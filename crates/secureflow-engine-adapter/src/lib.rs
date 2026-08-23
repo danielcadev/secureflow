@@ -3,13 +3,15 @@
 //! This first slice avoids a shell, clears the child environment, bounds the
 //! direct process duration, retained output and Linux resources. On Unix the
 //! child receives a dedicated process group so timeout cleanup includes its
-//! descendants. Filesystem sandboxing remains explicit future hardening.
+//! descendants. Linux callers can require Bubblewrap for a read-only host
+//! filesystem and a private network namespace; failure to start then fails
+//! closed rather than silently falling back.
 
-use sha2::{Digest, Sha256};
 use secureflow_model::{
     AiValidation, Confidence, EvidenceKind, EvidenceStep, Finding, HumanDecision, HumanReview,
     Location, Severity, TaxonomyCoordinates,
 };
+use sha2::{Digest, Sha256};
 use std::io::{self, Read};
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
@@ -28,6 +30,14 @@ pub const DEFAULT_MAX_TARGET_FILE_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 pub const DEFAULT_MAX_TARGET_DEPTH: usize = 256;
 pub const MAX_ENGINE_BINARY_BYTES: u64 = 1024 * 1024 * 1024;
 pub const MAX_ENGINE_TIMEOUT_SECONDS: u64 = 3600;
+#[cfg(target_os = "linux")]
+pub const BUBBLEWRAP_PATH: &str = "/usr/bin/bwrap";
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SandboxMode {
+    Disabled,
+    RequiredLinuxBubblewrap,
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TargetHashLimits {
@@ -60,6 +70,7 @@ pub struct EngineConfig {
     pub max_memory_bytes: u64,
     pub max_cpu_seconds: u64,
     pub max_open_files: u64,
+    pub sandbox: SandboxMode,
 }
 
 impl EngineConfig {
@@ -79,6 +90,7 @@ impl EngineConfig {
             max_memory_bytes: 2 * 1024 * 1024 * 1024,
             max_cpu_seconds: 121,
             max_open_files: 256,
+            sandbox: SandboxMode::Disabled,
         }
     }
 
@@ -93,6 +105,13 @@ impl EngineConfig {
         hash_field(&mut hasher, &self.max_memory_bytes.to_string());
         hash_field(&mut hasher, &self.max_cpu_seconds.to_string());
         hash_field(&mut hasher, &self.max_open_files.to_string());
+        hash_field(
+            &mut hasher,
+            match self.sandbox {
+                SandboxMode::Disabled => "sandbox-disabled",
+                SandboxMode::RequiredLinuxBubblewrap => "sandbox-required-linux-bubblewrap-v1",
+            },
+        );
         hex_digest(hasher.finalize().as_slice())
     }
 }
@@ -105,6 +124,8 @@ pub struct EngineOutput {
     pub stderr: Vec<u8>,
     pub binary_sha256: String,
     pub argv: Vec<String>,
+    pub sandboxed: bool,
+    pub sandbox_binary_sha256: Option<String>,
 }
 
 impl EngineOutput {
@@ -151,6 +172,8 @@ pub enum AdapterError {
     InvalidJson(#[source] serde_json::Error),
     #[error("engine report does not declare secure-json-v1")]
     WrongSchema,
+    #[error("required Linux Bubblewrap sandbox is unavailable: {0}")]
+    SandboxUnavailable(String),
     #[error("invalid finding at index {index}: {message}")]
     InvalidFinding { index: usize, message: String },
 }
@@ -162,24 +185,32 @@ pub fn run(config: &EngineConfig) -> Result<EngineOutput, AdapterError> {
     let mut argv = config.arguments.clone();
     argv.push(config.target.display().to_string());
 
-    let mut command = Command::new(&resolved_binary);
+    let (mut command, sandbox_binary_sha256) = command_for(config, &resolved_binary, &argv)?;
     command
-        .args(&argv)
         .env_clear()
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     configure_isolation(&mut command, config);
     let mut child = command.spawn().map_err(AdapterError::Spawn)?;
-    let stdout = child.stdout.take().ok_or(AdapterError::OutputReaderPanicked)?;
-    let stderr = child.stderr.take().ok_or(AdapterError::OutputReaderPanicked)?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or(AdapterError::OutputReaderPanicked)?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or(AdapterError::OutputReaderPanicked)?;
     let max_output = config.max_output_bytes;
     let stdout_thread = thread::spawn(move || read_bounded(stdout, max_output));
     let stderr_thread = thread::spawn(move || read_bounded(stderr, max_output));
 
-    let deadline = Instant::now()
-        .checked_add(config.timeout)
-        .ok_or(AdapterError::InvalidConfig("timeout exceeds platform limits"))?;
+    let deadline =
+        Instant::now()
+            .checked_add(config.timeout)
+            .ok_or(AdapterError::InvalidConfig(
+                "timeout exceeds platform limits",
+            ))?;
     let mut timed_out = false;
     let status = loop {
         if let Some(status) = child.try_wait().map_err(AdapterError::Spawn)? {
@@ -209,7 +240,55 @@ pub fn run(config: &EngineConfig) -> Result<EngineOutput, AdapterError> {
         stderr,
         binary_sha256,
         argv,
+        sandboxed: config.sandbox == SandboxMode::RequiredLinuxBubblewrap,
+        sandbox_binary_sha256,
     })
+}
+
+fn command_for(
+    config: &EngineConfig,
+    resolved_binary: &Path,
+    argv: &[String],
+) -> Result<(Command, Option<String>), AdapterError> {
+    match config.sandbox {
+        SandboxMode::Disabled => {
+            let mut command = Command::new(resolved_binary);
+            command.args(argv);
+            Ok((command, None))
+        }
+        SandboxMode::RequiredLinuxBubblewrap => {
+            #[cfg(target_os = "linux")]
+            {
+                let sandbox = Path::new(BUBBLEWRAP_PATH);
+                let sandbox_sha256 = hash_engine_binary(sandbox)
+                    .map_err(|error| AdapterError::SandboxUnavailable(error.to_string()))?;
+                let mut command = Command::new(sandbox);
+                command.args([
+                    "--die-with-parent",
+                    "--new-session",
+                    "--unshare-all",
+                    "--ro-bind",
+                    "/",
+                    "/",
+                    "--proc",
+                    "/proc",
+                    "--dev",
+                    "/dev",
+                    "--clearenv",
+                    "--",
+                ]);
+                command.arg(resolved_binary).args(argv);
+                Ok((command, Some(sandbox_sha256)))
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                let _ = (resolved_binary, argv);
+                Err(AdapterError::SandboxUnavailable(
+                    "Bubblewrap sandbox is supported only on Linux".into(),
+                ))
+            }
+        }
+    }
 }
 
 fn resolve_engine_binary(path: &Path) -> Result<PathBuf, AdapterError> {
@@ -247,7 +326,9 @@ fn validate_config(config: &EngineConfig) -> Result<(), AdapterError> {
         return Err(AdapterError::InvalidConfig("timeout exceeds one hour"));
     }
     if config.target.to_str().is_none() {
-        return Err(AdapterError::InvalidConfig("target path must be valid UTF-8"));
+        return Err(AdapterError::InvalidConfig(
+            "target path must be valid UTF-8",
+        ));
     }
     if config.max_output_bytes == 0 {
         return Err(AdapterError::InvalidConfig(
@@ -599,8 +680,7 @@ fn project_evidence_path(
             let object = step
                 .as_object()
                 .ok_or_else(|| invalid_finding(index, "evidence step must be an object"))?;
-            let location =
-                project_location(object.get("location"), index, "evidence location")?;
+            let location = project_location(object.get("location"), index, "evidence location")?;
             let kind = object
                 .get("kind")
                 .and_then(serde_json::Value::as_str)
@@ -785,7 +865,9 @@ fn collect_regular_files(
             *total_bytes = validate_target_file_size(metadata.len(), limits, *total_bytes)?;
             let relative = path
                 .strip_prefix(root)
-                .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "target path escaped root"))?
+                .map_err(|_| {
+                    io::Error::new(io::ErrorKind::InvalidInput, "target path escaped root")
+                })?
                 .to_str()
                 .ok_or_else(|| {
                     io::Error::new(
@@ -801,8 +883,11 @@ fn collect_regular_files(
 }
 
 pub fn validate_secure_json_report(bytes: &[u8]) -> Result<serde_json::Value, AdapterError> {
-    let value: serde_json::Value = serde_json::from_slice(bytes).map_err(AdapterError::InvalidJson)?;
-    if value.get("schema_version").and_then(serde_json::Value::as_str)
+    let value: serde_json::Value =
+        serde_json::from_slice(bytes).map_err(AdapterError::InvalidJson)?;
+    if value
+        .get("schema_version")
+        .and_then(serde_json::Value::as_str)
         != Some(SECURE_JSON_SCHEMA)
     {
         return Err(AdapterError::WrongSchema);
@@ -825,9 +910,7 @@ fn read_bounded<R: Read>(mut reader: R, max_output: usize) -> io::Result<Vec<u8>
     }
 }
 
-fn join_output(
-    handle: thread::JoinHandle<io::Result<Vec<u8>>>,
-) -> Result<Vec<u8>, AdapterError> {
+fn join_output(handle: thread::JoinHandle<io::Result<Vec<u8>>>) -> Result<Vec<u8>, AdapterError> {
     handle
         .join()
         .map_err(|_| AdapterError::OutputReaderPanicked)?
@@ -853,7 +936,13 @@ mod tests {
         let config = EngineConfig::default_scan("/bin/secure", "/tmp/fixture");
         assert_eq!(
             config.arguments,
-            ["scan", "--format", "secure-json-v1", "--no-cache", "--quiet"]
+            [
+                "scan",
+                "--format",
+                "secure-json-v1",
+                "--no-cache",
+                "--quiet"
+            ]
         );
         assert_eq!(config.target, PathBuf::from("/tmp/fixture"));
         assert_eq!(config.max_memory_bytes, 2 * 1024 * 1024 * 1024);
@@ -867,10 +956,44 @@ mod tests {
         let first = EngineConfig::default_scan("/bin/secure", "/tmp/fixture");
         let mut second = first.clone();
         second.max_memory_bytes += 1;
+        assert_ne!(first.configuration_sha256(), second.configuration_sha256());
+        second = first.clone();
+        second.sandbox = SandboxMode::RequiredLinuxBubblewrap;
+        assert_ne!(first.configuration_sha256(), second.configuration_sha256());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn required_bubblewrap_is_read_only_and_uses_a_private_network_namespace() {
+        let target = std::env::temp_dir().join(format!(
+            "secureflow-sandbox-target-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("current time")
+                .as_nanos()
+        ));
+        std::fs::create_dir(&target).expect("sandbox target");
+        let parent_network_namespace = std::fs::read_link("/proc/self/ns/net")
+            .expect("parent network namespace")
+            .to_string_lossy()
+            .into_owned();
+        let mut config = EngineConfig::default_scan("/bin/sh", &target);
+        config.arguments = vec![
+            "-c".into(),
+            "touch \"$0/sandbox-write\" 2>/dev/null; readlink /proc/self/ns/net >&2; printf '%s\\n' '{\"schema_version\":\"secure-json-v1\",\"findings\":[]}'".into(),
+        ];
+        config.sandbox = SandboxMode::RequiredLinuxBubblewrap;
+        let output = run(&config).expect("sandboxed execution");
+        output.report_json().expect("valid sandboxed report");
+        assert!(output.sandboxed);
+        assert!(output.sandbox_binary_sha256.is_some());
+        assert!(!target.join("sandbox-write").exists());
         assert_ne!(
-            first.configuration_sha256(),
-            second.configuration_sha256()
+            String::from_utf8_lossy(&output.stderr).trim(),
+            parent_network_namespace
         );
+        std::fs::remove_dir(target).expect("sandbox target cleanup");
     }
 
     #[test]
@@ -948,7 +1071,10 @@ mod tests {
         let mut config = EngineConfig::default_scan(&path, "/tmp/ignored");
         config.timeout = Duration::from_secs(2);
         config.max_cpu_seconds = 2;
-        assert!(matches!(run(&config), Err(AdapterError::BinaryChangedDuringRun)));
+        assert!(matches!(
+            run(&config),
+            Err(AdapterError::BinaryChangedDuringRun)
+        ));
         std::fs::remove_file(path).expect("temporary engine should be removable");
     }
 
@@ -976,7 +1102,10 @@ mod tests {
 
         let config = EngineConfig::default_scan(&path, "/tmp/ignored");
         let output = run(&config).expect("process boundary should retain the result");
-        assert!(matches!(output.report_json(), Err(AdapterError::ProcessFailed(_))));
+        assert!(matches!(
+            output.report_json(),
+            Err(AdapterError::ProcessFailed(_))
+        ));
         std::fs::remove_file(path).expect("temporary engine should be removable");
     }
 
@@ -1069,7 +1198,10 @@ mod tests {
         });
         let findings = project_findings(&report).expect("fixture should project");
         assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].finding_id, format!("sf_finding_{}", "a".repeat(64)));
+        assert_eq!(
+            findings[0].finding_id,
+            format!("sf_finding_{}", "a".repeat(64))
+        );
         assert_eq!(findings[0].human_review.decision, HumanDecision::Pending);
     }
 

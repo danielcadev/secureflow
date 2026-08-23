@@ -105,7 +105,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             std::process::id()
         ));
         if path.exists() {
-            return Err(format!("temporary benchmark path already exists: {}", path.display()).into());
+            return Err(format!(
+                "temporary benchmark path already exists: {}",
+                path.display()
+            )
+            .into());
         }
         std::fs::write(&path, &bytes)?;
         let mut load_samples = Vec::with_capacity(iterations);
@@ -138,7 +142,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 fn median(samples: &[f64]) -> f64 {
     let middle = samples.len() / 2;
-    if samples.len() % 2 == 0 {
+    if samples.len().is_multiple_of(2) {
         (samples[middle - 1] + samples[middle]) / 2.0
     } else {
         samples[middle]

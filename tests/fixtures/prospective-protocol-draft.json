@@ -1,0 +1,64 @@
+{
+  "research_question": "On a frozen authorized Rust and TypeScript holdout, does SecureFlow improve validated recall per analyst minute while preserving validated precision relative to unaided expert review?",
+  "corpus": {
+    "manifest_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+    "provenance_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+    "license_manifest_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+    "total_cases": 20,
+    "vulnerable_cases": 10,
+    "safe_controls": 10,
+    "languages": ["Rust", "TypeScript"],
+    "weakness_families": ["authorization", "filesystem", "parser", "webhook", "supply-chain"],
+    "previously_unseen_holdout": true,
+    "labels_hidden_from_systems": true
+  },
+  "systems": [
+    {
+      "system_id": "secureflow-v1",
+      "kind": "secureflow",
+      "version_or_cohort": "exact release hash required before real sealing",
+      "configuration_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+      "capability_profile": ["deterministic-analysis", "contextual-review", "optional-ai", "human-adjudication"]
+    },
+    {
+      "system_id": "expert-human-cohort",
+      "kind": "human-researcher",
+      "version_or_cohort": "at least three authorized reviewers; identities retained privately",
+      "configuration_sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+      "capability_profile": ["manual-source-review", "local-tooling", "documented-time-budget"]
+    }
+  ],
+  "blinding": {
+    "participant_ground_truth_hidden": true,
+    "system_ground_truth_hidden": true,
+    "randomized_case_order": true,
+    "independent_adjudicators": 2,
+    "disagreement_resolution": "A third independent adjudicator resolves disagreements against retained evidence.",
+    "leakage_audit_required": true
+  },
+  "execution": {
+    "repetitions_per_automated_system": 3,
+    "timeout_seconds_per_case": 600,
+    "equal_machine_resource_limits": true,
+    "network_policy": "disabled",
+    "retry_policy": "No retry except a documented infrastructure failure declared before labels are opened.",
+    "crash_timeout_policy": "Crashes and timeouts are reported separately and scored by the preregistered missing-result rule.",
+    "environment_sha256": "6666666666666666666666666666666666666666666666666666666666666666"
+  },
+  "outcomes": {
+    "primary_metrics": ["validated-recall", "validated-precision", "analyst-minutes"],
+    "report_precision_recall_separately": true,
+    "report_false_positives_negatives_separately": true,
+    "report_time_and_cost": true,
+    "report_abstentions": true,
+    "uncertainty_method": "Paired bootstrap confidence intervals with the resampling unit fixed before execution.",
+    "success_criterion": "SecureFlow validated recall and precision non-inferiority margins must each be at least -5 percentage points, while median analyst minutes must decrease by at least 20 percent."
+  },
+  "claims": {
+    "task_bounded_comparison_only": true,
+    "no_global_superiority_claim": true,
+    "no_production_safety_claim": true,
+    "publish_negative_results": true,
+    "disclose_conflicts_and_limitations": true
+  }
+}

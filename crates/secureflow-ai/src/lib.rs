@@ -502,9 +502,7 @@ pub struct AiResponseEnvelope {
 impl AiResponseEnvelope {
     pub fn validate(&self) -> Result<(), AiError> {
         if self.contract_version != RESPONSE_VERSION {
-            return Err(AiError::UnsupportedResponse(
-                self.contract_version.clone(),
-            ));
+            return Err(AiError::UnsupportedResponse(self.contract_version.clone()));
         }
         if !valid_prefixed_hash(&self.request_id, "sf_ai_request_") {
             return Err(AiError::InvalidField("response.request_id"));
@@ -524,11 +522,7 @@ impl AiResponseEnvelope {
         if self.input_tokens > 10_000_000 || self.output_tokens > 10_000_000 {
             return Err(AiError::InvalidField("response.tokens"));
         }
-        validate_text(
-            &self.analysis_summary,
-            "response.analysis_summary",
-            8_000,
-        )?;
+        validate_text(&self.analysis_summary, "response.analysis_summary", 8_000)?;
         if self.limitations.len() > 100 {
             return Err(AiError::InvalidField("response.limitations"));
         }
@@ -620,6 +614,7 @@ fn model_label(value: ModelFamily) -> &'static str {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn request_id(
     run_id: &str,
     target_sha256: &str,
@@ -854,6 +849,8 @@ mod tests {
                 binary_sha256: "b".repeat(64),
                 report_schema: secureflow_model::ENGINE_REPORT_SCHEMA.into(),
                 report_sha256: "c".repeat(64),
+                sandbox_name: None,
+                sandbox_binary_sha256: None,
             },
             configuration_sha256: None,
             phases: Phases {
@@ -950,19 +947,17 @@ mod tests {
         assert!(!json.contains("excluded source detail"));
         assert!(!json.contains("human_review"));
         assert_eq!(request.model_family, ModelFamily::Luna);
-        assert_eq!(request.authority.validation_authority, ValidationAuthority::HumanOnly);
+        assert_eq!(
+            request.authority.validation_authority,
+            ValidationAuthority::HumanOnly
+        );
     }
 
     #[test]
     fn potential_secrets_are_redacted_before_hashing() {
         let mut manifest = manifest();
         manifest.findings[0].limitations = vec!["token=abcdefghijklmnopqrstuvwxyz123456".into()];
-        let request = prepare_request(
-            &manifest,
-            "sf_finding_1234567890abcdef",
-            options(),
-        )
-        .unwrap();
+        let request = prepare_request(&manifest, "sf_finding_1234567890abcdef", options()).unwrap();
         assert_eq!(
             request.payload.limitations,
             vec!["[REDACTED_POTENTIAL_SECRET]"]
@@ -984,12 +979,7 @@ mod tests {
     #[test]
     fn applying_response_records_usage_but_not_a_human_decision() {
         let mut manifest = manifest();
-        let request = prepare_request(
-            &manifest,
-            "sf_finding_1234567890abcdef",
-            options(),
-        )
-        .unwrap();
+        let request = prepare_request(&manifest, "sf_finding_1234567890abcdef", options()).unwrap();
         let response = AiResponseEnvelope {
             contract_version: RESPONSE_VERSION.into(),
             request_id: request.request_id.clone(),
@@ -999,8 +989,7 @@ mod tests {
             prompt_version: request.prompt_version.clone(),
             request_payload_sha256: request.payload_sha256.clone(),
             assessment: AiAssessment::Uncertain,
-            analysis_summary: "Static evidence is insufficient without application context."
-                .into(),
+            analysis_summary: "Static evidence is insufficient without application context.".into(),
             input_tokens: 500,
             output_tokens: 100,
             limitations: vec![ResponseLimitation::RequiresHumanContext],
@@ -1010,7 +999,10 @@ mod tests {
         apply_response(&mut manifest, &request, &response, &response_bytes).unwrap();
         let finding = &manifest.findings[0];
         assert_eq!(finding.human_review.decision, HumanDecision::Pending);
-        assert_eq!(finding.ai_validation.assessment, Some(AiAssessment::Uncertain));
+        assert_eq!(
+            finding.ai_validation.assessment,
+            Some(AiAssessment::Uncertain)
+        );
         assert_eq!(manifest.summary.as_ref().unwrap().ai_calls, 1);
         assert_eq!(manifest.summary.as_ref().unwrap().ai_input_tokens, 500);
     }
@@ -1018,12 +1010,7 @@ mod tests {
     #[test]
     fn response_over_budget_fails_closed() {
         let mut manifest = manifest();
-        let request = prepare_request(
-            &manifest,
-            "sf_finding_1234567890abcdef",
-            options(),
-        )
-        .unwrap();
+        let request = prepare_request(&manifest, "sf_finding_1234567890abcdef", options()).unwrap();
         let response = AiResponseEnvelope {
             contract_version: RESPONSE_VERSION.into(),
             request_id: request.request_id.clone(),
@@ -1045,6 +1032,9 @@ mod tests {
             apply_response(&mut manifest, &request, &response, &response_bytes),
             Err(AiError::BudgetExceeded(_))
         ));
-        assert_eq!(manifest.findings[0].human_review.decision, HumanDecision::Pending);
+        assert_eq!(
+            manifest.findings[0].human_review.decision,
+            HumanDecision::Pending
+        );
     }
 }

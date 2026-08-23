@@ -16,15 +16,16 @@ secureflow-cli
     └── review-run que escribe un manifiesto derivado
 
 secureflow-orchestrator
-    ├── state machine de fases
-    ├── cancelación y retries idempotentes
-    └── límites de tiempo, memoria y procesos
+    ├── state machine de siete fases
+    ├── enlaces por hash y siguiente acción fail-closed
+    └── IA opcional, benchmark evaluativo y abstención explícita
 
 secureflow-engine-adapter
     ├── Secure Engine como proceso externo
     ├── secure-json-v1
     ├── timeout, grupo de procesos y output acotado
     ├── rlimits Linux de memoria/CPU/descriptores/core
+    ├── Bubblewrap requerido por defecto: root RO y red privada
     └── provenance del binario y reporte
 
 secureflow-model
@@ -43,11 +44,13 @@ secureflow-secure-adapter
 secureflow-knowledge
     ├── ledger JSONL v2 compatible con v1
     ├── decisiones humanas y observaciones exactas repetidas
-    ├── catálogo SQLite v1 separado para advisories externos
+    ├── catálogo SQLite v2 separado para registros de seguridad externos
+    ├── snapshots OSV reproducibles, licencia y cuarentena
     ├── revisiones raw, fuentes, licencias y provenance hasheada
     ├── unión conservadora por aliases exactos; no por texto/IA
     ├── paquetes/rangos compactos e índices de consulta
-    └── FTS5 reconstruible para títulos y detalles
+    ├── correlación conservadora finding-paquete-advisory
+    └── FTS5, canonicalización y backups reconstruibles
 
 secureflow-ai
     ├── preparación local con Luna como familia lógica
@@ -60,7 +63,8 @@ secureflow-bench-adapter
     ├── Secure Bench separado de la ruta de producción
     ├── validación de result-v2 y fingerprints
     ├── TP/FN por expectativas y FP/TN por controles
-    └── sin ranking, superioridad ni claims de producción
+    ├── protocolo prospectivo sellado con cohorte humana y blinding
+    └── sin ranking, superioridad global ni claims de producción
 ```
 
 ## Estructura futura del repositorio

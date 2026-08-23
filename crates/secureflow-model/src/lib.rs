@@ -34,7 +34,9 @@ pub struct RunManifest {
 impl RunManifest {
     pub fn validate(&self) -> Result<(), ModelError> {
         if self.contract_version != CONTRACT_VERSION {
-            return Err(ModelError::UnsupportedContract(self.contract_version.clone()));
+            return Err(ModelError::UnsupportedContract(
+                self.contract_version.clone(),
+            ));
         }
         if !valid_identifier(&self.run_id, "sf_run_", 16, 80) {
             return Err(ModelError::InvalidIdentifier("run_id"));
@@ -106,7 +108,11 @@ pub fn prioritize_findings(findings: &mut [Finding]) {
             .then_with(|| confidence_rank(right.confidence).cmp(&confidence_rank(left.confidence)))
             .then_with(|| left.rule_id.cmp(&right.rule_id))
             .then_with(|| left.source_location.path.cmp(&right.source_location.path))
-            .then_with(|| left.source_location.start_line.cmp(&right.source_location.start_line))
+            .then_with(|| {
+                left.source_location
+                    .start_line
+                    .cmp(&right.source_location.start_line)
+            })
             .then_with(|| left.sink_location.path.cmp(&right.sink_location.path))
             .then_with(|| left.finding_id.cmp(&right.finding_id))
     });
@@ -289,6 +295,10 @@ pub struct EngineProvenance {
     pub binary_sha256: String,
     pub report_schema: String,
     pub report_sha256: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sandbox_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sandbox_binary_sha256: Option<String>,
 }
 
 impl EngineProvenance {
@@ -296,10 +306,21 @@ impl EngineProvenance {
         validate_bounded_string(&self.name, "engine.name", 100)?;
         validate_bounded_string(&self.version, "engine.version", 100)?;
         if self.report_schema != ENGINE_REPORT_SCHEMA {
-            return Err(ModelError::UnsupportedReportSchema(self.report_schema.clone()));
+            return Err(ModelError::UnsupportedReportSchema(
+                self.report_schema.clone(),
+            ));
         }
         validate_sha256(&self.binary_sha256, "engine.binary_sha256")?;
         validate_sha256(&self.report_sha256, "engine.report_sha256")?;
+        validate_optional_string(self.sandbox_name.as_deref(), "engine.sandbox_name", 100)?;
+        if let Some(value) = &self.sandbox_binary_sha256 {
+            validate_sha256(value, "engine.sandbox_binary_sha256")?;
+        }
+        if self.sandbox_name.is_some() != self.sandbox_binary_sha256.is_some() {
+            return Err(ModelError::InconsistentState(
+                "engine sandbox name and binary hash must appear together",
+            ));
+        }
         Ok(())
     }
 }
@@ -443,11 +464,7 @@ impl TaxonomyCoordinates {
     fn validate(&self) -> Result<(), ModelError> {
         validate_bounded_string(&self.version, "finding.taxonomy.version", 50)?;
         validate_bounded_string(&self.category_id, "finding.taxonomy.category_id", 100)?;
-        validate_bounded_string(
-            &self.invariant_id,
-            "finding.taxonomy.invariant_id",
-            100,
-        )
+        validate_bounded_string(&self.invariant_id, "finding.taxonomy.invariant_id", 100)
     }
 }
 
@@ -491,13 +508,14 @@ impl Location {
         if self.end_line == Some(0) || self.end_column == Some(0) {
             return Err(ModelError::InvalidLocation);
         }
-        if let Some(end_line) = self.end_line {
-            if end_line < self.start_line
+        if let Some(end_line) = self.end_line
+            && (end_line < self.start_line
                 || (end_line == self.start_line
-                    && self.end_column.is_some_and(|column| column < self.start_column))
-            {
-                return Err(ModelError::InvalidLocation);
-            }
+                    && self
+                        .end_column
+                        .is_some_and(|column| column < self.start_column)))
+        {
+            return Err(ModelError::InvalidLocation);
         }
         Ok(())
     }
@@ -605,10 +623,10 @@ pub struct AiValidation {
 
 impl AiValidation {
     fn validate(&self) -> Result<(), ModelError> {
-        if let Some(value) = &self.request_id {
-            if !valid_identifier(value, "sf_ai_request_", 64, 64) {
-                return Err(ModelError::InvalidIdentifier("ai_validation.request_id"));
-            }
+        if let Some(value) = &self.request_id
+            && !valid_identifier(value, "sf_ai_request_", 64, 64)
+        {
+            return Err(ModelError::InvalidIdentifier("ai_validation.request_id"));
         }
         validate_optional_string(self.provider.as_deref(), "ai_validation.provider", 100)?;
         validate_optional_string(self.model.as_deref(), "ai_validation.model", 100)?;
@@ -645,9 +663,7 @@ impl AiValidation {
             || self.output_tokens.is_some()
             || self.assessment.is_some();
         match self.status {
-            AiValidationStatus::NotRequested | AiValidationStatus::Skipped
-                if has_any_metadata =>
-            {
+            AiValidationStatus::NotRequested | AiValidationStatus::Skipped if has_any_metadata => {
                 return Err(ModelError::InconsistentState(
                     "inactive AI validation cannot contain request or response metadata",
                 ));
@@ -769,18 +785,18 @@ impl RunManifest {
     /// Recomputes review and AI counters while preserving only the
     /// deduplication count recorded for this run.
     pub fn refresh_summary(&mut self) {
-        let (validated_count, rejected_count, abstained_count) = self
-            .findings
-            .iter()
-            .fold((0_u64, 0_u64, 0_u64), |counts, finding| {
-                let (validated, rejected, abstained) = counts;
-                match finding.human_review.decision {
-                    HumanDecision::Validated => (validated + 1, rejected, abstained),
-                    HumanDecision::Rejected => (validated, rejected + 1, abstained),
-                    HumanDecision::Abstained => (validated, rejected, abstained + 1),
-                    HumanDecision::Pending => counts,
-                }
-            });
+        let (validated_count, rejected_count, abstained_count) =
+            self.findings
+                .iter()
+                .fold((0_u64, 0_u64, 0_u64), |counts, finding| {
+                    let (validated, rejected, abstained) = counts;
+                    match finding.human_review.decision {
+                        HumanDecision::Validated => (validated + 1, rejected, abstained),
+                        HumanDecision::Rejected => (validated, rejected + 1, abstained),
+                        HumanDecision::Abstained => (validated, rejected, abstained + 1),
+                        HumanDecision::Pending => counts,
+                    }
+                });
         let ai_calls = self
             .findings
             .iter()
@@ -839,7 +855,11 @@ pub struct EvaluationReference {
 
 impl EvaluationReference {
     fn validate(&self) -> Result<(), ModelError> {
-        validate_optional_string(self.harness_version.as_deref(), "evaluation.harness_version", 100)?;
+        validate_optional_string(
+            self.harness_version.as_deref(),
+            "evaluation.harness_version",
+            100,
+        )?;
         if let Some(value) = &self.manifest_sha256 {
             validate_sha256(value, "evaluation.manifest_sha256")?;
         }
@@ -897,14 +917,18 @@ impl std::fmt::Display for ModelError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::UnsupportedContract(value) => write!(formatter, "unsupported contract: {value}"),
-            Self::UnsupportedReportSchema(value) => write!(formatter, "unsupported report schema: {value}"),
+            Self::UnsupportedReportSchema(value) => {
+                write!(formatter, "unsupported report schema: {value}")
+            }
             Self::InvalidIdentifier(field) => write!(formatter, "invalid identifier: {field}"),
             Self::DuplicateIdentifier(field) => write!(formatter, "duplicate identifier: {field}"),
             Self::InvalidSha256(field) => write!(formatter, "invalid SHA-256: {field}"),
             Self::InvalidRelativePath(field) => write!(formatter, "invalid relative path: {field}"),
             Self::EmptyField(field) => write!(formatter, "empty field: {field}"),
             Self::FieldTooLong(field) => write!(formatter, "field exceeds maximum length: {field}"),
-            Self::InvalidTimestamp(field) => write!(formatter, "invalid RFC3339 timestamp: {field}"),
+            Self::InvalidTimestamp(field) => {
+                write!(formatter, "invalid RFC3339 timestamp: {field}")
+            }
             Self::InvalidRevision => write!(formatter, "invalid full Git revision"),
             Self::InconsistentState(message) => write!(formatter, "inconsistent state: {message}"),
             Self::SummaryMismatch => write!(formatter, "summary does not match findings"),
@@ -922,9 +946,9 @@ fn valid_identifier(value: &str, prefix: &str, min_suffix: usize, max_suffix: us
         return false;
     };
     (min_suffix..=max_suffix).contains(&suffix.len())
-        && suffix.chars().all(|character| {
-            character.is_ascii_alphanumeric() || matches!(character, '_' | '-')
-        })
+        && suffix
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '_' | '-'))
 }
 
 fn validate_sha256(value: &str, field: &'static str) -> Result<(), ModelError> {
@@ -971,10 +995,7 @@ fn validate_optional_string(
     Ok(())
 }
 
-fn validate_timestamp(
-    value: &str,
-    field: &'static str,
-) -> Result<OffsetDateTime, ModelError> {
+fn validate_timestamp(value: &str, field: &'static str) -> Result<OffsetDateTime, ModelError> {
     OffsetDateTime::parse(value, &Rfc3339).map_err(|_| ModelError::InvalidTimestamp(field))
 }
 
@@ -984,7 +1005,9 @@ fn validate_relative_path(value: &str, field: &'static str) -> Result<(), ModelE
         || path.is_absolute()
         || value.contains('\\')
         || value.chars().any(char::is_control)
-        || path.components().any(|component| component == std::path::Component::ParentDir)
+        || path
+            .components()
+            .any(|component| component == std::path::Component::ParentDir)
     {
         Err(ModelError::InvalidRelativePath(field))
     } else {
@@ -1068,6 +1091,8 @@ mod tests {
                 binary_sha256: "b".repeat(64),
                 report_schema: ENGINE_REPORT_SCHEMA.into(),
                 report_sha256: "c".repeat(64),
+                sandbox_name: None,
+                sandbox_binary_sha256: None,
             },
             configuration_sha256: None,
             phases: Phases {
@@ -1108,7 +1133,10 @@ mod tests {
     fn rejects_empty_target_label() {
         let mut value = manifest();
         value.target.label.clear();
-        assert_eq!(value.validate(), Err(ModelError::EmptyField("target.label")));
+        assert_eq!(
+            value.validate(),
+            Err(ModelError::EmptyField("target.label"))
+        );
     }
 
     #[test]
@@ -1221,9 +1249,11 @@ mod tests {
     #[test]
     fn rejects_completed_validation_with_pending_findings() {
         let mut value = manifest();
-        value
-            .findings
-            .push(finding("a000000000000000", Severity::High, Confidence::High));
+        value.findings.push(finding(
+            "a000000000000000",
+            Severity::High,
+            Confidence::High,
+        ));
         value.phases.validation = PhaseStatus::Completed;
         assert_eq!(
             value.validate(),

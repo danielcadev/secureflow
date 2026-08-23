@@ -68,3 +68,15 @@ del corpus después de observar los resultados.
 - una ejecución no permite intervalos de incertidumbre ni claims generales;
 - los resultados no demuestran superioridad, production readiness ni desempeño
   en repositorios reales.
+
+## Estudio prospectivo siguiente
+
+`benchmark-protocol-seal` valida y sella el contrato
+`secureflow-prospective-protocol-v1` antes de observar resultados. Exige como
+mínimo 20 casos, 10 vulnerables y 10 controles, holdout no visto, etiquetas
+ocultas, SecureFlow y cohorte humana, dos adjudicadores, blinding, auditoría de
+leakage, tiempo/coste, abstenciones y publicación de resultados negativos.
+
+`tests/fixtures/prospective-protocol-draft.json` prueba únicamente el contrato
+con hashes sintéticos. No es un preregistro, no contiene un corpus real y no
+autoriza todavía ningún claim de superar a humanos.

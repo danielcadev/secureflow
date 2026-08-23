@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://secureflow.local/schemas/secureflow-orchestration-v1.schema.json",
+  "title": "SecureFlow deterministic orchestration plan v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "plan_id", "created_at", "linked_run_id", "manifest_sha256", "target_sha256", "policy", "evidence", "state", "phases", "next_action", "claim_status"],
+  "properties": {
+    "contract_version": { "const": "secureflow-orchestration-v1" },
+    "plan_id": { "type": "string", "pattern": "^sf_plan_[0-9a-f]{64}$" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "linked_run_id": { "type": "string", "pattern": "^sf_run_[A-Za-z0-9_-]{16,80}$" },
+    "manifest_sha256": { "$ref": "#/$defs/sha256" },
+    "target_sha256": { "$ref": "#/$defs/sha256" },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authorization_required", "deterministic_first", "ai_optional", "ai_validation_authority", "benchmark_evaluation_only", "no_evidence_action", "network_execution"],
+      "properties": {
+        "authorization_required": { "const": true },
+        "deterministic_first": { "const": true },
+        "ai_optional": { "const": true },
+        "ai_validation_authority": { "const": "human-only" },
+        "benchmark_evaluation_only": { "const": true },
+        "no_evidence_action": { "const": "abstain" },
+        "network_execution": { "const": "not-implemented" }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "maxItems": 10000,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "sha256"],
+        "properties": {
+          "kind": { "enum": ["contextual-review", "advisory-correlation", "benchmark-result"] },
+          "sha256": { "$ref": "#/$defs/sha256" }
+        }
+      }
+    },
+    "state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidate_count", "pending_human_reviews", "terminal_human_reviews", "ai_completed", "ai_failed_or_queued"],
+      "properties": {
+        "candidate_count": { "type": "integer", "minimum": 0 },
+        "pending_human_reviews": { "type": "integer", "minimum": 0 },
+        "terminal_human_reviews": { "type": "integer", "minimum": 0 },
+        "ai_completed": { "type": "integer", "minimum": 0 },
+        "ai_failed_or_queued": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "phases": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "status", "reason"],
+        "properties": {
+          "name": { "enum": ["authorization", "deterministic-analysis", "deterministic-prioritization", "context-enrichment", "optional-ai-advisory", "human-validation", "reproducible-evaluation"] },
+          "status": { "enum": ["blocked", "ready", "partial", "completed", "optional-not-requested", "evaluation-only", "failed"] },
+          "reason": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "next_action": { "enum": ["complete-deterministic-analysis", "complete-deterministic-prioritization", "human-review-or-abstain", "run-prospective-evaluation", "preserve-auditable-evidence"] },
+    "claim_status": { "enum": ["candidates-require-human-review", "human-decisions-available", "no-candidates-is-not-proof-of-safety"] }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  }
+}

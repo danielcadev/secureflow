@@ -37,6 +37,11 @@ cargo run -p secureflow -- scan \
   /ruta/al/target
 ```
 
+En Linux el CLI exige Bubblewrap por defecto: red privada y filesystem del host
+de sólo lectura. El run conserva el hash del binario `/usr/bin/bwrap`. Sólo una
+decisión operativa explícita puede usar `--sandbox disabled`; nunca hay fallback
+silencioso si el sandbox requerido no está disponible.
+
 `--authorization-reviewer` es obligatorio. Las bases `written-consent`,
 `organization-policy` y `other-documented` exigen además
 `--authorization-reference`; una expiración RFC3339 vencida falla antes de
@@ -110,8 +115,28 @@ en vez de inventar una licencia. Los schemas normativos se imprimen con
 mediante `secureflow knowledge-schema --version v1`.
 
 Los advisories públicos viven en un catálogo SQLite separado para no confundir
-conocimiento externo con decisiones humanas. La importación actual es local y
-acepta uno o muchos registros OSV JSON con fuente/licencia explícitas:
+conocimiento externo con decisiones humanas. La ruta reproducible prepara un
+ZIP OSV adquirido externamente, conserva todos los aceptados y rechazados,
+evidencia de licencia y accounting exacto:
+
+```bash
+cargo run -p secureflow -- snapshot-prepare-osv \
+  --archive /ruta/npm-all.zip \
+  --output .secureflow/npm-snapshot \
+  --artifact-locator https://osv-vulnerabilities.storage.googleapis.com/npm/all.zip \
+  --artifact-revision gcs-generation:<id> \
+  --expected-ecosystem npm \
+  --acquired-at 2026-08-23T17:47:25Z \
+  --github-license-evidence /ruta/GHAD-LICENSE.md \
+  --openssf-malicious-packages-license-evidence /ruta/OPENSSF-LICENSE
+
+cargo run -p secureflow -- catalog-import-snapshot \
+  --database .secureflow/advisories.sqlite3 \
+  --manifest .secureflow/npm-snapshot/manifest.json \
+  --archive /ruta/npm-all.zip
+```
+
+La importación manual de OSV JSON sigue disponible para fuentes explícitas:
 
 ```bash
 cargo run -p secureflow -- catalog-import-osv \
@@ -138,8 +163,47 @@ cargo run -p secureflow -- catalog-check .secureflow/advisories.sqlite3
 La base conserva revisiones raw, alias exactos y rangos compactos; `upstream` y
 `related` no fusionan vulnerabilidades. Durante importaciones masivas FTS se
 reconstruye al final y queda `dirty` si el proceso se interrumpe; se recupera
-con `catalog-rebuild-index`. Toda consulta estructurada mantiene
+con `catalog-rebuild-index`. Los componentes exactos de aliases se pueden
+reconstruir con `catalog-rebuild-canonicalization`, incluyendo splits cuando
+una revisión retira un alias. Toda consulta estructurada mantiene
 `validation_authority=human-only`.
+
+El piloto real de crates.io, GitHub Actions y npm procesó 229.644 registros
+fuente activos como 228.674 entidades canónicas en una base de 1,20 GB. Incluye
+219.658 reportes de paquetes maliciosos OpenSSF; por eso esas cifras son
+registros de seguridad, no vulnerabilidades humanas validadas. 328 registros
+npm sin procedencia admitida quedaron en cuarentena. Evidencia exacta:
+[`docs/evidence/real-advisory-pilot-2026-08-23.json`](./docs/evidence/real-advisory-pilot-2026-08-23.json).
+
+Un finding se enlaza conservadoramente con advisories de un paquete sin evaluar
+todavía el rango de versión ni afirmar causalidad:
+
+```bash
+cargo run -p secureflow -- correlate-package \
+  --manifest /tmp/secureflow-run.json \
+  --finding-id sf_finding_<id> \
+  --database .secureflow/advisories.sqlite3 \
+  --ecosystem crates.io --package tokio --version 1.0.0 \
+  --output /tmp/secureflow-correlation.json
+
+cargo run -p secureflow -- orchestrate-plan \
+  --manifest /tmp/secureflow-run.json \
+  --correlation /tmp/secureflow-correlation.json \
+  --output /tmp/secureflow-plan.json
+```
+
+Backups y restores crean destinos nuevos, hasheados y verificados:
+
+```bash
+cargo run -p secureflow -- catalog-backup \
+  --database .secureflow/advisories.sqlite3 \
+  --output /backups/advisories.sqlite3 \
+  --manifest-output /backups/advisories.backup.json
+
+cargo run -p secureflow -- catalog-backup-verify \
+  --backup /backups/advisories.sqlite3 \
+  --manifest /backups/advisories.backup.json
+```
 
 En el host documentado se midieron 100k, 500k y 1M registros sintéticos. El
 millón produjo 900k entidades canónicas, ocupó 2,07 GB y tardó 104,7 s en NVMe/
@@ -200,6 +264,17 @@ bash scripts/eval-local.sh
 El protocolo, resultado observado y límites están en
 [`docs/evaluation.md`](./docs/evaluation.md).
 
+Antes de un estudio nuevo se puede sellar un protocolo prospectivo con holdout,
+cohorte humana, blinding, adjudicación, costes y límites de claims:
+
+```bash
+cargo run -p secureflow -- benchmark-protocol-seal \
+  --draft /ruta/protocol-draft.json \
+  --output /ruta/protocol-sealed.json
+```
+
+El fixture del repositorio sólo prueba el contrato; no es un preregistro real.
+
 La IA opcional empieza con un contrato offline. El CLI prepara un solo finding
 redacted y presupuestado, pero no hace llamadas de red:
 
@@ -231,8 +306,10 @@ target analizado.
 El proceso se ejecuta sin shell, sin stdin y con entorno limpio. En Linux recibe
 un grupo de procesos propio, core dumps desactivados y límites de 2 GiB de
 memoria virtual, 256 descriptores y CPU ligada al timeout; el hash de esta
-configuración queda en el manifiesto. Esto todavía no constituye un sandbox de
-filesystem.
+configuración queda en el manifiesto. Con el modo requerido, Bubblewrap añade
+un namespace de red privado, root host de sólo lectura, `/proc` y `/dev`
+aislados; no equivale a aislamiento fuerte frente a un kernel comprometido ni
+a una VM.
 
 El timeout aceptado es de 1 a 3.600 segundos y se acorta para terminar antes de
 una expiración de autorización registrada. Binarios mayores de 1 GiB se
@@ -246,10 +323,10 @@ archivos, 500.000 entradas, 16 GiB totales, 2 GiB por archivo o 256 niveles de
 directorio. Paths no UTF-8 también se rechazan para evitar fingerprints
 ambiguos.
 
-## Estado inicial
+## Estado actual
 
-Este workspace contiene la especificación inicial, no una integración física de
-los proyectos originales. Secure Engine, Secure Skill, Secure Bench, CMS Nova y
+Este workspace integra los proyectos originales por procesos y contratos, no
+por copia física. Secure Engine, Secure Skill, Secure Bench, CMS Nova y
 Mitiquete permanecen en sus propios directorios y conservan sus historiales.
 
 El primer contrato es [`secureflow-run-v1`](./docs/contracts/secureflow-run-v1.md).

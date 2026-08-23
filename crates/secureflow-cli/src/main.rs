@@ -2,20 +2,35 @@ use clap::{Parser, Subcommand, ValueEnum};
 use secureflow_ai as ai;
 use secureflow_bench_adapter as bench_adapter;
 use secureflow_engine_adapter::{
-    EngineConfig, MAX_ENGINE_TIMEOUT_SECONDS, project_findings, run, sha256_bytes,
+    EngineConfig, MAX_ENGINE_TIMEOUT_SECONDS, SandboxMode, project_findings, run, sha256_bytes,
     sha256_target,
+};
+use secureflow_knowledge::catalog::{
+    Catalog, CatalogImportResult, CatalogSnapshot, CatalogSource, MAX_IMPORT_RECORDS,
+    MAX_OSV_RECORD_BYTES,
+};
+use secureflow_knowledge::catalog_backup::{
+    MAX_BACKUP_MANIFEST_BYTES, create_backup, parse_manifest as parse_backup_manifest,
+    restore_backup, verify_backup,
+};
+use secureflow_knowledge::correlation::{
+    MAX_CORRELATION_BYTES, MAX_CORRELATION_MATCHES, build_correlation, parse_correlation,
+};
+use secureflow_knowledge::snapshot::{
+    SnapshotPrepareConfig, load_and_validate_snapshot, prepare_osv_zip, validate_snapshot_archive,
 };
 use secureflow_knowledge::{
     KnowledgeRecord, SourceLicense, SourceLicenseStatus, import_manifest_to_ledger, read_ledger,
 };
-use secureflow_knowledge::catalog::{
-    Catalog, CatalogImportResult, CatalogSource, MAX_IMPORT_RECORDS, MAX_OSV_RECORD_BYTES,
-};
 use secureflow_model::{
-    Authorization, AuthorizationBasis, AuthorizationStatus, EngineProvenance, EvaluationReference,
-    deduplicate_findings, prioritize_findings, Confidence, HumanDecision, PhaseStatus, Phases,
-    Revision, RevisionKind, RunManifest, RunStatus, Severity, Summary, Target,
-    ENGINE_REPORT_SCHEMA, CONTRACT_VERSION,
+    Authorization, AuthorizationBasis, AuthorizationStatus, CONTRACT_VERSION, Confidence,
+    ENGINE_REPORT_SCHEMA, EngineProvenance, EvaluationReference, HumanDecision, PhaseStatus,
+    Phases, Revision, RevisionKind, RunManifest, RunStatus, Severity, Summary, Target,
+    deduplicate_findings, prioritize_findings,
+};
+use secureflow_orchestrator::{
+    EvidenceArtifact as OrchestrationEvidence, EvidenceKind as OrchestrationEvidenceKind,
+    MAX_ORCHESTRATION_BYTES, derive_plan, parse_plan,
 };
 use secureflow_secure_adapter::{
     ImportContext, MAX_REVIEW_BYTES, SecureReviewEnvelope, import_review, load_source_provenance,
@@ -42,6 +57,12 @@ const AI_REQUEST_SCHEMA: &str =
     include_str!("../../../schemas/secureflow-ai-request-v1.schema.json");
 const AI_RESPONSE_SCHEMA: &str =
     include_str!("../../../schemas/secureflow-ai-response-v1.schema.json");
+const CORRELATION_SCHEMA: &str =
+    include_str!("../../../schemas/secureflow-correlation-v1.schema.json");
+const ORCHESTRATION_SCHEMA: &str =
+    include_str!("../../../schemas/secureflow-orchestration-v1.schema.json");
+const PROSPECTIVE_PROTOCOL_SCHEMA: &str =
+    include_str!("../../../schemas/secureflow-prospective-protocol-v1.schema.json");
 
 const MAX_MANIFEST_BYTES: u64 = 32 * 1024 * 1024;
 const MAX_LICENSE_EVIDENCE_BYTES: u64 = 1024 * 1024;
@@ -51,7 +72,11 @@ const MAX_CATALOG_INPUT_DEPTH: usize = 64;
 const AUTHORIZATION_EXPIRY_MARGIN: Duration = Duration::from_millis(100);
 
 #[derive(Debug, Parser)]
-#[command(name = "secureflow", version, about = "Local-first orchestration for authorized security analysis")]
+#[command(
+    name = "secureflow",
+    version,
+    about = "Local-first orchestration for authorized security analysis"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -75,6 +100,12 @@ enum Command {
     AiRequestSchema,
     /// Print the normative structured AI response schema.
     AiResponseSchema,
+    /// Print the normative finding-to-advisory correlation schema.
+    CorrelationSchema,
+    /// Print the normative deterministic orchestration-plan schema.
+    OrchestrationSchema,
+    /// Print the normative sealed prospective benchmark protocol schema.
+    ProspectiveProtocolSchema,
     /// Validate a local secureflow-run-v1 manifest.
     ValidateRun { path: PathBuf },
     /// Export a validated run as a local Markdown report.
@@ -139,6 +170,44 @@ enum Command {
         #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
         format: OutputFormat,
     },
+    /// Prepare a bounded, attributed and reproducible snapshot from an OSV ecosystem ZIP.
+    SnapshotPrepareOsv {
+        /// Previously acquired OSV ecosystem ZIP. SecureFlow does not download it.
+        #[arg(long)]
+        archive: PathBuf,
+        /// New snapshot directory. Existing paths are never overwritten.
+        #[arg(long)]
+        output: PathBuf,
+        /// Public immutable or versioned artifact URL.
+        #[arg(long)]
+        artifact_locator: String,
+        /// Immutable HTTP/GCS/Git revision for the acquired artifact.
+        #[arg(long)]
+        artifact_revision: String,
+        /// Exact OSV ecosystem expected in every accepted record.
+        #[arg(long)]
+        expected_ecosystem: String,
+        /// RFC3339 acquisition timestamp supplied by the acquisition boundary.
+        #[arg(long)]
+        acquired_at: String,
+        /// Local GitHub Advisory Database license evidence.
+        #[arg(long)]
+        github_license_evidence: Option<PathBuf>,
+        /// Local RustSec license policy evidence.
+        #[arg(long)]
+        rustsec_license_evidence: Option<PathBuf>,
+        /// Local OpenSSF Malicious Packages Apache-2.0 license evidence.
+        #[arg(long)]
+        openssf_malicious_packages_license_evidence: Option<PathBuf>,
+    },
+    /// Validate an extracted advisory snapshot and optionally its original ZIP.
+    SnapshotValidate {
+        /// Snapshot manifest path.
+        manifest: PathBuf,
+        /// Original ZIP to re-hash against artifact provenance.
+        #[arg(long)]
+        archive: Option<PathBuf>,
+    },
     /// Create or verify the indexed local advisory catalog.
     CatalogInit {
         /// SQLite catalog path.
@@ -165,6 +234,18 @@ enum Command {
         #[arg(long)]
         source_locator: String,
     },
+    /// Import every accepted partition from a validated advisory snapshot.
+    CatalogImportSnapshot {
+        /// SQLite catalog path outside the immutable snapshot tree.
+        #[arg(long)]
+        database: PathBuf,
+        /// Snapshot manifest path.
+        #[arg(long)]
+        manifest: PathBuf,
+        /// Original ZIP to verify again before importing.
+        #[arg(long)]
+        archive: Option<PathBuf>,
+    },
     /// Report physical and logical catalog counts as JSON.
     CatalogStats {
         /// Existing SQLite catalog path.
@@ -179,6 +260,38 @@ enum Command {
     CatalogRebuildIndex {
         /// Existing SQLite catalog path.
         database: PathBuf,
+    },
+    /// Recompute exact-alias components from active source records, allowing splits.
+    CatalogRebuildCanonicalization {
+        /// Existing SQLite catalog path.
+        database: PathBuf,
+    },
+    /// Create a consistent, hash-bound catalog backup without overwriting files.
+    CatalogBackup {
+        #[arg(long)]
+        database: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+        #[arg(long)]
+        manifest_output: PathBuf,
+    },
+    /// Verify a catalog backup against its manifest and SQLite integrity.
+    CatalogBackupVerify {
+        #[arg(long)]
+        backup: PathBuf,
+        #[arg(long)]
+        manifest: PathBuf,
+    },
+    /// Restore a verified backup to a new catalog path without overwriting files.
+    CatalogRestore {
+        #[arg(long)]
+        backup: PathBuf,
+        #[arg(long)]
+        manifest: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+        #[arg(long)]
+        manifest_output: PathBuf,
     },
     /// Resolve an exact CVE, GHSA, OSV, RUSTSEC or other identifier.
     CatalogLookup {
@@ -224,6 +337,52 @@ enum Command {
         #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
         format: OutputFormat,
     },
+    /// Link one finding to exact package advisory context without validating it.
+    CorrelatePackage {
+        /// Validated SecureFlow run manifest containing the candidate.
+        #[arg(long)]
+        manifest: PathBuf,
+        /// Stable finding ID in the run.
+        #[arg(long)]
+        finding_id: String,
+        /// Existing advisory catalog with at least one complete snapshot.
+        #[arg(long)]
+        database: PathBuf,
+        /// Exact OSV ecosystem declared by the operator.
+        #[arg(long)]
+        ecosystem: String,
+        /// Exact package name declared by the operator.
+        #[arg(long)]
+        package: String,
+        /// Optional installed version retained as context only; ranges are not evaluated in v1.
+        #[arg(long)]
+        version: Option<String>,
+        /// New correlation envelope. Inputs are never modified.
+        #[arg(long)]
+        output: PathBuf,
+    },
+    /// Validate a local conservative correlation envelope.
+    CorrelationValidate { path: PathBuf },
+    /// Derive a fail-closed local phase plan from validated retained artifacts.
+    OrchestratePlan {
+        /// Validated SecureFlow run manifest.
+        #[arg(long)]
+        manifest: PathBuf,
+        /// Optional validated Secure Skill contextual-review envelope.
+        #[arg(long)]
+        secure_review: Option<PathBuf>,
+        /// Zero or more validated package-correlation envelopes.
+        #[arg(long)]
+        correlation: Vec<PathBuf>,
+        /// Optional evaluation-only benchmark envelope.
+        #[arg(long)]
+        benchmark: Option<PathBuf>,
+        /// New orchestration envelope. Inputs are never modified.
+        #[arg(long)]
+        output: PathBuf,
+    },
+    /// Validate a local orchestration-plan envelope.
+    OrchestrationValidate { path: PathBuf },
     /// Import a Secure Skill review-contract 1.1 payload as contextual candidates.
     SecureReviewImport {
         /// Secure Skill review-contract 1.1 JSON payload.
@@ -286,6 +445,17 @@ enum Command {
         #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
         format: OutputFormat,
     },
+    /// Seal a strict prospective-study draft before observing results.
+    BenchmarkProtocolSeal {
+        /// Protocol draft JSON without identity or timestamp.
+        #[arg(long)]
+        draft: PathBuf,
+        /// New immutable-by-convention sealed protocol.
+        #[arg(long)]
+        output: PathBuf,
+    },
+    /// Validate a sealed prospective-study protocol and its content-derived ID.
+    BenchmarkProtocolValidate { path: PathBuf },
     /// Prepare one local redacted AI request. This command performs no network call.
     AiPrepare {
         /// Validated SecureFlow run manifest.
@@ -396,6 +566,9 @@ enum Command {
         /// Process timeout in seconds.
         #[arg(long, default_value_t = 120)]
         timeout_seconds: u64,
+        /// Linux process isolation policy. Required is the secure default.
+        #[arg(long, value_enum, default_value_t = ScanSandbox::Required)]
+        sandbox: ScanSandbox,
     },
 }
 
@@ -497,6 +670,21 @@ enum TargetRevisionKind {
     Unknown,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+enum ScanSandbox {
+    Required,
+    Disabled,
+}
+
+impl From<ScanSandbox> for SandboxMode {
+    fn from(value: ScanSandbox) -> Self {
+        match value {
+            ScanSandbox::Required => Self::RequiredLinuxBubblewrap,
+            ScanSandbox::Disabled => Self::Disabled,
+        }
+    }
+}
+
 impl From<TargetRevisionKind> for RevisionKind {
     fn from(value: TargetRevisionKind) -> Self {
         match value {
@@ -520,12 +708,8 @@ impl From<AiPurposeArg> for ai::AiPurpose {
 impl From<BenchmarkStudyKind> for bench_adapter::StudyKind {
     fn from(value: BenchmarkStudyKind) -> Self {
         match value {
-            BenchmarkStudyKind::LocalDevelopmentDiagnostic => {
-                Self::LocalDevelopmentDiagnostic
-            }
-            BenchmarkStudyKind::HistoricalPublicDiagnostic => {
-                Self::HistoricalPublicDiagnostic
-            }
+            BenchmarkStudyKind::LocalDevelopmentDiagnostic => Self::LocalDevelopmentDiagnostic,
+            BenchmarkStudyKind::HistoricalPublicDiagnostic => Self::HistoricalPublicDiagnostic,
             BenchmarkStudyKind::PreregisteredOneShot => Self::PreregisteredOneShot,
             BenchmarkStudyKind::PostOpenRecovery => Self::PostOpenRecovery,
         }
@@ -553,11 +737,20 @@ enum CliError {
     #[error("invalid timeout: {provided} seconds (expected 1..={maximum})")]
     InvalidTimeout { provided: u64, maximum: u64 },
     #[error("could not read {path}: {source}")]
-    Read { path: PathBuf, source: std::io::Error },
+    Read {
+        path: PathBuf,
+        source: std::io::Error,
+    },
     #[error("could not write {path}: {source}")]
-    Write { path: PathBuf, source: std::io::Error },
+    Write {
+        path: PathBuf,
+        source: std::io::Error,
+    },
     #[error("could not fingerprint target {path}: {source}")]
-    TargetHash { path: PathBuf, source: std::io::Error },
+    TargetHash {
+        path: PathBuf,
+        source: std::io::Error,
+    },
     #[error("review field cannot be empty: {0}")]
     EmptyReviewField(&'static str),
     #[error("review field is too long: {field} (maximum {max} characters)")]
@@ -578,12 +771,24 @@ enum CliError {
     Knowledge(secureflow_knowledge::KnowledgeError),
     #[error("knowledge catalog failed: {0}")]
     Catalog(#[from] secureflow_knowledge::catalog::CatalogError),
+    #[error("advisory snapshot failed: {0}")]
+    Snapshot(#[from] secureflow_knowledge::snapshot::SnapshotError),
+    #[error("catalog backup failed: {0}")]
+    CatalogBackup(#[from] secureflow_knowledge::catalog_backup::BackupError),
     #[error("Secure Skill adapter failed: {0}")]
     SecureReview(#[from] secureflow_secure_adapter::AdapterError),
     #[error("Secure Bench adapter failed: {0}")]
     Benchmark(#[from] bench_adapter::BenchAdapterError),
+    #[error("prospective benchmark protocol failed: {0}")]
+    BenchmarkProtocol(#[from] bench_adapter::prospective::ProtocolError),
     #[error("AI contract failed: {0}")]
     Ai(#[from] ai::AiError),
+    #[error("correlation contract failed: {0}")]
+    Correlation(#[from] secureflow_knowledge::correlation::CorrelationError),
+    #[error("orchestration contract failed: {0}")]
+    Orchestration(#[from] secureflow_orchestrator::OrchestratorError),
+    #[error("artifact does not link to the exact run: {0}")]
+    ArtifactLinkMismatch(&'static str),
     #[error("expected a regular file: {0}")]
     NotAFile(PathBuf),
     #[error("catalog input contains a symlink: {0}")]
@@ -605,7 +810,10 @@ enum CliError {
     #[error("refusing to write {output}: it is inside protected input tree {root}")]
     OutputInsideInputTree { output: PathBuf, root: PathBuf },
     #[error("could not resolve {path} for output-safety checks: {source}")]
-    PathResolution { path: PathBuf, source: std::io::Error },
+    PathResolution {
+        path: PathBuf,
+        source: std::io::Error,
+    },
     #[error("target changed while the scan was running: {0}")]
     TargetChangedDuringScan(PathBuf),
 }
@@ -650,6 +858,18 @@ fn execute(cli: Cli) -> Result<(), CliError> {
         }
         Command::AiResponseSchema => {
             print!("{AI_RESPONSE_SCHEMA}");
+            Ok(())
+        }
+        Command::CorrelationSchema => {
+            print!("{CORRELATION_SCHEMA}");
+            Ok(())
+        }
+        Command::OrchestrationSchema => {
+            print!("{ORCHESTRATION_SCHEMA}");
+            Ok(())
+        }
+        Command::ProspectiveProtocolSchema => {
+            print!("{PROSPECTIVE_PROTOCOL_SCHEMA}");
             Ok(())
         }
         Command::ValidateRun { path } => {
@@ -740,13 +960,8 @@ fn execute(cli: Cli) -> Result<(), CliError> {
                 evidence_sha256,
             )
             .map_err(CliError::Knowledge)?;
-            let result = import_manifest_to_ledger(
-                &bytes,
-                &run_manifest,
-                &ledger,
-                source_license,
-            )
-            .map_err(CliError::Knowledge)?;
+            let result = import_manifest_to_ledger(&bytes, &run_manifest, &ledger, source_license)
+                .map_err(CliError::Knowledge)?;
             println!(
                 "knowledge import: ledger={} added={} skipped={} duplicate_observations_linked={} manifest_sha256={}",
                 ledger.display(),
@@ -783,6 +998,57 @@ fn execute(cli: Cli) -> Result<(), CliError> {
             }
             Ok(())
         }
+        Command::SnapshotPrepareOsv {
+            archive,
+            output,
+            artifact_locator,
+            artifact_revision,
+            expected_ecosystem,
+            acquired_at,
+            github_license_evidence,
+            rustsec_license_evidence,
+            openssf_malicious_packages_license_evidence,
+        } => {
+            ensure_output_distinct(&output, &[&archive])?;
+            let manifest = prepare_osv_zip(&SnapshotPrepareConfig {
+                archive,
+                output: output.clone(),
+                artifact_locator,
+                artifact_revision,
+                expected_ecosystem,
+                acquired_at,
+                github_license_evidence,
+                rustsec_license_evidence,
+                openssf_malicious_packages_license_evidence,
+            })?;
+            println!(
+                "snapshot prepared: directory={} snapshot_id={} accepted={} quarantined={} sources={} archive_sha256={} validation_authority=human-only",
+                output.display(),
+                manifest.snapshot_id,
+                manifest.accounting.accepted_records,
+                manifest.accounting.quarantined_records,
+                manifest.sources.len(),
+                manifest.artifact.sha256,
+            );
+            Ok(())
+        }
+        Command::SnapshotValidate { manifest, archive } => {
+            let (snapshot, manifest_sha256) = load_and_validate_snapshot(&manifest)?;
+            if let Some(archive) = archive.as_deref() {
+                validate_snapshot_archive(&snapshot, archive)?;
+            }
+            println!(
+                "valid {}: manifest={} snapshot_id={} manifest_sha256={} accepted={} quarantined={} archive_verified={} validation_authority=human-only",
+                snapshot.contract_version,
+                manifest.display(),
+                snapshot.snapshot_id,
+                manifest_sha256,
+                snapshot.accounting.accepted_records,
+                snapshot.accounting.quarantined_records,
+                archive.is_some(),
+            );
+            Ok(())
+        }
         Command::CatalogInit { database } => {
             let catalog = Catalog::open_or_create(&database)?;
             let stats = catalog.stats()?;
@@ -805,10 +1071,7 @@ fn execute(cli: Cli) -> Result<(), CliError> {
         } => {
             ensure_catalog_database_outside_input(&database, &input)?;
             ensure_output_distinct(&database, &[&source_license_evidence])?;
-            let evidence = read_bounded_file(
-                &source_license_evidence,
-                MAX_LICENSE_EVIDENCE_BYTES,
-            )?;
+            let evidence = read_bounded_file(&source_license_evidence, MAX_LICENSE_EVIDENCE_BYTES)?;
             let source = CatalogSource {
                 name: source_name,
                 license_expression: source_license_expression,
@@ -825,9 +1088,8 @@ fn execute(cli: Cli) -> Result<(), CliError> {
                 batch_bytes = batch_bytes.saturating_add(bytes.len());
                 batch.push(bytes);
                 if batch.len() >= CATALOG_BATCH_RECORDS || batch_bytes >= CATALOG_BATCH_BYTES {
-                    total.merge(
-                        catalog.import_osv_batch_deferred_search(&source, batch.drain(..))?,
-                    );
+                    total
+                        .merge(catalog.import_osv_batch_deferred_search(&source, batch.drain(..))?);
                     batch_bytes = 0;
                 }
             }
@@ -847,6 +1109,92 @@ fn execute(cli: Cli) -> Result<(), CliError> {
                 total.canonical_groups_merged,
                 stats.source_records,
                 stats.canonical_vulnerabilities,
+            );
+            Ok(())
+        }
+        Command::CatalogImportSnapshot {
+            database,
+            manifest,
+            archive,
+        } => {
+            let snapshot_root = manifest
+                .parent()
+                .ok_or(CliError::NotAFile(manifest.clone()))?;
+            ensure_output_outside_tree(&database, snapshot_root)?;
+            let (snapshot, manifest_sha256) = load_and_validate_snapshot(&manifest)?;
+            if let Some(archive) = archive.as_deref() {
+                validate_snapshot_archive(&snapshot, archive)?;
+            }
+            let mut catalog = Catalog::open_or_create(&database)?;
+            catalog.register_snapshot(&CatalogSnapshot {
+                snapshot_id: snapshot.snapshot_id.clone(),
+                manifest_sha256: manifest_sha256.clone(),
+                artifact_sha256: snapshot.artifact.sha256.clone(),
+                artifact_revision: snapshot.artifact.revision.clone(),
+                expected_ecosystem: snapshot.expected_ecosystem.clone(),
+                acquired_at: snapshot.acquired_at.clone(),
+                accepted_records: snapshot.accounting.accepted_records,
+                quarantined_records: snapshot.accounting.quarantined_records,
+            })?;
+            let mut total = CatalogImportResult::default();
+            for source_metadata in &snapshot.sources {
+                let source = CatalogSource {
+                    name: source_metadata.name.clone(),
+                    license_expression: source_metadata.license_expression.clone(),
+                    license_evidence_sha256: source_metadata.license_evidence_sha256.clone(),
+                    locator: source_metadata.locator.clone(),
+                };
+                let mut batch = Vec::new();
+                let mut batch_bytes = 0_usize;
+                for record in snapshot
+                    .records
+                    .iter()
+                    .filter(|record| record.source_name == source_metadata.name)
+                {
+                    let path = snapshot_root.join(&record.stored_path);
+                    let bytes = read_bounded_file(&path, MAX_OSV_RECORD_BYTES)?;
+                    batch_bytes = batch_bytes.saturating_add(bytes.len());
+                    batch.push(bytes);
+                    if batch.len() >= CATALOG_BATCH_RECORDS || batch_bytes >= CATALOG_BATCH_BYTES {
+                        total.merge(catalog.import_osv_snapshot_batch_deferred_search(
+                            &source,
+                            &snapshot.snapshot_id,
+                            batch.drain(..),
+                        )?);
+                        batch_bytes = 0;
+                    }
+                }
+                if !batch.is_empty() {
+                    total.merge(catalog.import_osv_snapshot_batch_deferred_search(
+                        &source,
+                        &snapshot.snapshot_id,
+                        batch.drain(..),
+                    )?);
+                }
+                total.merge(catalog.complete_snapshot_source(
+                    &source,
+                    &snapshot.snapshot_id,
+                    source_metadata.record_count,
+                )?);
+            }
+            catalog.complete_snapshot(&snapshot.snapshot_id)?;
+            catalog.rebuild_search_index()?;
+            let stats = catalog.stats()?;
+            println!(
+                "snapshot imported: database={} snapshot_id={} manifest_sha256={} seen={} inserted={} updated={} unchanged={} deactivated={} quarantined_not_imported={} total_source_records={} active_source_records={} total_canonical_vulnerabilities={} archive_verified={} validation_authority=human-only",
+                database.display(),
+                snapshot.snapshot_id,
+                manifest_sha256,
+                total.records_seen,
+                total.records_inserted,
+                total.records_updated,
+                total.records_unchanged,
+                total.records_deactivated,
+                snapshot.accounting.quarantined_records,
+                stats.source_records,
+                stats.active_source_records,
+                stats.canonical_vulnerabilities,
+                archive.is_some(),
             );
             Ok(())
         }
@@ -871,7 +1219,69 @@ fn execute(cli: Cli) -> Result<(), CliError> {
         Command::CatalogRebuildIndex { database } => {
             let mut catalog = Catalog::open_existing_writable(&database)?;
             catalog.rebuild_search_index()?;
-            println!("catalog search index rebuilt: database={}", database.display());
+            println!(
+                "catalog search index rebuilt: database={}",
+                database.display()
+            );
+            Ok(())
+        }
+        Command::CatalogRebuildCanonicalization { database } => {
+            let mut catalog = Catalog::open_existing_writable(&database)?;
+            let result = catalog.rebuild_canonicalization()?;
+            println!("{}", serde_json::to_string_pretty(&result)?);
+            Ok(())
+        }
+        Command::CatalogBackup {
+            database,
+            output,
+            manifest_output,
+        } => {
+            ensure_output_distinct(&output, &[&database, &manifest_output])?;
+            ensure_output_distinct(&manifest_output, &[&database])?;
+            let catalog = Catalog::open_existing(&database)?;
+            let manifest = create_backup(&catalog, &output)?;
+            write_atomic_new(&manifest_output, &serde_json::to_vec_pretty(&manifest)?)?;
+            println!(
+                "catalog backup complete: backup={} manifest={} backup_id={} bytes={} sha256={} integrity=ok",
+                output.display(),
+                manifest_output.display(),
+                manifest.backup_id,
+                manifest.database_bytes,
+                manifest.database_sha256,
+            );
+            Ok(())
+        }
+        Command::CatalogBackupVerify { backup, manifest } => {
+            let manifest_bytes = read_bounded_file(&manifest, MAX_BACKUP_MANIFEST_BYTES)?;
+            let manifest = parse_backup_manifest(&manifest_bytes)?;
+            verify_backup(&backup, &manifest)?;
+            println!(
+                "catalog backup verified: backup={} backup_id={} bytes={} integrity=ok",
+                backup.display(),
+                manifest.backup_id,
+                manifest.database_bytes,
+            );
+            Ok(())
+        }
+        Command::CatalogRestore {
+            backup,
+            manifest,
+            output,
+            manifest_output,
+        } => {
+            ensure_output_distinct(&output, &[&backup, &manifest, &manifest_output])?;
+            ensure_output_distinct(&manifest_output, &[&backup, &manifest])?;
+            let manifest_bytes = read_bounded_file(&manifest, MAX_BACKUP_MANIFEST_BYTES)?;
+            let manifest = parse_backup_manifest(&manifest_bytes)?;
+            let restored = restore_backup(&backup, &manifest, &output)?;
+            write_atomic_new(&manifest_output, &serde_json::to_vec_pretty(&restored)?)?;
+            println!(
+                "catalog restored: database={} manifest={} backup_id={} bytes={} integrity=ok source_verified=true",
+                output.display(),
+                manifest_output.display(),
+                restored.backup_id,
+                restored.database_bytes,
+            );
             Ok(())
         }
         Command::CatalogLookup {
@@ -903,6 +1313,134 @@ fn execute(cli: Cli) -> Result<(), CliError> {
         } => {
             let catalog = Catalog::open_existing(&database)?;
             print_catalog_hits(catalog.search_package(&ecosystem, &package, limit)?, format)?;
+            Ok(())
+        }
+        Command::CorrelatePackage {
+            manifest,
+            finding_id,
+            database,
+            ecosystem,
+            package,
+            version,
+            output,
+        } => {
+            ensure_output_distinct(&output, &[&manifest, &database])?;
+            let (manifest_bytes, run_manifest) = load_manifest(&manifest)?;
+            let catalog = Catalog::open_existing(&database)?;
+            let provenance = catalog.provenance()?;
+            let hits = catalog.search_package(&ecosystem, &package, MAX_CORRELATION_MATCHES)?;
+            let envelope = build_correlation(
+                &run_manifest,
+                sha256_bytes(&manifest_bytes),
+                &finding_id,
+                ecosystem,
+                package,
+                version,
+                provenance,
+                hits,
+            )?;
+            let advisory_count = envelope.advisories.len();
+            let human_decision = envelope.linked_run.human_decision;
+            let correlation_id = envelope.correlation_id.clone();
+            write_atomic(&output, &serde_json::to_vec_pretty(&envelope)?)?;
+            println!(
+                "package context correlated: envelope={} correlation_id={} advisories={} affected_version_evaluated=false causal_relationship_asserted=false human_decision={:?} validation_authority=human-only",
+                output.display(),
+                correlation_id,
+                advisory_count,
+                human_decision,
+            );
+            Ok(())
+        }
+        Command::CorrelationValidate { path } => {
+            let bytes = read_bounded_file(&path, MAX_CORRELATION_BYTES)?;
+            let envelope = parse_correlation(&bytes)?;
+            println!(
+                "valid secureflow-correlation-v1: {} advisories={} affected_version_evaluated=false validation_authority=human-only",
+                path.display(),
+                envelope.advisories.len(),
+            );
+            Ok(())
+        }
+        Command::OrchestratePlan {
+            manifest,
+            secure_review,
+            correlation,
+            benchmark,
+            output,
+        } => {
+            ensure_output_distinct(&output, &[&manifest])?;
+            let (manifest_bytes, run_manifest) = load_manifest(&manifest)?;
+            let manifest_sha256 = sha256_bytes(&manifest_bytes);
+            let mut evidence = Vec::new();
+
+            if let Some(path) = secure_review.as_ref() {
+                ensure_output_distinct(&output, &[path])?;
+                let bytes = read_bounded(path, MAX_REVIEW_BYTES)?;
+                let envelope = parse_envelope(&bytes)?;
+                if envelope.linked_run_id != run_manifest.run_id
+                    || envelope.target_sha256 != run_manifest.target.root_sha256
+                {
+                    return Err(CliError::ArtifactLinkMismatch("secure review"));
+                }
+                evidence.push(OrchestrationEvidence {
+                    kind: OrchestrationEvidenceKind::ContextualReview,
+                    sha256: sha256_bytes(&bytes),
+                });
+            }
+            for path in &correlation {
+                ensure_output_distinct(&output, &[path])?;
+                let bytes = read_bounded_file(path, MAX_CORRELATION_BYTES)?;
+                let envelope = parse_correlation(&bytes)?;
+                if envelope.linked_run.run_id != run_manifest.run_id
+                    || envelope.linked_run.manifest_sha256 != manifest_sha256
+                    || !run_manifest
+                        .findings
+                        .iter()
+                        .any(|finding| finding.finding_id == envelope.linked_run.finding_id)
+                {
+                    return Err(CliError::ArtifactLinkMismatch("advisory correlation"));
+                }
+                evidence.push(OrchestrationEvidence {
+                    kind: OrchestrationEvidenceKind::AdvisoryCorrelation,
+                    sha256: sha256_bytes(&bytes),
+                });
+            }
+            if let Some(path) = benchmark.as_ref() {
+                ensure_output_distinct(&output, &[path])?;
+                let bytes = bench_adapter::read_bounded(path, bench_adapter::MAX_RESULT_BYTES)?;
+                let envelope = bench_adapter::parse_envelope(&bytes)?;
+                if envelope.artifacts.run_manifest_sha256 != manifest_sha256 {
+                    return Err(CliError::ArtifactLinkMismatch("benchmark"));
+                }
+                evidence.push(OrchestrationEvidence {
+                    kind: OrchestrationEvidenceKind::BenchmarkResult,
+                    sha256: sha256_bytes(&bytes),
+                });
+            }
+
+            let plan = derive_plan(&run_manifest, manifest_sha256, evidence)?;
+            let plan_id = plan.plan_id.clone();
+            let next_action = plan.next_action;
+            let claim_status = plan.claim_status;
+            write_atomic(&output, &serde_json::to_vec_pretty(&plan)?)?;
+            println!(
+                "orchestration plan derived: output={} plan_id={} next_action={:?} claim_status={:?} network_execution=not-implemented validation_authority=human-only",
+                output.display(),
+                plan_id,
+                next_action,
+                claim_status,
+            );
+            Ok(())
+        }
+        Command::OrchestrationValidate { path } => {
+            let bytes = read_bounded_file(&path, MAX_ORCHESTRATION_BYTES)?;
+            let plan = parse_plan(&bytes)?;
+            println!(
+                "valid secureflow-orchestration-v1: {} next_action={:?} validation_authority=human-only",
+                path.display(),
+                plan.next_action,
+            );
             Ok(())
         }
         Command::SecureReviewImport {
@@ -974,22 +1512,16 @@ fn execute(cli: Cli) -> Result<(), CliError> {
         } => {
             ensure_output_distinct(&output, &[&result, &run_manifest, &suite])?;
             ensure_output_outside_tree(&output, &secure_bench_root)?;
-            let result_bytes = bench_adapter::read_bounded(
-                &result,
-                bench_adapter::MAX_RESULT_BYTES,
-            )?;
+            let result_bytes =
+                bench_adapter::read_bounded(&result, bench_adapter::MAX_RESULT_BYTES)?;
             let run_bytes = bench_adapter::read_bounded(
                 &run_manifest,
                 bench_adapter::MAX_INPUT_ARTIFACT_BYTES,
             )?;
-            let suite_bytes = bench_adapter::read_bounded(
-                &suite,
-                bench_adapter::MAX_INPUT_ARTIFACT_BYTES,
-            )?;
-            let (source, result_schema) = bench_adapter::load_source_provenance(
-                &secure_bench_root,
-                &secure_bench_revision,
-            )?;
+            let suite_bytes =
+                bench_adapter::read_bounded(&suite, bench_adapter::MAX_INPUT_ARTIFACT_BYTES)?;
+            let (source, result_schema) =
+                bench_adapter::load_source_provenance(&secure_bench_root, &secure_bench_revision)?;
             let envelope = bench_adapter::import_benchmark(bench_adapter::BenchmarkImport {
                 result: &result_bytes,
                 run_manifest: &run_bytes,
@@ -1025,6 +1557,30 @@ fn execute(cli: Cli) -> Result<(), CliError> {
                 }
                 OutputFormat::Text => print_benchmark_summary(&envelope),
             }
+            Ok(())
+        }
+        Command::BenchmarkProtocolSeal { draft, output } => {
+            ensure_output_distinct(&output, &[&draft])?;
+            let bytes = read_bounded_file(&draft, bench_adapter::prospective::MAX_PROTOCOL_BYTES)?;
+            let protocol = bench_adapter::prospective::seal_draft(&bytes, None)?;
+            let protocol_id = protocol.protocol_id.clone();
+            write_atomic(&output, &serde_json::to_vec_pretty(&protocol)?)?;
+            println!(
+                "prospective protocol sealed: output={} protocol_id={} holdout=true human_comparator_required=true negative_results_required=true claims=task-bounded-only",
+                output.display(),
+                protocol_id,
+            );
+            Ok(())
+        }
+        Command::BenchmarkProtocolValidate { path } => {
+            let bytes = read_bounded_file(&path, bench_adapter::prospective::MAX_PROTOCOL_BYTES)?;
+            let protocol = bench_adapter::prospective::parse_protocol(&bytes)?;
+            println!(
+                "valid secureflow-prospective-protocol-v1: {} protocol_id={} cases={} claims=task-bounded-only",
+                path.display(),
+                protocol.protocol_id,
+                protocol.draft.corpus.total_cases,
+            );
             Ok(())
         }
         Command::AiPrepare {
@@ -1093,12 +1649,7 @@ fn execute(cli: Cli) -> Result<(), CliError> {
                 .iter()
                 .find(|finding| finding.finding_id == request.finding_id)
                 .map(|finding| finding.human_review.decision);
-            ai::apply_response(
-                &mut run_manifest,
-                &request,
-                &response,
-                &response_bytes,
-            )?;
+            ai::apply_response(&mut run_manifest, &request, &response, &response_bytes)?;
             let human_decision_after = run_manifest
                 .findings
                 .iter()
@@ -1186,6 +1737,7 @@ fn execute(cli: Cli) -> Result<(), CliError> {
             output,
             manifest_output,
             timeout_seconds,
+            sandbox,
         } => {
             if !authorized {
                 return Err(CliError::AuthorizationRequired);
@@ -1200,11 +1752,8 @@ fn execute(cli: Cli) -> Result<(), CliError> {
             ensure_output_distinct(&manifest_output, &[&binary, &target, &output])?;
             ensure_output_outside_tree(&output, &target)?;
             ensure_output_outside_tree(&manifest_output, &target)?;
-            let authorization_reviewer = checked_review_field(
-                authorization_reviewer.trim(),
-                "authorization_reviewer",
-                200,
-            )?;
+            let authorization_reviewer =
+                checked_review_field(authorization_reviewer.trim(), "authorization_reviewer", 200)?;
             let authorization_reference = authorization_reference
                 .as_deref()
                 .map(str::trim)
@@ -1255,20 +1804,22 @@ fn execute(cli: Cli) -> Result<(), CliError> {
                     secureflow_model::ModelError::InvalidRevision,
                 ));
             }
-            let revision = target_revision_kind.zip(target_revision).map(|(kind, value)| {
-                Revision {
+            let revision = target_revision_kind
+                .zip(target_revision)
+                .map(|(kind, value)| Revision {
                     kind: kind.into(),
                     value,
-                }
-            });
+                });
             let mut config = EngineConfig::default_scan(binary, target);
+            config.sandbox = sandbox.into();
             config.timeout = Duration::from_secs(timeout_seconds);
             config.max_cpu_seconds = timeout_seconds.saturating_add(1);
             let created_at = created.format(&Rfc3339)?;
-            let target_hash = sha256_target(&config.target).map_err(|source| CliError::TargetHash {
-                path: config.target.clone(),
-                source,
-            })?;
+            let target_hash =
+                sha256_target(&config.target).map_err(|source| CliError::TargetHash {
+                    path: config.target.clone(),
+                    source,
+                })?;
             if let Some(expires_at) = authorization_expiration {
                 let remaining = Duration::try_from(expires_at - OffsetDateTime::now_utc())
                     .ok()
@@ -1335,6 +1886,8 @@ fn execute(cli: Cli) -> Result<(), CliError> {
                     binary_sha256: result.binary_sha256.clone(),
                     report_schema: ENGINE_REPORT_SCHEMA.into(),
                     report_sha256: result.report_sha256(),
+                    sandbox_name: result.sandboxed.then(|| "bubblewrap".into()),
+                    sandbox_binary_sha256: result.sandbox_binary_sha256.clone(),
                 },
                 configuration_sha256: Some(configuration_sha256.clone()),
                 phases: Phases {
@@ -1368,7 +1921,7 @@ fn execute(cli: Cli) -> Result<(), CliError> {
             let manifest_bytes = serde_json::to_vec_pretty(&manifest)?;
             write_atomic(&manifest_output, &manifest_bytes)?;
             println!(
-                "run completed: report={} manifest={} candidates={} exit={} timed_out={} binary_sha256={} configuration_sha256={}",
+                "run completed: report={} manifest={} candidates={} exit={} timed_out={} binary_sha256={} configuration_sha256={} sandboxed={} sandbox_binary_sha256={}",
                 output.display(),
                 manifest_output.display(),
                 manifest.findings.len(),
@@ -1376,6 +1929,8 @@ fn execute(cli: Cli) -> Result<(), CliError> {
                 result.timed_out,
                 result.binary_sha256,
                 configuration_sha256,
+                result.sandboxed,
+                result.sandbox_binary_sha256.as_deref().unwrap_or("none"),
             );
             Ok(())
         }
@@ -1389,10 +1944,7 @@ fn load_manifest(path: &PathBuf) -> Result<(Vec<u8>, RunManifest), CliError> {
     Ok((bytes, manifest))
 }
 
-fn ensure_catalog_database_outside_input(
-    database: &PathBuf,
-    input: &PathBuf,
-) -> Result<(), CliError> {
+fn ensure_catalog_database_outside_input(database: &Path, input: &PathBuf) -> Result<(), CliError> {
     let metadata = fs::symlink_metadata(input).map_err(|source| CliError::Read {
         path: input.clone(),
         source,
@@ -1463,7 +2015,9 @@ fn collect_osv_directory(
         if file_type.is_dir() {
             collect_osv_directory(&path, depth + 1, files)?;
         } else if file_type.is_file()
-            && path.extension().is_some_and(|extension| extension == "json")
+            && path
+                .extension()
+                .is_some_and(|extension| extension == "json")
         {
             if files.len() >= MAX_IMPORT_RECORDS {
                 return Err(CliError::CatalogInputTooLarge {
@@ -1505,12 +2059,12 @@ fn read_bounded_file(path: &PathBuf, maximum: u64) -> Result<Vec<u8>, CliError> 
     Ok(bytes)
 }
 
-fn load_secure_review_envelope(path: &PathBuf) -> Result<SecureReviewEnvelope, CliError> {
+fn load_secure_review_envelope(path: &Path) -> Result<SecureReviewEnvelope, CliError> {
     let bytes = read_bounded(path, MAX_REVIEW_BYTES)?;
     Ok(parse_envelope(&bytes)?)
 }
 
-fn load_benchmark_envelope(path: &PathBuf) -> Result<bench_adapter::BenchmarkEnvelope, CliError> {
+fn load_benchmark_envelope(path: &Path) -> Result<bench_adapter::BenchmarkEnvelope, CliError> {
     let bytes = bench_adapter::read_bounded(path, bench_adapter::MAX_RESULT_BYTES)?;
     Ok(bench_adapter::parse_envelope(&bytes)?)
 }
@@ -1582,10 +2136,7 @@ fn render_markdown_report(manifest: &RunManifest, include_human_rationale: bool)
         markdown_code(&manifest.created_at)
     ));
     if let Some(completed_at) = &manifest.completed_at {
-        output.push_str(&format!(
-            "- Completed: `{}`\n",
-            markdown_code(completed_at)
-        ));
+        output.push_str(&format!("- Completed: `{}`\n", markdown_code(completed_at)));
     }
     output.push_str(&format!(
         "- Target: {} (`{}`)\n",
@@ -1847,9 +2398,10 @@ fn print_benchmark_summary(envelope: &bench_adapter::BenchmarkEnvelope) {
 }
 
 fn print_ratio(name: &str, ratio: &bench_adapter::RatioMetric) {
-    let rate = ratio
-        .basis_points
-        .map_or_else(|| "undefined".to_owned(), |value| format!("{:.2}%", f64::from(value) / 100.0));
+    let rate = ratio.basis_points.map_or_else(
+        || "undefined".to_owned(),
+        |value| format!("{:.2}%", f64::from(value) / 100.0),
+    );
     println!(
         "{}\t{}/{}\t{}",
         name, ratio.numerator, ratio.denominator, rate
@@ -1866,9 +2418,7 @@ fn ai_assessment_label(value: secureflow_model::AiAssessment) -> &'static str {
     }
 }
 
-fn review_severity_label(
-    value: secureflow_secure_adapter::ReviewSeverity,
-) -> &'static str {
+fn review_severity_label(value: secureflow_secure_adapter::ReviewSeverity) -> &'static str {
     use secureflow_secure_adapter::ReviewSeverity;
     match value {
         ReviewSeverity::Critical => "critical",
@@ -1878,9 +2428,7 @@ fn review_severity_label(
     }
 }
 
-fn review_confidence_label(
-    value: secureflow_secure_adapter::ReviewConfidence,
-) -> &'static str {
+fn review_confidence_label(value: secureflow_secure_adapter::ReviewConfidence) -> &'static str {
     use secureflow_secure_adapter::ReviewConfidence;
     match value {
         ReviewConfidence::High => "high",
@@ -1889,9 +2437,7 @@ fn review_confidence_label(
     }
 }
 
-fn review_verification_label(
-    value: secureflow_secure_adapter::VerificationStatus,
-) -> &'static str {
+fn review_verification_label(value: secureflow_secure_adapter::VerificationStatus) -> &'static str {
     use secureflow_secure_adapter::VerificationStatus;
     match value {
         VerificationStatus::Verified => "verified",
@@ -1946,11 +2492,7 @@ fn terminal_safe(value: &str) -> String {
     output
 }
 
-fn checked_review_field(
-    value: &str,
-    field: &'static str,
-    max: usize,
-) -> Result<String, CliError> {
+fn checked_review_field(value: &str, field: &'static str, max: usize) -> Result<String, CliError> {
     if value.is_empty() {
         return Err(CliError::EmptyReviewField(field));
     }
@@ -2151,6 +2693,73 @@ fn write_atomic(path: &PathBuf, bytes: &[u8]) -> Result<(), CliError> {
         });
     }
     Ok(())
+}
+
+fn write_atomic_new(path: &Path, bytes: &[u8]) -> Result<(), CliError> {
+    if fs::symlink_metadata(path).is_ok() {
+        return Err(CliError::Write {
+            path: path.to_path_buf(),
+            source: std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                "destination already exists",
+            ),
+        });
+    }
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let name = path
+        .file_name()
+        .map(|value| value.to_string_lossy())
+        .unwrap_or_else(|| std::borrow::Cow::Borrowed("secureflow-output"));
+    let nonce = OffsetDateTime::now_utc().unix_timestamp_nanos();
+    let mut temporary = None;
+    for attempt in 0..100_u32 {
+        let candidate = parent.join(format!(
+            ".{name}.new-{}-{nonce}-{attempt}",
+            std::process::id()
+        ));
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        match options.open(&candidate) {
+            Ok(mut file) => {
+                let result = file.write_all(bytes).and_then(|()| file.sync_all());
+                drop(file);
+                if let Err(source) = result {
+                    let _ = fs::remove_file(&candidate);
+                    return Err(CliError::Write {
+                        path: path.to_path_buf(),
+                        source,
+                    });
+                }
+                temporary = Some(candidate);
+                break;
+            }
+            Err(source) if source.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(source) => {
+                return Err(CliError::Write {
+                    path: path.to_path_buf(),
+                    source,
+                });
+            }
+        }
+    }
+    let temporary = temporary.ok_or_else(|| CliError::Write {
+        path: path.to_path_buf(),
+        source: std::io::Error::new(
+            std::io::ErrorKind::AlreadyExists,
+            "could not allocate a unique temporary output file",
+        ),
+    })?;
+    let publish = fs::hard_link(&temporary, path).map_err(|source| CliError::Write {
+        path: path.to_path_buf(),
+        source,
+    });
+    let _ = fs::remove_file(&temporary);
+    publish
 }
 
 #[cfg(test)]

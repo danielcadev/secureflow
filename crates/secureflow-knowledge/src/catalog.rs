@@ -10,13 +10,13 @@ use rusqlite::{
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
-pub const CATALOG_SCHEMA_VERSION: u32 = 1;
+pub const CATALOG_SCHEMA_VERSION: u32 = 2;
 pub const CATALOG_APPLICATION_ID: u32 = 0x5346_4b42;
 pub const MAX_OSV_RECORD_BYTES: u64 = 4 * 1024 * 1024;
 pub const MAX_IMPORT_RECORDS: usize = 1_100_000;
@@ -26,6 +26,8 @@ const MAX_IDENTIFIERS_PER_RECORD: usize = 1_024;
 const MAX_AFFECTED_PER_RECORD: usize = 4_096;
 const MAX_REFERENCES_PER_RECORD: usize = 4_096;
 const MAX_VERSIONS_PER_AFFECTED: usize = 100_000;
+const MAX_CANONICAL_REBUILD_RECORDS: usize = 1_100_000;
+const MAX_CANONICAL_REBUILD_RELATIONSHIPS: usize = 5_000_000;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CatalogSource {
@@ -43,6 +45,7 @@ pub struct CatalogImportResult {
     pub records_unchanged: usize,
     pub duplicate_records_linked: usize,
     pub canonical_groups_merged: usize,
+    pub records_deactivated: usize,
 }
 
 impl CatalogImportResult {
@@ -53,16 +56,21 @@ impl CatalogImportResult {
         self.records_unchanged += other.records_unchanged;
         self.duplicate_records_linked += other.duplicate_records_linked;
         self.canonical_groups_merged += other.canonical_groups_merged;
+        self.records_deactivated += other.records_deactivated;
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct CatalogStats {
     pub schema_version: u32,
     pub sources: u64,
     pub canonical_vulnerabilities: u64,
+    pub active_canonical_vulnerabilities: u64,
     pub source_records: u64,
+    pub active_source_records: u64,
+    pub inactive_source_records: u64,
     pub source_record_revisions: u64,
+    pub snapshots: u64,
     pub identifiers: u64,
     pub relationships: u64,
     pub affected_packages: u64,
@@ -83,11 +91,43 @@ pub struct CatalogHit {
     pub score: Option<f64>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct CatalogIntegrity {
     pub quick_check: String,
     pub foreign_key_violations: u64,
     pub search_index_status: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct CanonicalRebuildResult {
+    pub rebuild_id: String,
+    pub active_records: u64,
+    pub exact_relationships: u64,
+    pub old_components: u64,
+    pub new_components: u64,
+    pub split_components: u64,
+    pub merged_components: u64,
+    pub unambiguous_redirects: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct CatalogProvenance {
+    pub schema_version: u32,
+    pub complete_snapshot_ids: Vec<String>,
+    pub canonicalization: String,
+    pub last_canonical_rebuild_id: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CatalogSnapshot {
+    pub snapshot_id: String,
+    pub manifest_sha256: String,
+    pub artifact_sha256: String,
+    pub artifact_revision: String,
+    pub expected_ecosystem: String,
+    pub acquired_at: String,
+    pub accepted_records: u64,
+    pub quarantined_records: u64,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -146,7 +186,10 @@ pub enum CatalogError {
     #[error("catalog path is invalid: {0}")]
     InvalidPath(&'static str),
     #[error("catalog filesystem operation failed for {path}: {source}")]
-    Filesystem { path: PathBuf, source: std::io::Error },
+    Filesystem {
+        path: PathBuf,
+        source: std::io::Error,
+    },
     #[error("catalog SQLite operation failed: {0}")]
     Sqlite(#[from] rusqlite::Error),
     #[error("catalog schema mismatch: expected {expected}, observed {observed}")]
@@ -167,6 +210,20 @@ pub enum CatalogError {
     InvalidQuery(&'static str),
     #[error("catalog WAL checkpoint remained busy with {remaining_frames} frames")]
     CheckpointBusy { remaining_frames: i64 },
+    #[error("catalog snapshot metadata conflicts with an existing snapshot: {0}")]
+    SnapshotConflict(String),
+    #[error("catalog snapshot is not registered: {0}")]
+    SnapshotNotRegistered(String),
+    #[error("catalog snapshot would roll source {source_name} back from {latest} to {attempted}")]
+    SnapshotRollback {
+        source_name: String,
+        latest: String,
+        attempted: String,
+    },
+    #[error("catalog snapshot is incomplete: {0}")]
+    SnapshotIncomplete(String),
+    #[error("canonical rebuild exceeds {kind} limit of {maximum}")]
+    CanonicalRebuildTooLarge { kind: &'static str, maximum: usize },
 }
 
 pub struct Catalog {
@@ -174,7 +231,136 @@ pub struct Catalog {
     path: PathBuf,
 }
 
+struct DisjointSet {
+    parent: Vec<usize>,
+    rank: Vec<u8>,
+}
+
+impl DisjointSet {
+    fn new(length: usize) -> Self {
+        Self {
+            parent: (0..length).collect(),
+            rank: vec![0; length],
+        }
+    }
+
+    fn find(&mut self, value: usize) -> usize {
+        let parent = self.parent[value];
+        if parent != value {
+            self.parent[value] = self.find(parent);
+        }
+        self.parent[value]
+    }
+
+    fn union(&mut self, left: usize, right: usize) {
+        let mut left_root = self.find(left);
+        let mut right_root = self.find(right);
+        if left_root == right_root {
+            return;
+        }
+        if self.rank[left_root] < self.rank[right_root] {
+            std::mem::swap(&mut left_root, &mut right_root);
+        }
+        self.parent[right_root] = left_root;
+        if self.rank[left_root] == self.rank[right_root] {
+            self.rank[left_root] = self.rank[left_root].saturating_add(1);
+        }
+    }
+}
+
 impl Catalog {
+    /// Create a consistent SQLite online backup at a new path.
+    ///
+    /// The destination is published atomically through a same-directory hard
+    /// link and is never overwritten. A failed or interrupted backup leaves no
+    /// destination that can be mistaken for complete.
+    pub fn backup_to(&self, output: &Path) -> Result<(), CatalogError> {
+        if prepare_catalog_path(output, true)? {
+            return Err(CatalogError::InvalidPath(
+                "backup destination already exists",
+            ));
+        }
+        let parent = output.parent().ok_or(CatalogError::InvalidPath(
+            "backup destination must have a parent directory",
+        ))?;
+        let name = output
+            .file_name()
+            .ok_or(CatalogError::InvalidPath(
+                "backup destination must name a file",
+            ))?
+            .to_string_lossy();
+        let nonce = OffsetDateTime::now_utc().unix_timestamp_nanos();
+        let temporary = (0..100_u32)
+            .find_map(|attempt| {
+                let candidate = parent.join(format!(
+                    ".{name}.backup-{}-{nonce}-{attempt}",
+                    std::process::id()
+                ));
+                let mut options = fs::OpenOptions::new();
+                options.write(true).create_new(true);
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::OpenOptionsExt;
+                    options.mode(0o600);
+                }
+                match options.open(&candidate) {
+                    Ok(file) => {
+                        drop(file);
+                        Some(Ok(candidate))
+                    }
+                    Err(source) if source.kind() == std::io::ErrorKind::AlreadyExists => None,
+                    Err(source) => Some(Err(CatalogError::Filesystem {
+                        path: candidate,
+                        source,
+                    })),
+                }
+            })
+            .transpose()?
+            .ok_or(CatalogError::InvalidPath(
+                "could not allocate temporary backup file",
+            ))?;
+
+        let result = (|| {
+            let mut destination = Connection::open_with_flags(
+                &temporary,
+                OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+            )?;
+            {
+                let backup = rusqlite::backup::Backup::new(&self.connection, &mut destination)?;
+                backup.run_to_completion(256, std::time::Duration::from_millis(5), None)?;
+            }
+            destination.close().map_err(|(_, error)| error)?;
+            secure_file_permissions(&temporary)?;
+            let file = fs::OpenOptions::new()
+                .read(true)
+                .open(&temporary)
+                .map_err(|source| CatalogError::Filesystem {
+                    path: temporary.clone(),
+                    source,
+                })?;
+            file.sync_all().map_err(|source| CatalogError::Filesystem {
+                path: temporary.clone(),
+                source,
+            })?;
+            let verification = Catalog::open_existing(&temporary)?;
+            let integrity = verification.check_integrity()?;
+            if integrity.quick_check != "ok" || integrity.foreign_key_violations != 0 {
+                return Err(CatalogError::InvalidPath(
+                    "backup integrity verification failed",
+                ));
+            }
+            drop(verification);
+            fs::hard_link(&temporary, output).map_err(|source| CatalogError::Filesystem {
+                path: output.to_owned(),
+                source,
+            })?;
+            secure_file_permissions(output)?;
+            Ok(())
+        })();
+        let _ = fs::remove_file(&temporary);
+        result
+    }
+
     pub fn open_or_create(path: &Path) -> Result<Self, CatalogError> {
         let existed = prepare_catalog_path(path, true)?;
         let connection = Connection::open_with_flags(
@@ -185,8 +371,17 @@ impl Catalog {
         )?;
         if existed {
             configure_connection(&connection, true)?;
-            verify_schema(&connection)?;
+            verify_application_id(&connection)?;
+            let version = schema_version(&connection)?;
             configure_connection(&connection, false)?;
+            if version == 1 {
+                migrate_v1_to_v2(&connection)?;
+            } else if version != i64::from(CATALOG_SCHEMA_VERSION) {
+                return Err(CatalogError::SchemaMismatch {
+                    expected: CATALOG_SCHEMA_VERSION,
+                    observed: version,
+                });
+            }
         } else {
             configure_connection(&connection, false)?;
             initialize_schema(&connection)?;
@@ -220,8 +415,18 @@ impl Catalog {
             OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
         )?;
         configure_connection(&connection, true)?;
-        verify_schema(&connection)?;
+        verify_application_id(&connection)?;
+        let version = schema_version(&connection)?;
         configure_connection(&connection, false)?;
+        if version == 1 {
+            migrate_v1_to_v2(&connection)?;
+        } else if version != i64::from(CATALOG_SCHEMA_VERSION) {
+            return Err(CatalogError::SchemaMismatch {
+                expected: CATALOG_SCHEMA_VERSION,
+                observed: version,
+            });
+        }
+        verify_schema(&connection)?;
         secure_file_permissions(path)?;
         Ok(Self {
             connection,
@@ -246,7 +451,7 @@ impl Catalog {
         I: IntoIterator<Item = B>,
         B: AsRef<[u8]>,
     {
-        self.import_osv_batch_internal(source, records, true)
+        self.import_osv_batch_internal(source, None, records, true)
     }
 
     /// Imports records without maintaining FTS row by row. The caller must
@@ -260,12 +465,93 @@ impl Catalog {
         I: IntoIterator<Item = B>,
         B: AsRef<[u8]>,
     {
-        self.import_osv_batch_internal(source, records, false)
+        self.import_osv_batch_internal(source, None, records, false)
+    }
+
+    pub fn register_snapshot(&mut self, snapshot: &CatalogSnapshot) -> Result<(), CatalogError> {
+        validate_snapshot_descriptor(snapshot)?;
+        let imported_at = OffsetDateTime::now_utc()
+            .format(&Rfc3339)
+            .map_err(|_| CatalogError::InvalidRecord("snapshot.imported_at"))?;
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let existing = query_row_optional_cached(
+            &transaction,
+            "SELECT manifest_sha256, artifact_sha256, artifact_revision,
+                    expected_ecosystem, acquired_at, accepted_records,
+                    quarantined_records
+             FROM advisory_snapshots WHERE snapshot_id = ?1",
+            [&snapshot.snapshot_id],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, i64>(5)?,
+                    row.get::<_, i64>(6)?,
+                ))
+            },
+        )?;
+        if let Some(existing) = existing {
+            let expected = (
+                snapshot.manifest_sha256.clone(),
+                snapshot.artifact_sha256.clone(),
+                snapshot.artifact_revision.clone(),
+                snapshot.expected_ecosystem.clone(),
+                snapshot.acquired_at.clone(),
+                i64::try_from(snapshot.accepted_records)
+                    .map_err(|_| CatalogError::InvalidRecord("snapshot.accepted_records"))?,
+                i64::try_from(snapshot.quarantined_records)
+                    .map_err(|_| CatalogError::InvalidRecord("snapshot.quarantined_records"))?,
+            );
+            if existing != expected {
+                return Err(CatalogError::SnapshotConflict(snapshot.snapshot_id.clone()));
+            }
+        } else {
+            execute_cached(
+                &transaction,
+                "INSERT INTO advisory_snapshots(
+                     snapshot_id, manifest_sha256, artifact_sha256,
+                     artifact_revision, expected_ecosystem, acquired_at,
+                     accepted_records, quarantined_records, status, imported_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'preparing', ?9)",
+                params![
+                    snapshot.snapshot_id,
+                    snapshot.manifest_sha256,
+                    snapshot.artifact_sha256,
+                    snapshot.artifact_revision,
+                    snapshot.expected_ecosystem,
+                    snapshot.acquired_at,
+                    snapshot.accepted_records as i64,
+                    snapshot.quarantined_records as i64,
+                    imported_at,
+                ],
+            )?;
+        }
+        transaction.commit()?;
+        Ok(())
+    }
+
+    pub fn import_osv_snapshot_batch_deferred_search<I, B>(
+        &mut self,
+        source: &CatalogSource,
+        snapshot_id: &str,
+        records: I,
+    ) -> Result<CatalogImportResult, CatalogError>
+    where
+        I: IntoIterator<Item = B>,
+        B: AsRef<[u8]>,
+    {
+        self.import_osv_batch_internal(source, Some(snapshot_id), records, false)
     }
 
     fn import_osv_batch_internal<I, B>(
         &mut self,
         source: &CatalogSource,
+        snapshot_id: Option<&str>,
         records: I,
         update_search_index: bool,
     ) -> Result<CatalogImportResult, CatalogError>
@@ -285,6 +571,26 @@ impl Catalog {
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let source_id = register_source(&transaction, source, &imported_at)?;
+        if let Some(snapshot_id) = snapshot_id {
+            let registered = query_row_optional_cached(
+                &transaction,
+                "SELECT 1 FROM advisory_snapshots WHERE snapshot_id = ?1",
+                [snapshot_id],
+                |row| row.get::<_, i64>(0),
+            )?
+            .is_some();
+            if !registered {
+                return Err(CatalogError::SnapshotNotRegistered(snapshot_id.to_owned()));
+            }
+            ensure_snapshot_order(&transaction, source_id, &source.name, snapshot_id)?;
+            execute_cached(
+                &transaction,
+                "INSERT OR IGNORE INTO source_snapshot_imports(
+                     snapshot_id, source_id, record_count, deactivated_records
+                 ) VALUES (?1, ?2, 0, 0)",
+                params![snapshot_id, source_id],
+            )?;
+        }
         if !update_search_index {
             execute_cached(
                 &transaction,
@@ -301,7 +607,7 @@ impl Catalog {
             let bytes = bytes.as_ref();
             validate_record_size(bytes)?;
             let record: OsvRecord = serde_json::from_slice(bytes)?;
-            validate_osv_record(&record)?;
+            validate_osv_record_public(&record)?;
             result.records_seen += 1;
             import_osv_record_tx(
                 &transaction,
@@ -313,9 +619,398 @@ impl Catalog {
                 update_search_index,
                 &mut result,
             )?;
+            if let Some(snapshot_id) = snapshot_id {
+                let raw_sha256 = sha256(bytes);
+                execute_cached(
+                    &transaction,
+                    "INSERT INTO snapshot_records(
+                         snapshot_id, source_id, source_record_id, raw_sha256
+                     ) VALUES (?1, ?2, ?3, ?4)
+                     ON CONFLICT(snapshot_id, source_id, source_record_id)
+                     DO UPDATE SET raw_sha256 = excluded.raw_sha256",
+                    params![snapshot_id, source_id, record.id, raw_sha256],
+                )?;
+            }
+        }
+        if let Some(snapshot_id) = snapshot_id {
+            execute_cached(
+                &transaction,
+                "UPDATE source_snapshot_imports SET record_count = (
+                     SELECT COUNT(*) FROM snapshot_records
+                     WHERE snapshot_id = ?1 AND source_id = ?2
+                 ) WHERE snapshot_id = ?1 AND source_id = ?2",
+                params![snapshot_id, source_id],
+            )?;
         }
         transaction.commit()?;
         Ok(result)
+    }
+
+    pub fn complete_snapshot_source(
+        &mut self,
+        source: &CatalogSource,
+        snapshot_id: &str,
+        expected_records: u64,
+    ) -> Result<CatalogImportResult, CatalogError> {
+        validate_source(source)?;
+        let completed_at = OffsetDateTime::now_utc()
+            .format(&Rfc3339)
+            .map_err(|_| CatalogError::InvalidRecord("snapshot.completed_at"))?;
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let source_id = query_row_optional_cached(
+            &transaction,
+            "SELECT source_id FROM sources WHERE name = ?1",
+            [&source.name],
+            |row| row.get::<_, i64>(0),
+        )?
+        .ok_or_else(|| CatalogError::SnapshotIncomplete(source.name.clone()))?;
+        ensure_snapshot_order(&transaction, source_id, &source.name, snapshot_id)?;
+        let observed_records = query_row_cached(
+            &transaction,
+            "SELECT COUNT(*) FROM snapshot_records
+             WHERE snapshot_id = ?1 AND source_id = ?2",
+            params![snapshot_id, source_id],
+            |row| row.get::<_, i64>(0),
+        )?;
+        if observed_records
+            != i64::try_from(expected_records)
+                .map_err(|_| CatalogError::InvalidRecord("snapshot.source.record_count"))?
+        {
+            return Err(CatalogError::SnapshotIncomplete(format!(
+                "{} expected {} records, observed {}",
+                source.name, expected_records, observed_records
+            )));
+        }
+        let deactivated = execute_cached(
+            &transaction,
+            "UPDATE source_records SET active = 0
+             WHERE source_id = ?1 AND active = 1
+               AND NOT EXISTS (
+                   SELECT 1 FROM snapshot_records ss
+                   WHERE ss.snapshot_id = ?2
+                     AND ss.source_id = source_records.source_id
+                     AND ss.source_record_id = source_records.source_record_id
+               )",
+            params![source_id, snapshot_id],
+        )?;
+        execute_cached(
+            &transaction,
+            "UPDATE source_records SET active = 1
+             WHERE source_id = ?1 AND EXISTS (
+                 SELECT 1 FROM snapshot_records ss
+                 WHERE ss.snapshot_id = ?2
+                   AND ss.source_id = source_records.source_id
+                   AND ss.source_record_id = source_records.source_record_id
+             )",
+            params![source_id, snapshot_id],
+        )?;
+        execute_cached(
+            &transaction,
+            "UPDATE source_snapshot_imports
+             SET record_count = ?1, deactivated_records = ?2, completed_at = ?3
+             WHERE snapshot_id = ?4 AND source_id = ?5",
+            params![
+                expected_records as i64,
+                deactivated as i64,
+                completed_at,
+                snapshot_id,
+                source_id,
+            ],
+        )?;
+        execute_cached(
+            &transaction,
+            "INSERT INTO catalog_metadata(key, value) VALUES ('search_index_status', 'dirty')
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            [],
+        )?;
+        transaction.commit()?;
+        Ok(CatalogImportResult {
+            records_deactivated: deactivated,
+            ..CatalogImportResult::default()
+        })
+    }
+
+    pub fn complete_snapshot(&mut self, snapshot_id: &str) -> Result<(), CatalogError> {
+        let completed_at = OffsetDateTime::now_utc()
+            .format(&Rfc3339)
+            .map_err(|_| CatalogError::InvalidRecord("snapshot.completed_at"))?;
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let expected = query_row_optional_cached(
+            &transaction,
+            "SELECT accepted_records FROM advisory_snapshots WHERE snapshot_id = ?1",
+            [snapshot_id],
+            |row| row.get::<_, i64>(0),
+        )?
+        .ok_or_else(|| CatalogError::SnapshotNotRegistered(snapshot_id.to_owned()))?;
+        let observed = query_row_cached(
+            &transaction,
+            "SELECT COUNT(*) FROM snapshot_records WHERE snapshot_id = ?1",
+            [snapshot_id],
+            |row| row.get::<_, i64>(0),
+        )?;
+        let incomplete_sources = query_row_cached(
+            &transaction,
+            "SELECT COUNT(*) FROM source_snapshot_imports
+             WHERE snapshot_id = ?1 AND completed_at IS NULL",
+            [snapshot_id],
+            |row| row.get::<_, i64>(0),
+        )?;
+        if expected != observed || incomplete_sources != 0 {
+            return Err(CatalogError::SnapshotIncomplete(format!(
+                "{snapshot_id}: expected={expected} observed={observed} incomplete_sources={incomplete_sources}"
+            )));
+        }
+        execute_cached(
+            &transaction,
+            "UPDATE advisory_snapshots
+             SET status = 'complete', completed_at = ?1 WHERE snapshot_id = ?2",
+            params![completed_at, snapshot_id],
+        )?;
+        transaction.commit()?;
+        Ok(())
+    }
+
+    pub fn rebuild_canonicalization(&mut self) -> Result<CanonicalRebuildResult, CatalogError> {
+        #[derive(Debug)]
+        struct RecordState {
+            rowid: i64,
+            source_name: String,
+            source_record_id: String,
+            raw_sha256: String,
+            old_canonical_id: String,
+            candidate_id: String,
+        }
+
+        let rebuilt_at = OffsetDateTime::now_utc()
+            .format(&Rfc3339)
+            .map_err(|_| CatalogError::InvalidRecord("canonical.rebuilt_at"))?;
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let records = {
+            let mut statement = transaction.prepare(
+                "SELECT sr.record_rowid, s.name, sr.source_record_id,
+                        sr.raw_sha256, sr.canonical_id
+                 FROM source_records sr
+                 JOIN sources s ON s.source_id = sr.source_id
+                 WHERE sr.active = 1
+                 ORDER BY s.name, sr.source_record_id",
+            )?;
+            let rows = statement.query_map([], |row| {
+                let source_name = row.get::<_, String>(1)?;
+                let source_record_id = row.get::<_, String>(2)?;
+                Ok(RecordState {
+                    rowid: row.get(0)?,
+                    candidate_id: canonical_id(&source_name, &source_record_id),
+                    source_name,
+                    source_record_id,
+                    raw_sha256: row.get(3)?,
+                    old_canonical_id: row.get(4)?,
+                })
+            })?;
+            rows.collect::<Result<Vec<_>, _>>()?
+        };
+        if records.len() > MAX_CANONICAL_REBUILD_RECORDS {
+            return Err(CatalogError::CanonicalRebuildTooLarge {
+                kind: "record",
+                maximum: MAX_CANONICAL_REBUILD_RECORDS,
+            });
+        }
+        let mut dsu = DisjointSet::new(records.len());
+        let row_indexes = records
+            .iter()
+            .enumerate()
+            .map(|(index, record)| (record.rowid, index))
+            .collect::<HashMap<_, _>>();
+        let mut identifier_owners = HashMap::<String, usize>::new();
+        for (index, record) in records.iter().enumerate() {
+            if let Some(owner) = identifier_owners.insert(record.source_record_id.clone(), index) {
+                dsu.union(owner, index);
+            }
+        }
+        let mut relationship_count = records.len();
+        {
+            let mut statement = transaction.prepare(
+                "SELECT ir.source_record_rowid, ir.identifier
+                 FROM identifier_relationships ir
+                 JOIN source_records sr ON sr.record_rowid = ir.source_record_rowid
+                 WHERE sr.active = 1 AND ir.kind = 'alias'
+                 ORDER BY ir.identifier, ir.source_record_rowid",
+            )?;
+            let mut rows = statement.query([])?;
+            while let Some(row) = rows.next()? {
+                relationship_count = relationship_count.saturating_add(1);
+                if relationship_count > MAX_CANONICAL_REBUILD_RELATIONSHIPS {
+                    return Err(CatalogError::CanonicalRebuildTooLarge {
+                        kind: "exact relationship",
+                        maximum: MAX_CANONICAL_REBUILD_RELATIONSHIPS,
+                    });
+                }
+                let rowid = row.get::<_, i64>(0)?;
+                let identifier = row.get::<_, String>(1)?;
+                let index = *row_indexes
+                    .get(&rowid)
+                    .ok_or(CatalogError::InvalidRecord("canonical.record_rowid"))?;
+                if let Some(owner) = identifier_owners.insert(identifier, index) {
+                    dsu.union(owner, index);
+                }
+            }
+        }
+        let mut selected_by_root = HashMap::<usize, String>::new();
+        for (index, record) in records.iter().enumerate() {
+            let root = dsu.find(index);
+            selected_by_root
+                .entry(root)
+                .and_modify(|selected| {
+                    if record.candidate_id < *selected {
+                        *selected = record.candidate_id.clone();
+                    }
+                })
+                .or_insert_with(|| record.candidate_id.clone());
+        }
+        let selected_by_record = records
+            .iter()
+            .enumerate()
+            .map(|(index, _)| {
+                selected_by_root
+                    .get(&dsu.find(index))
+                    .cloned()
+                    .ok_or(CatalogError::InvalidRecord("canonical.component"))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut old_to_new = HashMap::<String, BTreeSet<String>>::new();
+        let mut new_to_old = HashMap::<String, BTreeSet<String>>::new();
+        for (record, selected) in records.iter().zip(&selected_by_record) {
+            old_to_new
+                .entry(record.old_canonical_id.clone())
+                .or_default()
+                .insert(selected.clone());
+            new_to_old
+                .entry(selected.clone())
+                .or_default()
+                .insert(record.old_canonical_id.clone());
+        }
+        let historical_redirects = {
+            let mut statement = transaction
+                .prepare("SELECT old_canonical_id, canonical_id FROM canonical_redirects")?;
+            let rows = statement.query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })?;
+            rows.collect::<Result<Vec<_>, _>>()?
+        };
+
+        let mut hasher = Sha256::new();
+        hash_field(&mut hasher, "secureflow-canonical-rebuild-v2");
+        for (record, selected) in records.iter().zip(&selected_by_record) {
+            hash_field(&mut hasher, &record.source_name);
+            hash_field(&mut hasher, &record.source_record_id);
+            hash_field(&mut hasher, &record.raw_sha256);
+            hash_field(&mut hasher, selected);
+        }
+        let rebuild_id = format!("sf_canonical_{}", hex_digest(hasher.finalize().as_slice()));
+
+        execute_cached(&transaction, "DELETE FROM identifiers", [])?;
+        execute_cached(&transaction, "DELETE FROM canonical_redirects", [])?;
+        for selected in selected_by_root.values() {
+            execute_cached(
+                &transaction,
+                "INSERT OR IGNORE INTO canonical_vulnerabilities(
+                     canonical_id, created_at, updated_at
+                 ) VALUES (?1, ?2, ?2)",
+                params![selected, rebuilt_at],
+            )?;
+        }
+        for (record, selected) in records.iter().zip(&selected_by_record) {
+            execute_cached(
+                &transaction,
+                "UPDATE source_records SET canonical_id = ?1 WHERE record_rowid = ?2",
+                params![selected, record.rowid],
+            )?;
+        }
+        for (identifier, owner) in &identifier_owners {
+            let selected = selected_by_root
+                .get(&dsu.find(*owner))
+                .ok_or(CatalogError::InvalidRecord("canonical.identifier"))?;
+            execute_cached(
+                &transaction,
+                "INSERT INTO identifiers(identifier, canonical_id) VALUES (?1, ?2)",
+                params![identifier, selected],
+            )?;
+        }
+        let mut redirects = BTreeSet::<(String, String)>::new();
+        for (old, targets) in &old_to_new {
+            if targets.len() == 1 {
+                let target = targets.iter().next().expect("one target");
+                if old != target {
+                    redirects.insert((old.clone(), target.clone()));
+                }
+            }
+        }
+        for (historical, previous_target) in historical_redirects {
+            if let Some(targets) = old_to_new.get(&previous_target)
+                && targets.len() == 1
+            {
+                let target = targets.iter().next().expect("one target");
+                if historical != *target {
+                    redirects.insert((historical, target.clone()));
+                }
+            }
+        }
+        for (old, target) in &redirects {
+            execute_cached(
+                &transaction,
+                "INSERT INTO canonical_redirects(old_canonical_id, canonical_id)
+                 VALUES (?1, ?2)",
+                params![old, target],
+            )?;
+        }
+        execute_cached(
+            &transaction,
+            "DELETE FROM canonical_vulnerabilities
+             WHERE NOT EXISTS (
+                 SELECT 1 FROM source_records sr
+                 WHERE sr.canonical_id = canonical_vulnerabilities.canonical_id
+             ) AND NOT EXISTS (
+                 SELECT 1 FROM identifiers i
+                 WHERE i.canonical_id = canonical_vulnerabilities.canonical_id
+             )",
+            [],
+        )?;
+        execute_cached(
+            &transaction,
+            "INSERT INTO catalog_metadata(key, value)
+             VALUES ('canonicalization', 'exact-osv-alias-rebuild-v2')
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            [],
+        )?;
+        execute_cached(
+            &transaction,
+            "INSERT INTO catalog_metadata(key, value) VALUES ('last_canonical_rebuild_id', ?1)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            [&rebuild_id],
+        )?;
+        transaction.commit()?;
+
+        Ok(CanonicalRebuildResult {
+            rebuild_id,
+            active_records: records.len() as u64,
+            exact_relationships: relationship_count as u64,
+            old_components: old_to_new.len() as u64,
+            new_components: selected_by_root.len() as u64,
+            split_components: old_to_new
+                .values()
+                .filter(|targets| targets.len() > 1)
+                .count() as u64,
+            merged_components: new_to_old
+                .values()
+                .filter(|sources| sources.len() > 1)
+                .count() as u64,
+            unambiguous_redirects: redirects.len() as u64,
+        })
     }
 
     pub fn rebuild_search_index(&mut self) -> Result<(), CatalogError> {
@@ -326,7 +1021,7 @@ impl Catalog {
         execute_cached(
             &transaction,
             "INSERT INTO source_record_fts(rowid, title, details)
-             SELECT record_rowid, title, details FROM source_records",
+             SELECT record_rowid, title, details FROM source_records WHERE active = 1",
             [],
         )?;
         execute_cached(
@@ -337,17 +1032,15 @@ impl Catalog {
         )?;
         transaction.commit()?;
         self.connection.execute_batch("PRAGMA optimize;")?;
-        let (busy, log_frames, checkpointed_frames) = self.connection.query_row(
-            "PRAGMA wal_checkpoint(TRUNCATE)",
-            [],
-            |row| {
-                Ok((
-                    row.get::<_, i64>(0)?,
-                    row.get::<_, i64>(1)?,
-                    row.get::<_, i64>(2)?,
-                ))
-            },
-        )?;
+        let (busy, log_frames, checkpointed_frames) =
+            self.connection
+                .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, i64>(1)?,
+                        row.get::<_, i64>(2)?,
+                    ))
+                })?;
         self.connection
             .pragma_update(None, "wal_autocheckpoint", 1_000_i64)?;
         if busy != 0 {
@@ -370,7 +1063,7 @@ impl Catalog {
              FROM identifiers i
              JOIN source_records sr ON sr.canonical_id = i.canonical_id
              JOIN sources s ON s.source_id = sr.source_id
-             WHERE i.identifier = ?1
+             WHERE i.identifier = ?1 AND sr.active = 1
              ORDER BY sr.withdrawn_at IS NOT NULL, s.name, sr.source_record_id
              LIMIT ?2",
         )?;
@@ -378,11 +1071,7 @@ impl Catalog {
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
 
-    pub fn search_text(
-        &self,
-        query: &str,
-        limit: usize,
-    ) -> Result<Vec<CatalogHit>, CatalogError> {
+    pub fn search_text(&self, query: &str, limit: usize) -> Result<Vec<CatalogHit>, CatalogError> {
         validate_query(query, limit)?;
         ensure_search_index_ready(&self.connection)?;
         let escaped = format!("\"{}\"", query.replace('"', "\"\""));
@@ -393,7 +1082,7 @@ impl Catalog {
              FROM source_record_fts
              JOIN source_records sr ON sr.record_rowid = source_record_fts.rowid
              JOIN sources s ON s.source_id = sr.source_id
-             WHERE source_record_fts MATCH ?1
+             WHERE source_record_fts MATCH ?1 AND sr.active = 1
              ORDER BY bm25(source_record_fts), sr.withdrawn_at IS NOT NULL,
                       s.name, sr.source_record_id
              LIMIT ?2",
@@ -426,7 +1115,7 @@ impl Catalog {
              FROM affected_packages ap
              JOIN source_records sr ON sr.record_rowid = ap.source_record_rowid
              JOIN sources s ON s.source_id = sr.source_id
-             WHERE ap.ecosystem = ?1 AND ap.package_name = ?2
+             WHERE ap.ecosystem = ?1 AND ap.package_name = ?2 AND sr.active = 1
              ORDER BY sr.withdrawn_at IS NOT NULL, s.name, sr.source_record_id
              LIMIT ?3",
         )?;
@@ -440,8 +1129,24 @@ impl Catalog {
             schema_version: CATALOG_SCHEMA_VERSION,
             sources: count(&self.connection, "sources")?,
             canonical_vulnerabilities: count(&self.connection, "canonical_vulnerabilities")?,
+            active_canonical_vulnerabilities: nonnegative_count(self.connection.query_row(
+                "SELECT COUNT(DISTINCT canonical_id) FROM source_records WHERE active = 1",
+                [],
+                |row| row.get::<_, i64>(0),
+            )?)?,
             source_records: count(&self.connection, "source_records")?,
+            active_source_records: nonnegative_count(self.connection.query_row(
+                "SELECT COUNT(*) FROM source_records WHERE active = 1",
+                [],
+                |row| row.get::<_, i64>(0),
+            )?)?,
+            inactive_source_records: nonnegative_count(self.connection.query_row(
+                "SELECT COUNT(*) FROM source_records WHERE active = 0",
+                [],
+                |row| row.get::<_, i64>(0),
+            )?)?,
             source_record_revisions: count(&self.connection, "source_record_revisions")?,
+            snapshots: count(&self.connection, "advisory_snapshots")?,
             identifiers: count(&self.connection, "identifiers")?,
             relationships: count(&self.connection, "identifier_relationships")?,
             affected_packages: count(&self.connection, "affected_packages")?,
@@ -470,6 +1175,36 @@ impl Catalog {
             quick_check,
             foreign_key_violations,
             search_index_status: search_index_status(&self.connection)?,
+        })
+    }
+
+    pub fn provenance(&self) -> Result<CatalogProvenance, CatalogError> {
+        let complete_snapshot_ids = {
+            let mut statement = self.connection.prepare(
+                "SELECT snapshot_id FROM advisory_snapshots
+                 WHERE status = 'complete' ORDER BY snapshot_id",
+            )?;
+            let rows = statement.query_map([], |row| row.get::<_, String>(0))?;
+            rows.collect::<Result<Vec<_>, _>>()?
+        };
+        let canonicalization = self.connection.query_row(
+            "SELECT value FROM catalog_metadata WHERE key = 'canonicalization'",
+            [],
+            |row| row.get::<_, String>(0),
+        )?;
+        let last_canonical_rebuild_id = self
+            .connection
+            .query_row(
+                "SELECT value FROM catalog_metadata WHERE key = 'last_canonical_rebuild_id'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?;
+        Ok(CatalogProvenance {
+            schema_version: CATALOG_SCHEMA_VERSION,
+            complete_snapshot_ids,
+            canonicalization,
+            last_canonical_rebuild_id,
         })
     }
 }
@@ -518,6 +1253,20 @@ fn initialize_schema(connection: &Connection) -> Result<(), CatalogError> {
              canonical_id TEXT NOT NULL REFERENCES canonical_vulnerabilities(canonical_id)
          ) STRICT;
 
+         CREATE TABLE IF NOT EXISTS advisory_snapshots (
+             snapshot_id TEXT PRIMARY KEY,
+             manifest_sha256 TEXT NOT NULL UNIQUE,
+             artifact_sha256 TEXT NOT NULL,
+             artifact_revision TEXT NOT NULL,
+             expected_ecosystem TEXT NOT NULL,
+             acquired_at TEXT NOT NULL,
+             accepted_records INTEGER NOT NULL CHECK(accepted_records >= 0),
+             quarantined_records INTEGER NOT NULL CHECK(quarantined_records >= 0),
+             status TEXT NOT NULL CHECK(status IN ('preparing', 'complete')),
+             imported_at TEXT NOT NULL,
+             completed_at TEXT
+         ) STRICT;
+
          CREATE TABLE IF NOT EXISTS source_record_revisions (
              revision_id INTEGER PRIMARY KEY,
              source_id INTEGER NOT NULL REFERENCES sources(source_id),
@@ -541,7 +1290,25 @@ fn initialize_schema(connection: &Connection) -> Result<(), CatalogError> {
              details TEXT NOT NULL,
              raw_sha256 TEXT NOT NULL,
              current_revision_id INTEGER NOT NULL REFERENCES source_record_revisions(revision_id),
+             active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0, 1)),
              UNIQUE(source_id, source_record_id)
+         ) STRICT;
+
+         CREATE TABLE IF NOT EXISTS snapshot_records (
+             snapshot_id TEXT NOT NULL REFERENCES advisory_snapshots(snapshot_id),
+             source_id INTEGER NOT NULL REFERENCES sources(source_id),
+             source_record_id TEXT NOT NULL,
+             raw_sha256 TEXT NOT NULL,
+             PRIMARY KEY(snapshot_id, source_id, source_record_id)
+         ) STRICT;
+
+         CREATE TABLE IF NOT EXISTS source_snapshot_imports (
+             snapshot_id TEXT NOT NULL REFERENCES advisory_snapshots(snapshot_id),
+             source_id INTEGER NOT NULL REFERENCES sources(source_id),
+             record_count INTEGER NOT NULL CHECK(record_count >= 0),
+             deactivated_records INTEGER NOT NULL DEFAULT 0 CHECK(deactivated_records >= 0),
+             completed_at TEXT,
+             PRIMARY KEY(snapshot_id, source_id)
          ) STRICT;
 
          CREATE TABLE IF NOT EXISTS identifiers (
@@ -576,6 +1343,10 @@ fn initialize_schema(connection: &Connection) -> Result<(), CatalogError> {
 
          CREATE INDEX IF NOT EXISTS source_records_canonical_idx
              ON source_records(canonical_id);
+         CREATE INDEX IF NOT EXISTS source_records_active_idx
+             ON source_records(source_id, active, source_record_id);
+         CREATE INDEX IF NOT EXISTS source_snapshot_imports_source_idx
+             ON source_snapshot_imports(source_id, completed_at);
          CREATE INDEX IF NOT EXISTS identifiers_canonical_idx
              ON identifiers(canonical_id);
          CREATE INDEX IF NOT EXISTS canonical_redirects_target_idx
@@ -603,12 +1374,70 @@ fn initialize_schema(connection: &Connection) -> Result<(), CatalogError> {
     Ok(())
 }
 
-fn verify_schema(connection: &Connection) -> Result<(), CatalogError> {
+fn migrate_v1_to_v2(connection: &Connection) -> Result<(), CatalogError> {
+    let result = connection.execute_batch(&format!(
+        "BEGIN IMMEDIATE;
+         CREATE TABLE advisory_snapshots (
+             snapshot_id TEXT PRIMARY KEY,
+             manifest_sha256 TEXT NOT NULL UNIQUE,
+             artifact_sha256 TEXT NOT NULL,
+             artifact_revision TEXT NOT NULL,
+             expected_ecosystem TEXT NOT NULL,
+             acquired_at TEXT NOT NULL,
+             accepted_records INTEGER NOT NULL CHECK(accepted_records >= 0),
+             quarantined_records INTEGER NOT NULL CHECK(quarantined_records >= 0),
+             status TEXT NOT NULL CHECK(status IN ('preparing', 'complete')),
+             imported_at TEXT NOT NULL,
+             completed_at TEXT
+         ) STRICT;
+         ALTER TABLE source_records
+             ADD COLUMN active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0, 1));
+         CREATE TABLE snapshot_records (
+             snapshot_id TEXT NOT NULL REFERENCES advisory_snapshots(snapshot_id),
+             source_id INTEGER NOT NULL REFERENCES sources(source_id),
+             source_record_id TEXT NOT NULL,
+             raw_sha256 TEXT NOT NULL,
+             PRIMARY KEY(snapshot_id, source_id, source_record_id)
+         ) STRICT;
+         CREATE TABLE source_snapshot_imports (
+             snapshot_id TEXT NOT NULL REFERENCES advisory_snapshots(snapshot_id),
+             source_id INTEGER NOT NULL REFERENCES sources(source_id),
+             record_count INTEGER NOT NULL CHECK(record_count >= 0),
+             deactivated_records INTEGER NOT NULL DEFAULT 0 CHECK(deactivated_records >= 0),
+             completed_at TEXT,
+             PRIMARY KEY(snapshot_id, source_id)
+         ) STRICT;
+         CREATE INDEX source_records_active_idx
+             ON source_records(source_id, active, source_record_id);
+         CREATE INDEX source_snapshot_imports_source_idx
+             ON source_snapshot_imports(source_id, completed_at);
+         PRAGMA user_version = {CATALOG_SCHEMA_VERSION};
+         COMMIT;"
+    ));
+    if let Err(error) = result {
+        let _ = connection.execute_batch("ROLLBACK;");
+        return Err(error.into());
+    }
+    Ok(())
+}
+
+fn verify_application_id(connection: &Connection) -> Result<(), CatalogError> {
     let application_id = connection.pragma_query_value(None, "application_id", |row| row.get(0))?;
     if application_id != i64::from(CATALOG_APPLICATION_ID) {
         return Err(CatalogError::ApplicationIdMismatch(application_id));
     }
-    let version = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    Ok(())
+}
+
+fn schema_version(connection: &Connection) -> Result<i64, CatalogError> {
+    connection
+        .pragma_query_value(None, "user_version", |row| row.get(0))
+        .map_err(Into::into)
+}
+
+fn verify_schema(connection: &Connection) -> Result<(), CatalogError> {
+    verify_application_id(connection)?;
+    let version = schema_version(connection)?;
     if version != i64::from(CATALOG_SCHEMA_VERSION) {
         return Err(CatalogError::SchemaMismatch {
             expected: CATALOG_SCHEMA_VERSION,
@@ -625,18 +1454,18 @@ fn register_source(
 ) -> Result<i64, CatalogError> {
     let existing = query_row_optional_cached(
         transaction,
-            "SELECT source_id, license_expression, license_evidence_sha256, locator
+        "SELECT source_id, license_expression, license_evidence_sha256, locator
              FROM sources WHERE name = ?1",
-            [&source.name],
-            |row| {
-                Ok((
-                    row.get::<_, i64>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                    row.get::<_, String>(3)?,
-                ))
-            },
-        )?;
+        [&source.name],
+        |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+            ))
+        },
+    )?;
     if let Some((source_id, license, evidence, locator)) = existing {
         if license != source.license_expression
             || evidence != source.license_evidence_sha256
@@ -682,17 +1511,17 @@ fn import_osv_record_tx(
     let raw_sha256 = sha256(raw);
     let existing = query_row_optional_cached(
         transaction,
-            "SELECT record_rowid, raw_sha256, canonical_id
+        "SELECT record_rowid, raw_sha256, canonical_id
              FROM source_records WHERE source_id = ?1 AND source_record_id = ?2",
-            params![source_id, record.id],
-            |row| {
-                Ok((
-                    row.get::<_, i64>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                ))
-            },
-        )?;
+        params![source_id, record.id],
+        |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        },
+    )?;
     if existing
         .as_ref()
         .is_some_and(|(_, existing_hash, _)| existing_hash == &raw_sha256)
@@ -719,11 +1548,10 @@ fn import_osv_record_tx(
     for identifier in &exact_identifiers {
         if let Some(value) = query_row_optional_cached(
             transaction,
-                "SELECT canonical_id FROM identifiers WHERE identifier = ?1",
-                [identifier],
-                |row| row.get::<_, String>(0),
-            )?
-        {
+            "SELECT canonical_id FROM identifiers WHERE identifier = ?1",
+            [identifier],
+            |row| row.get::<_, String>(0),
+        )? {
             canonical_ids.insert(value);
         }
     }
@@ -750,7 +1578,14 @@ fn import_osv_record_tx(
         "INSERT OR IGNORE INTO source_record_revisions(
              source_id, source_record_id, modified_at, raw_sha256, raw_json, imported_at
          ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        params![source_id, record.id, record.modified, raw_sha256, raw, imported_at],
+        params![
+            source_id,
+            record.id,
+            record.modified,
+            raw_sha256,
+            raw,
+            imported_at
+        ],
     )?;
     let revision_id = query_row_cached(
         transaction,
@@ -759,27 +1594,29 @@ fn import_osv_record_tx(
         params![source_id, record.id, raw_sha256],
         |row| row.get::<_, i64>(0),
     )?;
-    let title = record
-        .summary
-        .as_deref()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or(&record.id);
-    let details = record.details.as_deref().unwrap_or("");
+    let title = normalize_catalog_text(
+        record
+            .summary
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or(&record.id),
+    );
+    let details = normalize_catalog_text(record.details.as_deref().unwrap_or(""));
     let record_rowid = if let Some((record_rowid, _, _)) = existing {
         execute_cached(
             transaction,
             "UPDATE source_records SET
                  canonical_id = ?1, modified_at = ?2, published_at = ?3,
                  withdrawn_at = ?4, title = ?5, details = ?6, raw_sha256 = ?7,
-                 current_revision_id = ?8
+                 current_revision_id = ?8, active = 1
              WHERE record_rowid = ?9",
             params![
                 selected,
                 record.modified,
                 record.published,
                 record.withdrawn,
-                title,
-                details,
+                &title,
+                &details,
                 raw_sha256,
                 revision_id,
                 record_rowid
@@ -824,8 +1661,8 @@ fn import_osv_record_tx(
                 record.modified,
                 record.published,
                 record.withdrawn,
-                title,
-                details,
+                &title,
+                &details,
                 raw_sha256,
                 revision_id
             ],
@@ -942,13 +1779,65 @@ fn insert_relationship(
     Ok(())
 }
 
+fn ensure_snapshot_order(
+    connection: &Connection,
+    source_id: i64,
+    source_name: &str,
+    snapshot_id: &str,
+) -> Result<String, CatalogError> {
+    let attempted = query_row_optional_cached(
+        connection,
+        "SELECT acquired_at, artifact_sha256, artifact_revision
+         FROM advisory_snapshots WHERE snapshot_id = ?1",
+        [snapshot_id],
+        |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        },
+    )?
+    .ok_or_else(|| CatalogError::SnapshotNotRegistered(snapshot_id.to_owned()))?;
+    let latest = query_row_optional_cached(
+        connection,
+        "SELECT sn.acquired_at, sn.artifact_sha256, sn.artifact_revision
+         FROM source_snapshot_imports si
+         JOIN advisory_snapshots sn ON sn.snapshot_id = si.snapshot_id
+         WHERE si.source_id = ?1 AND si.completed_at IS NOT NULL
+           AND si.snapshot_id <> ?2
+         ORDER BY sn.acquired_at DESC LIMIT 1",
+        params![source_id, snapshot_id],
+        |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        },
+    )?;
+    if let Some(latest) = latest {
+        let attempted_time = OffsetDateTime::parse(&attempted.0, &Rfc3339)
+            .map_err(|_| CatalogError::InvalidRecord("snapshot.acquired_at"))?;
+        let latest_time = OffsetDateTime::parse(&latest.0, &Rfc3339)
+            .map_err(|_| CatalogError::InvalidRecord("snapshot.latest_acquired_at"))?;
+        if attempted_time < latest_time
+            || (attempted_time == latest_time
+                && (attempted.1 != latest.1 || attempted.2 != latest.2))
+        {
+            return Err(CatalogError::SnapshotRollback {
+                source_name: source_name.to_owned(),
+                latest: latest.0,
+                attempted: attempted.0,
+            });
+        }
+    }
+    Ok(attempted.0)
+}
+
 fn validate_source(source: &CatalogSource) -> Result<(), CatalogError> {
     validate_text(&source.name, 100, "source.name")?;
-    validate_text(
-        &source.license_expression,
-        200,
-        "source.license_expression",
-    )?;
+    validate_text(&source.license_expression, 200, "source.license_expression")?;
     if !super::valid_sha256(&source.license_evidence_sha256) {
         return Err(CatalogError::InvalidRecord(
             "source.license_evidence_sha256",
@@ -957,7 +1846,40 @@ fn validate_source(source: &CatalogSource) -> Result<(), CatalogError> {
     validate_text(&source.locator, 4_096, "source.locator")
 }
 
-fn validate_osv_record(record: &OsvRecord) -> Result<(), CatalogError> {
+fn validate_snapshot_descriptor(snapshot: &CatalogSnapshot) -> Result<(), CatalogError> {
+    validate_text(&snapshot.snapshot_id, 100, "snapshot.snapshot_id")?;
+    if !snapshot.snapshot_id.starts_with("sf_snapshot_") {
+        return Err(CatalogError::InvalidRecord("snapshot.snapshot_id"));
+    }
+    if !super::valid_sha256(&snapshot.manifest_sha256)
+        || !super::valid_sha256(&snapshot.artifact_sha256)
+    {
+        return Err(CatalogError::InvalidRecord("snapshot.sha256"));
+    }
+    validate_text(
+        &snapshot.artifact_revision,
+        500,
+        "snapshot.artifact_revision",
+    )?;
+    validate_text(
+        &snapshot.expected_ecosystem,
+        100,
+        "snapshot.expected_ecosystem",
+    )?;
+    validate_timestamp(&snapshot.acquired_at, "snapshot.acquired_at")?;
+    if snapshot.accepted_records == 0
+        || snapshot.accepted_records > MAX_IMPORT_RECORDS as u64
+        || snapshot
+            .accepted_records
+            .saturating_add(snapshot.quarantined_records)
+            > MAX_IMPORT_RECORDS as u64
+    {
+        return Err(CatalogError::InvalidRecord("snapshot.record_counts"));
+    }
+    Ok(())
+}
+
+pub fn validate_osv_record_public(record: &OsvRecord) -> Result<(), CatalogError> {
     validate_identifier(&record.id, "id")?;
     validate_timestamp(&record.modified, "modified")?;
     validate_optional_timestamp(record.published.as_deref(), "published")?;
@@ -965,8 +1887,8 @@ fn validate_osv_record(record: &OsvRecord) -> Result<(), CatalogError> {
     if let Some(version) = &record.schema_version {
         validate_text(version, 50, "schema_version")?;
     }
-    validate_optional_text(record.summary.as_deref(), 1_000, "summary")?;
-    validate_optional_text(record.details.as_deref(), 262_144, "details")?;
+    validate_optional_content_text(record.summary.as_deref(), 1_000, "summary")?;
+    validate_optional_content_text(record.details.as_deref(), 262_144, "details")?;
     if record.aliases.len() + record.upstream.len() + record.related.len()
         > MAX_IDENTIFIERS_PER_RECORD
     {
@@ -1027,14 +1949,12 @@ fn validate_identifier(value: &str, field: &'static str) -> Result<(), CatalogEr
     Ok(())
 }
 
-fn validate_text(
-    value: &str,
-    max_chars: usize,
-    field: &'static str,
-) -> Result<(), CatalogError> {
+fn validate_text(value: &str, max_chars: usize, field: &'static str) -> Result<(), CatalogError> {
     if value.trim().is_empty()
         || value.chars().count() > max_chars
-        || value.chars().any(|character| character.is_control() && !matches!(character, '\n' | '\r' | '\t'))
+        || value
+            .chars()
+            .any(|character| character.is_control() && !matches!(character, '\n' | '\r' | '\t'))
     {
         return Err(CatalogError::InvalidRecord(field));
     }
@@ -1055,6 +1975,35 @@ fn validate_optional_text(
     Ok(())
 }
 
+fn validate_optional_content_text(
+    value: Option<&str>,
+    max_chars: usize,
+    field: &'static str,
+) -> Result<(), CatalogError> {
+    if let Some(value) = value {
+        if value.is_empty() {
+            return Ok(());
+        }
+        if value.trim().is_empty() || value.chars().count() > max_chars {
+            return Err(CatalogError::InvalidRecord(field));
+        }
+    }
+    Ok(())
+}
+
+fn normalize_catalog_text(value: &str) -> String {
+    value
+        .chars()
+        .map(|character| {
+            if character.is_control() && !matches!(character, '\n' | '\r' | '\t') {
+                ' '
+            } else {
+                character
+            }
+        })
+        .collect()
+}
+
 fn validate_timestamp(value: &str, field: &'static str) -> Result<(), CatalogError> {
     OffsetDateTime::parse(value, &Rfc3339)
         .map(|_| ())
@@ -1073,10 +2022,14 @@ fn validate_optional_timestamp(
 
 fn validate_query(value: &str, limit: usize) -> Result<(), CatalogError> {
     if value.trim().is_empty() || value.chars().count() > 500 {
-        return Err(CatalogError::InvalidQuery("query must contain 1 to 500 characters"));
+        return Err(CatalogError::InvalidQuery(
+            "query must contain 1 to 500 characters",
+        ));
     }
     if limit == 0 || limit > MAX_QUERY_RESULTS {
-        return Err(CatalogError::InvalidQuery("limit must be between 1 and 1000"));
+        return Err(CatalogError::InvalidQuery(
+            "limit must be between 1 and 1000",
+        ));
     }
     Ok(())
 }
@@ -1130,6 +2083,7 @@ fn count(connection: &Connection, table: &str) -> Result<u64, CatalogError> {
         "identifier_relationships",
         "affected_packages",
         "advisory_references",
+        "advisory_snapshots",
     ];
     if !allowed.contains(&table) {
         return Err(CatalogError::InvalidQuery("unknown statistics table"));
@@ -1207,10 +2161,14 @@ fn prepare_catalog_path(path: &Path, create: bool) -> Result<bool, CatalogError>
     }
     match fs::symlink_metadata(path) {
         Ok(metadata) if metadata.file_type().is_symlink() => {
-            return Err(CatalogError::InvalidPath("database path cannot be a symlink"));
+            return Err(CatalogError::InvalidPath(
+                "database path cannot be a symlink",
+            ));
         }
         Ok(metadata) if !metadata.file_type().is_file() => {
-            return Err(CatalogError::InvalidPath("database path is not a regular file"));
+            return Err(CatalogError::InvalidPath(
+                "database path is not a regular file",
+            ));
         }
         Ok(_) => return Ok(true),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound && create => {
@@ -1263,10 +2221,12 @@ fn create_private_directories(path: &Path) -> Result<(), CatalogError> {
     use std::os::unix::fs::DirBuilderExt;
     let mut builder = fs::DirBuilder::new();
     builder.recursive(true).mode(0o700);
-    builder.create(path).map_err(|source| CatalogError::Filesystem {
-        path: path.to_owned(),
-        source,
-    })
+    builder
+        .create(path)
+        .map_err(|source| CatalogError::Filesystem {
+            path: path.to_owned(),
+            source,
+        })
 }
 
 #[cfg(not(unix))]
@@ -1303,6 +2263,19 @@ mod tests {
             license_expression: "CC-BY-4.0".into(),
             license_evidence_sha256: "a".repeat(64),
             locator: "https://example.invalid/osv".into(),
+        }
+    }
+
+    fn snapshot(fill: char, acquired_at: &str, accepted_records: u64) -> CatalogSnapshot {
+        CatalogSnapshot {
+            snapshot_id: format!("sf_snapshot_{}", fill.to_string().repeat(64)),
+            manifest_sha256: fill.to_string().repeat(64),
+            artifact_sha256: fill.to_string().repeat(64),
+            artifact_revision: format!("fixture-{fill}"),
+            expected_ecosystem: "crates.io".into(),
+            acquired_at: acquired_at.into(),
+            accepted_records,
+            quarantined_records: 0,
         }
     }
 
@@ -1376,6 +2349,59 @@ mod tests {
     }
 
     #[test]
+    fn canonical_rebuild_splits_components_after_an_alias_is_removed() {
+        let path = temporary_catalog("canonical-split");
+        let mut catalog = Catalog::open_or_create(&path).expect("catalog");
+        let linked = record("GHSA-aaaa-bbbb-cccc", &["CVE-2026-0001"], "linked");
+        let cve = record("CVE-2026-0001", &[], "cve");
+        catalog
+            .import_osv_batch(&source(), [&linked, &cve])
+            .expect("linked import");
+        assert_eq!(
+            catalog
+                .stats()
+                .expect("stats")
+                .active_canonical_vulnerabilities,
+            1
+        );
+
+        let corrected = record("GHSA-aaaa-bbbb-cccc", &[], "corrected");
+        catalog
+            .import_osv_record(&source(), &corrected)
+            .expect("alias removal");
+        assert_eq!(
+            catalog
+                .stats()
+                .expect("stats")
+                .active_canonical_vulnerabilities,
+            1
+        );
+        let rebuild = catalog
+            .rebuild_canonicalization()
+            .expect("canonical rebuild");
+        assert_eq!(rebuild.old_components, 1);
+        assert_eq!(rebuild.new_components, 2);
+        assert_eq!(rebuild.split_components, 1);
+        assert_eq!(
+            catalog
+                .stats()
+                .expect("stats")
+                .active_canonical_vulnerabilities,
+            2
+        );
+        let ghsa = catalog
+            .lookup_identifier("GHSA-aaaa-bbbb-cccc", 10)
+            .expect("GHSA lookup");
+        let cve = catalog
+            .lookup_identifier("CVE-2026-0001", 10)
+            .expect("CVE lookup");
+        assert_eq!(ghsa.len(), 1);
+        assert_eq!(cve.len(), 1);
+        assert_ne!(ghsa[0].canonical_id, cve[0].canonical_id);
+        cleanup(&path);
+    }
+
+    #[test]
     fn revisions_are_retained_and_identical_content_is_idempotent() {
         let path = temporary_catalog("revisions");
         let mut catalog = Catalog::open_or_create(&path).expect("catalog");
@@ -1420,6 +2446,154 @@ mod tests {
     }
 
     #[test]
+    fn full_snapshots_deactivate_missing_records_and_reject_rollbacks() {
+        let path = temporary_catalog("snapshot-lifecycle");
+        let mut catalog = Catalog::open_or_create(&path).expect("catalog");
+        let first = record("GHSA-aaaa-bbbb-cccc", &[], "first");
+        let second = record("GHSA-dddd-eeee-ffff", &[], "second");
+        let initial = snapshot('a', "2026-08-22T00:00:00Z", 2);
+        catalog
+            .register_snapshot(&initial)
+            .expect("register initial");
+        catalog
+            .import_osv_snapshot_batch_deferred_search(
+                &source(),
+                &initial.snapshot_id,
+                [&first, &second],
+            )
+            .expect("import initial");
+        catalog
+            .complete_snapshot_source(&source(), &initial.snapshot_id, 2)
+            .expect("complete initial source");
+        catalog
+            .complete_snapshot(&initial.snapshot_id)
+            .expect("complete initial");
+
+        let mut corrected_policy = initial.clone();
+        corrected_policy.snapshot_id = format!("sf_snapshot_{}", "d".repeat(64));
+        corrected_policy.manifest_sha256 = "d".repeat(64);
+        catalog
+            .register_snapshot(&corrected_policy)
+            .expect("register same-artifact policy correction");
+        catalog
+            .import_osv_snapshot_batch_deferred_search(
+                &source(),
+                &corrected_policy.snapshot_id,
+                [&first, &second],
+            )
+            .expect("same acquired artifact can be reprocessed by a new policy");
+        catalog
+            .complete_snapshot_source(&source(), &corrected_policy.snapshot_id, 2)
+            .expect("complete corrected policy source");
+        catalog
+            .complete_snapshot(&corrected_policy.snapshot_id)
+            .expect("complete corrected policy snapshot");
+
+        let next = snapshot('b', "2026-08-23T00:00:00Z", 1);
+        catalog.register_snapshot(&next).expect("register next");
+        catalog
+            .import_osv_snapshot_batch_deferred_search(&source(), &next.snapshot_id, [&first])
+            .expect("import next");
+        let completion = catalog
+            .complete_snapshot_source(&source(), &next.snapshot_id, 1)
+            .expect("complete next source");
+        assert_eq!(completion.records_deactivated, 1);
+        catalog
+            .complete_snapshot(&next.snapshot_id)
+            .expect("complete next");
+        catalog.rebuild_search_index().expect("rebuild FTS");
+        let stats = catalog.stats().expect("stats");
+        assert_eq!(stats.snapshots, 3);
+        assert_eq!(stats.source_records, 2);
+        assert_eq!(stats.active_source_records, 1);
+        assert_eq!(stats.inactive_source_records, 1);
+        assert!(
+            catalog
+                .lookup_identifier("GHSA-dddd-eeee-ffff", 10)
+                .expect("lookup")
+                .is_empty()
+        );
+
+        let rollback = snapshot('c', "2026-08-21T00:00:00Z", 1);
+        catalog
+            .register_snapshot(&rollback)
+            .expect("register rollback evidence");
+        assert!(matches!(
+            catalog.import_osv_snapshot_batch_deferred_search(
+                &source(),
+                &rollback.snapshot_id,
+                [&second]
+            ),
+            Err(CatalogError::SnapshotRollback { .. })
+        ));
+        assert_eq!(catalog.stats().expect("stats").active_source_records, 1);
+        cleanup(&path);
+    }
+
+    #[test]
+    fn writable_open_migrates_a_v1_catalog_without_reinitializing_it() {
+        let path = temporary_catalog("migration-v1");
+        let connection = Connection::open(&path).expect("v1 database");
+        connection
+            .execute_batch(&format!(
+                "PRAGMA application_id = {CATALOG_APPLICATION_ID};
+                 PRAGMA user_version = 1;
+                 CREATE TABLE sources (
+                     source_id INTEGER PRIMARY KEY,
+                     name TEXT NOT NULL UNIQUE,
+                     license_expression TEXT NOT NULL,
+                     license_evidence_sha256 TEXT NOT NULL,
+                     locator TEXT NOT NULL,
+                     first_imported_at TEXT NOT NULL,
+                     last_imported_at TEXT NOT NULL
+                 ) STRICT;
+                 CREATE TABLE canonical_vulnerabilities (
+                     canonical_id TEXT PRIMARY KEY,
+                     created_at TEXT NOT NULL,
+                     updated_at TEXT NOT NULL
+                 ) STRICT;
+                 CREATE TABLE source_record_revisions (
+                     revision_id INTEGER PRIMARY KEY,
+                     source_id INTEGER NOT NULL REFERENCES sources(source_id),
+                     source_record_id TEXT NOT NULL,
+                     modified_at TEXT NOT NULL,
+                     raw_sha256 TEXT NOT NULL,
+                     raw_json BLOB NOT NULL,
+                     imported_at TEXT NOT NULL,
+                     UNIQUE(source_id, source_record_id, raw_sha256)
+                 ) STRICT;
+                 CREATE TABLE source_records (
+                     record_rowid INTEGER PRIMARY KEY,
+                     source_id INTEGER NOT NULL REFERENCES sources(source_id),
+                     source_record_id TEXT NOT NULL,
+                     canonical_id TEXT NOT NULL REFERENCES canonical_vulnerabilities(canonical_id),
+                     modified_at TEXT NOT NULL,
+                     published_at TEXT,
+                     withdrawn_at TEXT,
+                     title TEXT NOT NULL,
+                     details TEXT NOT NULL,
+                     raw_sha256 TEXT NOT NULL,
+                     current_revision_id INTEGER NOT NULL REFERENCES source_record_revisions(revision_id),
+                     UNIQUE(source_id, source_record_id)
+                 ) STRICT;"
+            ))
+            .expect("v1 schema");
+        drop(connection);
+        let catalog = Catalog::open_or_create(&path).expect("migrated catalog");
+        assert_eq!(schema_version(&catalog.connection).expect("version"), 2);
+        let active_columns = catalog
+            .connection
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('source_records') WHERE name = 'active'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("active column");
+        assert_eq!(active_columns, 1);
+        cleanup(&path);
+    }
+
+    #[test]
     fn deferred_search_fails_closed_until_an_explicit_rebuild() {
         let path = temporary_catalog("deferred-search");
         let mut catalog = Catalog::open_or_create(&path).expect("catalog");
@@ -1433,10 +2607,73 @@ mod tests {
             Err(CatalogError::InvalidQuery(_))
         ));
         catalog.rebuild_search_index().expect("rebuild");
-        assert_eq!(catalog.search_text("deferred title", 10).expect("search").len(), 1);
+        assert_eq!(
+            catalog
+                .search_text("deferred title", 10)
+                .expect("search")
+                .len(),
+            1
+        );
         let integrity = catalog.check_integrity().expect("integrity");
         assert_eq!(integrity.quick_check, "ok");
         assert_eq!(integrity.foreign_key_violations, 0);
+        cleanup(&path);
+    }
+
+    #[test]
+    fn concurrent_readers_observe_consistent_states_during_writes() {
+        use std::sync::{Arc, Barrier};
+
+        let path = temporary_catalog("concurrent-readers");
+        let mut initial = Catalog::open_or_create(&path).expect("catalog");
+        let first = record("GHSA-aaaa-bbbb-cccc", &[], "initial title");
+        initial
+            .import_osv_record(&source(), &first)
+            .expect("initial import");
+        drop(initial);
+
+        let barrier = Arc::new(Barrier::new(4));
+        let writer_path = path.clone();
+        let writer_barrier = barrier.clone();
+        let writer = std::thread::spawn(move || {
+            let mut catalog = Catalog::open_existing_writable(&writer_path).expect("writer");
+            writer_barrier.wait();
+            for index in 0..25_u32 {
+                let id = format!("GHSA-test-test-{index:04}");
+                let bytes = record(&id, &[], &format!("concurrent title {index}"));
+                catalog
+                    .import_osv_record(&source(), &bytes)
+                    .expect("concurrent import");
+            }
+        });
+
+        let mut readers = Vec::new();
+        for _ in 0..3 {
+            let reader_path = path.clone();
+            let reader_barrier = barrier.clone();
+            readers.push(std::thread::spawn(move || {
+                let catalog = Catalog::open_existing(&reader_path).expect("reader");
+                reader_barrier.wait();
+                for _ in 0..50 {
+                    let stats = catalog.stats().expect("consistent stats");
+                    assert!(stats.active_source_records >= 1);
+                    assert_eq!(
+                        catalog
+                            .lookup_identifier("GHSA-aaaa-bbbb-cccc", 1)
+                            .expect("consistent lookup")
+                            .len(),
+                        1
+                    );
+                }
+            }));
+        }
+        writer.join().expect("writer thread");
+        for reader in readers {
+            reader.join().expect("reader thread");
+        }
+        let catalog = Catalog::open_existing(&path).expect("final reader");
+        assert_eq!(catalog.stats().expect("final stats").source_records, 26);
+        drop(catalog);
         cleanup(&path);
     }
 
@@ -1481,6 +2718,32 @@ mod tests {
         cleanup(&path);
     }
 
+    #[test]
+    fn raw_advisory_controls_are_retained_but_normalized_for_queries() {
+        let path = temporary_catalog("content-controls");
+        let mut catalog = Catalog::open_or_create(&path).expect("catalog");
+        let bytes = serde_json::to_vec(&serde_json::json!({
+            "id": "GHSA-aaaa-bbbb-cccc",
+            "modified": "2026-08-23T00:00:00Z",
+            "summary": "terminal\u{1b}[31m evidence",
+            "details": "captured output\u{1b}[0m"
+        }))
+        .expect("fixture JSON");
+        catalog
+            .import_osv_record(&source(), &bytes)
+            .expect("record import");
+        let hits = catalog
+            .lookup_identifier("GHSA-aaaa-bbbb-cccc", 1)
+            .expect("lookup");
+        assert_eq!(hits.len(), 1);
+        assert!(!hits[0].title.chars().any(char::is_control));
+        assert_eq!(
+            catalog.stats().expect("stats").raw_revision_bytes,
+            bytes.len() as u64
+        );
+        cleanup(&path);
+    }
+
     #[cfg(unix)]
     #[test]
     fn catalog_rejects_symlinks_and_uses_private_permissions() {
@@ -1507,11 +2770,7 @@ mod tests {
     fn database_size_preserves_non_utf8_paths_for_sqlite_sidecars() {
         use std::os::unix::ffi::OsStringExt;
 
-        let mut name = format!(
-            "secureflow-catalog-non-utf8-{}-",
-            std::process::id()
-        )
-        .into_bytes();
+        let mut name = format!("secureflow-catalog-non-utf8-{}-", std::process::id()).into_bytes();
         name.push(0xff);
         name.extend_from_slice(b".sqlite3");
         let path = std::env::temp_dir().join(std::ffi::OsString::from_vec(name));

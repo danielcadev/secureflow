@@ -1,0 +1,50 @@
+contract_version = "secureflow-advisory-source-registry-v1"
+default_network_policy = "acquisition-boundary-only"
+catalog_validation_authority = "human-only"
+
+[[ecosystems]]
+name = "crates.io"
+osv_zip = "https://osv-vulnerabilities.storage.googleapis.com/crates.io/all.zip"
+enabled = true
+accepted_primary_ids = ["GHSA-", "RUSTSEC-"]
+quarantine_primary_ids = ["MAL-", "other"]
+
+[[ecosystems]]
+name = "GitHub Actions"
+osv_zip = "https://osv-vulnerabilities.storage.googleapis.com/GitHub%20Actions/all.zip"
+enabled = true
+accepted_primary_ids = ["GHSA-"]
+quarantine_primary_ids = ["MAL-", "other"]
+
+[[ecosystems]]
+name = "npm"
+osv_zip = "https://osv-vulnerabilities.storage.googleapis.com/npm/all.zip"
+enabled = true
+accepted_primary_ids = ["GHSA-", "MAL-"]
+quarantine_primary_ids = ["other"]
+
+[[source_policies]]
+kind = "github-advisory-database"
+locator = "https://github.com/github/advisory-database"
+spdx = "CC-BY-4.0"
+require_local_license_evidence = true
+record_predicate = "primary ID starts GHSA-"
+
+[[source_policies]]
+kind = "rustsec-advisory-database"
+locator = "https://github.com/RustSec/advisory-db"
+spdx = "per-record: CC0-1.0 or CC-BY-4.0"
+require_local_license_evidence = true
+record_predicate = "primary ID starts RUSTSEC- and database_specific.license is supported"
+
+[[source_policies]]
+kind = "openssf-malicious-packages"
+locator = "https://github.com/ossf/malicious-packages"
+spdx = "Apache-2.0"
+require_local_license_evidence = true
+record_predicate = "primary ID starts MAL- and every affected.database_specific.source points to github.com/ossf/malicious-packages/blob/.../osv/malicious/..."
+
+[incremental_updates]
+status = "not-implemented"
+planned_index = "OSV modified_id.csv"
+rule = "full immutable snapshots remain authoritative until incremental replay, deletion and rollback tests exist"

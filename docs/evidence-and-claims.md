@@ -4,9 +4,9 @@
 
 | Claim acotado | Evidencia reproducible | Límite que debe acompañarlo |
 | --- | --- | --- |
-| Prototipo local-first en Rust | workspace con siete packages y `cargo test --workspace` | no release firmada ni commit de SecureFlow todavía |
+| Prototipo local-first en Rust | workspace con ocho packages, toolchain 1.92 fijado y gates locales/CI | no release firmada ni publicación todavía |
 | Integra un analizador por proceso externo | `scan`, SHA-256 de binario/target/reporte, límites y `secure-json-v1` | validado con fixtures locales; no demuestra cobertura general |
-| Limpia descendants al vencer el timeout | grupo de procesos Unix, rlimits Linux y prueba con un child que conserva pipes | no hay sandbox de filesystem todavía |
+| Aísla la ejecución Linux por defecto | grupo de procesos, rlimits y Bubblewrap con root host de sólo lectura y namespace de red privado | no equivale a una VM ni protege frente a un kernel comprometido; el modo deshabilitado exige una elección explícita |
 | Mantiene validación humana como autoridad | estados human review, manifests derivados, tests que IA no altera decisión | depende de identidad declarada por CLI; no hay firma humana aún |
 | Exporta evidencia legible sin elevar candidatos | informe Markdown con provenance, accounting, evidencia y limitaciones | no es un certificado de seguridad ni reemplaza la revisión humana |
 | Integra revisión contextual sin mezclar veredictos | `secureflow-secure-review-v1`, hashes de Skill/contrato/licencia | importa outputs; todavía no orquesta la ejecución de Secure Skill |
@@ -17,6 +17,10 @@
 | Demuestra capacidad de catálogo local | SQLite/FTS5: 100k, 500k y 1M source records; CSV retenido y consultas separadas | datos sintéticos; 1M source records no equivale a 1M vulnerabilidades reales |
 | Deduplica IDs externos conservadoramente | unión exacta CVE/GHSA/OSV/RUSTSEC por `aliases`; `upstream`/`related` no fusionan | quitar un alias upstream exige reconstruir desde snapshot; no hay dedup semántico |
 | Conserva licencia y repeticiones exactas | knowledge v2 con estado de licencia declarado, hash de evidencia y `duplicate_of_record_id` | no valida legalmente SPDX ni deduplica semánticamente entre engines |
+| Procesa snapshots reales con cuarentena | 229.644 registros fuente activos de crates.io, GitHub Actions y npm; hashes, revisiones, licencias y 347 rechazos retenidos | son advisories/reportes de seguridad —incluidos 219.658 reportes de paquetes maliciosos—, no vulnerabilidades validadas |
+| Correlaciona sin elevar señales | lookup exacto de paquete conserva hashes de run/catálogo y declara que no evaluó versión ni causalidad | el contexto de paquete es declarado por el operador y requiere revisión humana |
+| Sella un protocolo prospectivo | contrato con holdout, etiquetas ocultas, cohorte humana, dos adjudicadores, tiempo/coste y resultados negativos | el fixture es sintético; todavía no existe ejecución prospectiva ni base para comparar con humanos |
+| Genera evidencia de release | CI por commits, SBOM CycloneDX determinista y bundle local hasheado desde un commit limpio | falta firma, tag, ejecución CI remota y verificación binaria entre hosts |
 
 ## Formulación sugerida para CV
 
@@ -78,18 +82,20 @@ Cada resultado publicable debería fijar antes de ejecutar:
 - El catálogo procesó 1M source records sintéticos en 104,736 s sobre NVMe/
   Btrfs y produjo 900k entidades canónicas; esto mide infraestructura, no
   cobertura de vulnerabilidades.
+- El piloto real produjo 228.674 componentes canónicos por aliases exactos a
+  partir de 229.644 registros aceptados. La diferencia es deduplicación de IDs,
+  no confirmación de exploits ni una métrica de precisión.
 
 ## Bloqueos antes de publicación
 
-1. SecureFlow aún no tiene repositorio Git propio, commit reproducible ni tag.
-2. El metadata Cargo declara MIT, pero falta una decisión explícita del creador
-   y un archivo de licencia raíz correspondiente.
-3. Falta congelar un corpus propio con controles y protocolo anti-leakage.
-4. Falta ejecutar comparadores bajo capacidades y condiciones equivalentes.
-5. Falta una cohorte humana y adjudicación independiente.
-6. Falta transporte IA real auditado; las respuestas aplicadas en tests son
+1. Falta aprobar una release candidata, tag firmado y ejecución CI retenida.
+2. Falta congelar un corpus propio con controles usando el protocolo
+   prospectivo antes de observar resultados.
+3. Falta ejecutar comparadores bajo capacidades y condiciones equivalentes.
+4. Falta una cohorte humana y adjudicación independiente.
+5. Falta transporte IA real auditado; las respuestas aplicadas en tests son
    sintéticas.
-7. Falta medir coste/latencia/calidad por finding y demostrar ahorro de tiempo.
+6. Falta medir coste/latencia/calidad por finding y demostrar ahorro de tiempo.
 
 Hasta resolverlos, la evidencia es válida para presentar arquitectura y rigor
 de ingeniería de un prototipo, no eficacia superior.

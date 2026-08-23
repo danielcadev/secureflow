@@ -26,8 +26,10 @@ El MVP debe responder una sola pregunta:
    rationale humana por defecto.
 8. Almacenamiento local con autoridades separadas. **Ledger JSONL v2
    implementado** para decisiones humanas y **catálogo SQLite/FTS5 v1
-   implementado** para advisories externos. La capacidad se midió con 100k,
-   500k y 1M registros sintéticos; no se han descargado feeds reales.
+   implementado** para registros externos. La capacidad se midió con 100k,
+   500k y 1M sintéticos y con 229.644 registros reales aceptados de snapshots
+   crates.io, GitHub Actions y npm. Estos conteos no equivalen a
+   vulnerabilidades humanas validadas.
 9. Fixtures positivos y controles seguros. Hay una prueba mínima y se validó
    la integración con un fixture vulnerable de Secure Engine. El adapter de
    Secure Bench importa result-v2 con hashes y métricas separadas, y un script
@@ -56,8 +58,9 @@ El MVP debe responder una sola pregunta:
 - [x] conservar el raw sin modificar;
 - [x] aislar el grupo de procesos y matarlo completo al vencer el timeout;
 - [x] aplicar en Linux límites de memoria, CPU, descriptores y core dumps;
-- [ ] añadir aislamiento de filesystem sólo con una estrategia explícita y
-  portable (por ejemplo Landlock/bubblewrap), sin presentarlo como resuelto.
+- [x] exigir Bubblewrap por defecto en Linux, con root RO y red privada;
+- [ ] evaluar Landlock/VM/contenedor para perfiles que necesiten aislamiento
+  más fuerte o portabilidad fuera de Linux.
 
 ### Fase 2 — Modelo y revisión
 
@@ -76,7 +79,9 @@ El MVP debe responder una sola pregunta:
 - [x] separar el ledger humano del catálogo de advisories externos;
 - [x] importar OSV local, conservar revisiones y consultar alias/FTS/paquetes;
 - [x] medir capacidad sintética en 100k, 500k y 1M registros;
-- [ ] validar adapters, licencias, incrementalidad y rechazos con snapshots reales;
+- [x] validar adapters, licencias y rechazos con snapshots reales;
+- [ ] implementar `modified_id.csv` con replay, bajas y recovery antes de llamar
+  incremental al pipeline;
 - [ ] medir 5–20 millones de relaciones y concurrencia antes de prometerlos;
 - [ ] reconciliar claims/reglas entre engines sólo después de construir un corpus
   etiquetado para medir merges incorrectos.

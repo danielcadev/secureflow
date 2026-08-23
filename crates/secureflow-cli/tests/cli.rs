@@ -9,10 +9,9 @@ fn validate_with_schema(schema_name: &str, instance: &serde_json::Value) {
     let schema_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../schemas")
         .join(schema_name);
-    let schema: serde_json::Value = serde_json::from_slice(
-        &std::fs::read(&schema_path).expect("schema should be readable"),
-    )
-    .expect("schema should be JSON");
+    let schema: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&schema_path).expect("schema should be readable"))
+            .expect("schema should be JSON");
     let validator = jsonschema::validator_for(&schema).expect("schema should compile");
     validator
         .validate(instance)
@@ -24,8 +23,7 @@ fn fixture() -> PathBuf {
 }
 
 fn knowledge_fixture() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/fixtures/minimal-knowledge.jsonl")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/minimal-knowledge.jsonl")
 }
 
 fn osv_source_fixture() -> PathBuf {
@@ -38,33 +36,33 @@ fn secure_review_fixture() -> PathBuf {
 }
 
 fn secure_skill_source_fixture() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/fixtures/secure-skill-source")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/secure-skill-source")
 }
 
 fn bench_result_fixture() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/fixtures/minimal-bench-result.json")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/minimal-bench-result.json")
 }
 
 fn bench_run_fixture() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/fixtures/minimal-bench-run.json")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/minimal-bench-run.json")
 }
 
 fn bench_suite_fixture() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/fixtures/minimal-bench-suite.toml")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/minimal-bench-suite.toml")
 }
 
 fn secure_bench_source_fixture() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/fixtures/secure-bench-source")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/secure-bench-source")
 }
 
 fn finding_fixture() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/fixtures/minimal-run-with-finding.json")
+}
+
+fn prospective_protocol_fixture() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/fixtures/prospective-protocol-draft.json")
 }
 
 #[test]
@@ -74,12 +72,15 @@ fn validates_the_canonical_fixture() {
         .arg(fixture())
         .output()
         .expect("CLI should start");
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert!(String::from_utf8_lossy(&output.stdout).contains("valid secureflow-run-v1"));
-    let value: serde_json::Value = serde_json::from_slice(
-        &std::fs::read(fixture()).expect("fixture should be readable"),
-    )
-    .expect("fixture should be JSON");
+    let value: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(fixture()).expect("fixture should be readable"))
+            .expect("fixture should be JSON");
     validate_with_schema("secureflow-run-v1.schema.json", &value);
 }
 
@@ -91,7 +92,11 @@ fn lists_empty_fixture_as_machine_readable_json() {
         .args(["--format", "json"])
         .output()
         .expect("CLI should start");
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let value: serde_json::Value =
         serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
     assert_eq!(value["count"], 0);
@@ -130,7 +135,11 @@ fn human_can_abstain_without_mutating_the_original_manifest() {
         .arg(&output_path)
         .output()
         .expect("CLI should start");
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert_eq!(
         std::fs::read(finding_fixture()).expect("original fixture should remain readable"),
         original
@@ -139,7 +148,10 @@ fn human_can_abstain_without_mutating_the_original_manifest() {
         &std::fs::read(&output_path).expect("derived manifest should be readable"),
     )
     .expect("derived manifest should be JSON");
-    assert_eq!(reviewed["findings"][0]["human_review"]["decision"], "abstained");
+    assert_eq!(
+        reviewed["findings"][0]["human_review"]["decision"],
+        "abstained"
+    );
     assert_eq!(reviewed["summary"]["abstained_count"], 1);
     assert_eq!(reviewed["phases"]["validation"], "completed");
     validate_with_schema("secureflow-run-v1.schema.json", &reviewed);
@@ -148,10 +160,8 @@ fn human_can_abstain_without_mutating_the_original_manifest() {
 
 #[test]
 fn exports_a_markdown_report_that_preserves_candidate_semantics() {
-    let output_path = std::env::temp_dir().join(format!(
-        "secureflow-cli-report-{}.md",
-        std::process::id()
-    ));
+    let output_path =
+        std::env::temp_dir().join(format!("secureflow-cli-report-{}.md", std::process::id()));
     let _ = std::fs::remove_file(&output_path);
     let output = Command::new(binary())
         .arg("export-report")
@@ -161,7 +171,11 @@ fn exports_a_markdown_report_that_preserves_candidate_semantics() {
         .arg(&output_path)
         .output()
         .expect("CLI should start");
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let report = std::fs::read_to_string(&output_path).expect("report should be readable");
     assert!(report.contains("candidate, not confirmed vulnerability"));
     assert!(report.contains("Only the recorded human decision is authoritative"));
@@ -188,7 +202,11 @@ fn queries_validated_knowledge_as_json() {
         .args(["--decision", "validated", "--format", "json"])
         .output()
         .expect("CLI should start");
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let value: serde_json::Value =
         serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
     assert_eq!(value["count"], 1);
@@ -201,7 +219,11 @@ fn prints_the_knowledge_schema() {
         .arg("knowledge-schema")
         .output()
         .expect("CLI should start");
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let value: serde_json::Value =
         serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
     assert_eq!(value["title"], "SecureFlow Knowledge Record v2");
@@ -247,7 +269,11 @@ fn imports_reviewed_findings_as_traceable_v2_knowledge() {
         .arg(&reviewed_path)
         .output()
         .expect("review command should start");
-    assert!(review.status.success(), "{}", String::from_utf8_lossy(&review.stderr));
+    assert!(
+        review.status.success(),
+        "{}",
+        String::from_utf8_lossy(&review.stderr)
+    );
 
     let import = Command::new(binary())
         .arg("knowledge-import")
@@ -258,7 +284,11 @@ fn imports_reviewed_findings_as_traceable_v2_knowledge() {
         .args(["--source-license-status", "unknown"])
         .output()
         .expect("knowledge import should start");
-    assert!(import.status.success(), "{}", String::from_utf8_lossy(&import.stderr));
+    assert!(
+        import.status.success(),
+        "{}",
+        String::from_utf8_lossy(&import.stderr)
+    );
     assert!(String::from_utf8_lossy(&import.stdout).contains("duplicate_observations_linked=0"));
 
     let line = std::fs::read_to_string(&ledger_path).expect("ledger should exist");
@@ -267,10 +297,12 @@ fn imports_reviewed_findings_as_traceable_v2_knowledge() {
     assert_eq!(record["record_version"], "secureflow-knowledge-record-v2");
     assert_eq!(record["source_license"]["status"], "unknown");
     assert_eq!(record["source_license"]["assertion"], "operator-declared");
-    assert!(record["observation_fingerprint"]
-        .as_str()
-        .expect("fingerprint string")
-        .starts_with("sf_obs_"));
+    assert!(
+        record["observation_fingerprint"]
+            .as_str()
+            .expect("fingerprint string")
+            .starts_with("sf_obs_")
+    );
     validate_with_schema("secureflow-knowledge-record-v2.schema.json", &record);
     #[cfg(unix)]
     {
@@ -295,10 +327,7 @@ fn imports_reviewed_findings_as_traceable_v2_knowledge() {
 
 #[test]
 fn imports_and_queries_a_deduplicated_local_osv_catalog() {
-    let root = std::env::temp_dir().join(format!(
-        "secureflow-cli-catalog-{}",
-        std::process::id()
-    ));
+    let root = std::env::temp_dir().join(format!("secureflow-cli-catalog-{}", std::process::id()));
     let database = root.join("catalog.sqlite3");
     let _ = std::fs::remove_dir_all(&root);
     let source = osv_source_fixture();
@@ -318,7 +347,11 @@ fn imports_and_queries_a_deduplicated_local_osv_catalog() {
         .args(["--source-locator", "https://example.invalid/osv-fixture"])
         .output()
         .expect("catalog import should start");
-    assert!(import.status.success(), "{}", String::from_utf8_lossy(&import.stderr));
+    assert!(
+        import.status.success(),
+        "{}",
+        String::from_utf8_lossy(&import.stderr)
+    );
     assert!(String::from_utf8_lossy(&import.stdout).contains("seen=2"));
     assert!(String::from_utf8_lossy(&import.stdout).contains("total_canonical_vulnerabilities=1"));
 
@@ -327,7 +360,11 @@ fn imports_and_queries_a_deduplicated_local_osv_catalog() {
         .arg(&database)
         .output()
         .expect("catalog stats should start");
-    assert!(stats.status.success(), "{}", String::from_utf8_lossy(&stats.stderr));
+    assert!(
+        stats.status.success(),
+        "{}",
+        String::from_utf8_lossy(&stats.stderr)
+    );
     let stats: serde_json::Value =
         serde_json::from_slice(&stats.stdout).expect("stats should be JSON");
     assert_eq!(stats["source_records"], 2);
@@ -340,22 +377,52 @@ fn imports_and_queries_a_deduplicated_local_osv_catalog() {
         .arg(&database)
         .output()
         .expect("catalog check should start");
-    assert!(check.status.success(), "{}", String::from_utf8_lossy(&check.stderr));
+    assert!(
+        check.status.success(),
+        "{}",
+        String::from_utf8_lossy(&check.stderr)
+    );
     let check: serde_json::Value =
         serde_json::from_slice(&check.stdout).expect("check should be JSON");
     assert_eq!(check["quick_check"], "ok");
     assert_eq!(check["foreign_key_violations"], 0);
 
     for arguments in [
-        vec!["catalog-lookup", "--database", database.to_str().expect("UTF-8 path"), "CVE-2026-0001", "--format", "json"],
-        vec!["catalog-search", "--database", database.to_str().expect("UTF-8 path"), "command injection", "--format", "json"],
-        vec!["catalog-package", "--database", database.to_str().expect("UTF-8 path"), "crates.io", "secureflow-fixture", "--format", "json"],
+        vec![
+            "catalog-lookup",
+            "--database",
+            database.to_str().expect("UTF-8 path"),
+            "CVE-2026-0001",
+            "--format",
+            "json",
+        ],
+        vec![
+            "catalog-search",
+            "--database",
+            database.to_str().expect("UTF-8 path"),
+            "command injection",
+            "--format",
+            "json",
+        ],
+        vec![
+            "catalog-package",
+            "--database",
+            database.to_str().expect("UTF-8 path"),
+            "crates.io",
+            "secureflow-fixture",
+            "--format",
+            "json",
+        ],
     ] {
         let output = Command::new(binary())
             .args(arguments)
             .output()
             .expect("catalog query should start");
-        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
         let value: serde_json::Value =
             serde_json::from_slice(&output.stdout).expect("query should be JSON");
         assert_eq!(value["count"], 2);
@@ -379,7 +446,120 @@ fn imports_and_queries_a_deduplicated_local_osv_catalog() {
             0o600
         );
     }
+
+    let backup = root.join("catalog.backup.sqlite3");
+    let backup_manifest = root.join("catalog.backup.json");
+    let restored = root.join("catalog.restored.sqlite3");
+    let restored_manifest = root.join("catalog.restored.json");
+    let backup_output = Command::new(binary())
+        .arg("catalog-backup")
+        .args(["--database"])
+        .arg(&database)
+        .args(["--output"])
+        .arg(&backup)
+        .args(["--manifest-output"])
+        .arg(&backup_manifest)
+        .output()
+        .expect("catalog backup should start");
+    assert!(
+        backup_output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&backup_output.stderr)
+    );
+    let verify_output = Command::new(binary())
+        .arg("catalog-backup-verify")
+        .args(["--backup"])
+        .arg(&backup)
+        .args(["--manifest"])
+        .arg(&backup_manifest)
+        .output()
+        .expect("catalog backup verification should start");
+    assert!(verify_output.status.success());
+    let restore_output = Command::new(binary())
+        .arg("catalog-restore")
+        .args(["--backup"])
+        .arg(&backup)
+        .args(["--manifest"])
+        .arg(&backup_manifest)
+        .args(["--output"])
+        .arg(&restored)
+        .args(["--manifest-output"])
+        .arg(&restored_manifest)
+        .output()
+        .expect("catalog restore should start");
+    assert!(restore_output.status.success());
+    let restored_stats = Command::new(binary())
+        .arg("catalog-stats")
+        .arg(&restored)
+        .output()
+        .expect("restored stats should start");
+    let restored_stats: serde_json::Value =
+        serde_json::from_slice(&restored_stats.stdout).expect("restored stats JSON");
+    assert_eq!(restored_stats["source_records"], 2);
+    assert_eq!(restored_stats["canonical_vulnerabilities"], 1);
     std::fs::remove_dir_all(root).expect("temporary catalog cleanup");
+}
+
+#[test]
+fn prints_new_phase_two_schemas_and_seals_a_prospective_protocol() {
+    for (command, schema_name) in [
+        (
+            "correlation-schema",
+            "secureflow-correlation-v1.schema.json",
+        ),
+        (
+            "orchestration-schema",
+            "secureflow-orchestration-v1.schema.json",
+        ),
+        (
+            "prospective-protocol-schema",
+            "secureflow-prospective-protocol-v1.schema.json",
+        ),
+    ] {
+        let output = Command::new(binary())
+            .arg(command)
+            .output()
+            .expect("schema command should start");
+        assert!(output.status.success());
+        let schema: serde_json::Value =
+            serde_json::from_slice(&output.stdout).expect("schema JSON");
+        jsonschema::validator_for(&schema).expect("schema should compile");
+        assert!(
+            schema["$id"]
+                .as_str()
+                .is_some_and(|value| value.ends_with(schema_name))
+        );
+    }
+
+    let output_path = std::env::temp_dir().join(format!(
+        "secureflow-prospective-protocol-{}.json",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_file(&output_path);
+    let sealed = Command::new(binary())
+        .arg("benchmark-protocol-seal")
+        .args(["--draft"])
+        .arg(prospective_protocol_fixture())
+        .args(["--output"])
+        .arg(&output_path)
+        .output()
+        .expect("protocol seal should start");
+    assert!(
+        sealed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&sealed.stderr)
+    );
+    let protocol: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&output_path).expect("sealed protocol should exist"))
+            .expect("sealed protocol JSON");
+    validate_with_schema("secureflow-prospective-protocol-v1.schema.json", &protocol);
+    let validated = Command::new(binary())
+        .arg("benchmark-protocol-validate")
+        .arg(&output_path)
+        .output()
+        .expect("protocol validation should start");
+    assert!(validated.status.success());
+    std::fs::remove_file(output_path).expect("protocol cleanup");
 }
 
 #[test]
@@ -388,10 +568,17 @@ fn prints_the_secure_review_schema() {
         .arg("secure-review-schema")
         .output()
         .expect("CLI should start");
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let value: serde_json::Value =
         serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
-    assert_eq!(value["title"], "SecureFlow Secure Skill Contextual Review v1");
+    assert_eq!(
+        value["title"],
+        "SecureFlow Secure Skill Contextual Review v1"
+    );
 }
 
 #[test]
@@ -410,19 +597,23 @@ fn imports_and_lists_secure_skill_findings_as_contextual_candidates() {
         .arg(fixture())
         .args(["--secure-skill-root"])
         .arg(secure_skill_source_fixture())
-        .args(["--secure-skill-revision", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"])
+        .args([
+            "--secure-skill-revision",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ])
         .args(["--output"])
         .arg(&output_path)
         .output()
         .expect("CLI should start");
-    assert!(import.status.success(), "{}", String::from_utf8_lossy(&import.stderr));
     assert!(
-        String::from_utf8_lossy(&import.stdout).contains("validation_authority=human-only")
+        import.status.success(),
+        "{}",
+        String::from_utf8_lossy(&import.stderr)
     );
-    let imported: serde_json::Value = serde_json::from_slice(
-        &std::fs::read(&output_path).expect("envelope should be readable"),
-    )
-    .expect("envelope should be JSON");
+    assert!(String::from_utf8_lossy(&import.stdout).contains("validation_authority=human-only"));
+    let imported: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&output_path).expect("envelope should be readable"))
+            .expect("envelope should be JSON");
     validate_with_schema("secureflow-secure-review-v1.schema.json", &imported);
 
     let validate = Command::new(binary())
@@ -442,7 +633,11 @@ fn imports_and_lists_secure_skill_findings_as_contextual_candidates() {
         .args(["--format", "json"])
         .output()
         .expect("CLI should start");
-    assert!(list.status.success(), "{}", String::from_utf8_lossy(&list.stderr));
+    assert!(
+        list.status.success(),
+        "{}",
+        String::from_utf8_lossy(&list.stderr)
+    );
     let value: serde_json::Value =
         serde_json::from_slice(&list.stdout).expect("stdout should be JSON");
     assert_eq!(value["count"], 1);
@@ -462,7 +657,11 @@ fn prints_the_benchmark_schema() {
         .arg("benchmark-schema")
         .output()
         .expect("CLI should start");
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let value: serde_json::Value =
         serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
     assert_eq!(value["title"], "SecureFlow Benchmark Result v1");
@@ -485,17 +684,23 @@ fn imports_verified_benchmark_artifacts_without_enabling_marketing_claims() {
         .arg(bench_suite_fixture())
         .args(["--secure-bench-root"])
         .arg(secure_bench_source_fixture())
-        .args(["--secure-bench-revision", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"])
+        .args([
+            "--secure-bench-revision",
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        ])
         .args(["--study-kind", "historical-public-diagnostic"])
         .args(["--output"])
         .arg(&output_path)
         .output()
         .expect("CLI should start");
-    assert!(import.status.success(), "{}", String::from_utf8_lossy(&import.stderr));
-    let imported: serde_json::Value = serde_json::from_slice(
-        &std::fs::read(&output_path).expect("envelope should be readable"),
-    )
-    .expect("envelope should be JSON");
+    assert!(
+        import.status.success(),
+        "{}",
+        String::from_utf8_lossy(&import.stderr)
+    );
+    let imported: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&output_path).expect("envelope should be readable"))
+            .expect("envelope should be JSON");
     validate_with_schema("secureflow-benchmark-result-v1.schema.json", &imported);
 
     let summary = Command::new(binary())
@@ -504,11 +709,21 @@ fn imports_verified_benchmark_artifacts_without_enabling_marketing_claims() {
         .args(["--format", "json"])
         .output()
         .expect("CLI should start");
-    assert!(summary.status.success(), "{}", String::from_utf8_lossy(&summary.stderr));
+    assert!(
+        summary.status.success(),
+        "{}",
+        String::from_utf8_lossy(&summary.stderr)
+    );
     let value: serde_json::Value =
         serde_json::from_slice(&summary.stdout).expect("stdout should be JSON");
-    assert_eq!(value["result"]["confusion"]["true_positive_expectations"], 1);
-    assert_eq!(value["result"]["confusion"]["false_negative_expectations"], 1);
+    assert_eq!(
+        value["result"]["confusion"]["true_positive_expectations"],
+        1
+    );
+    assert_eq!(
+        value["result"]["confusion"]["false_negative_expectations"],
+        1
+    );
     assert_eq!(value["claims"]["evaluation_only"], true);
     assert_eq!(value["claims"]["ranking_allowed"], false);
     assert_eq!(value["claims"]["superiority_claim_allowed"], false);
@@ -533,7 +748,10 @@ fn benchmark_import_rejects_a_suite_fingerprint_mismatch() {
         .arg(bench_run_fixture())
         .args(["--secure-bench-root"])
         .arg(secure_bench_source_fixture())
-        .args(["--secure-bench-revision", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"])
+        .args([
+            "--secure-bench-revision",
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        ])
         .args(["--study-kind", "historical-public-diagnostic"])
         .args(["--output"])
         .arg(&output_path)
@@ -554,7 +772,11 @@ fn prints_the_ai_contract_schemas() {
             .arg(command)
             .output()
             .expect("CLI should start");
-        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
         let value: serde_json::Value =
             serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
         assert_eq!(value["title"], title);
@@ -612,12 +834,15 @@ fn prepares_and_applies_a_budgeted_advisory_response_without_human_validation() 
         .arg(&request_path)
         .output()
         .expect("CLI should start");
-    assert!(prepare.status.success(), "{}", String::from_utf8_lossy(&prepare.stderr));
+    assert!(
+        prepare.status.success(),
+        "{}",
+        String::from_utf8_lossy(&prepare.stderr)
+    );
     assert!(String::from_utf8_lossy(&prepare.stdout).contains("transmitted=false"));
-    let request: serde_json::Value = serde_json::from_slice(
-        &std::fs::read(&request_path).expect("request should be readable"),
-    )
-    .expect("request should be JSON");
+    let request: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&request_path).expect("request should be readable"))
+            .expect("request should be JSON");
     assert_eq!(request["model_family"], "luna");
     assert_eq!(request["authority"]["validation_authority"], "human-only");
     assert!(!request.to_string().contains("This evidence description"));
@@ -657,15 +882,28 @@ fn prepares_and_applies_a_budgeted_advisory_response_without_human_validation() 
         .arg(&manifest_path)
         .output()
         .expect("CLI should start");
-    assert!(apply.status.success(), "{}", String::from_utf8_lossy(&apply.stderr));
+    assert!(
+        apply.status.success(),
+        "{}",
+        String::from_utf8_lossy(&apply.stderr)
+    );
     assert!(String::from_utf8_lossy(&apply.stdout).contains("human_decision_unchanged=true"));
     let manifest: serde_json::Value = serde_json::from_slice(
         &std::fs::read(&manifest_path).expect("manifest should be readable"),
     )
     .expect("manifest should be JSON");
-    assert_eq!(manifest["findings"][0]["human_review"]["decision"], "pending");
-    assert_eq!(manifest["findings"][0]["ai_validation"]["status"], "completed");
-    assert_eq!(manifest["findings"][0]["ai_validation"]["assessment"], "uncertain");
+    assert_eq!(
+        manifest["findings"][0]["human_review"]["decision"],
+        "pending"
+    );
+    assert_eq!(
+        manifest["findings"][0]["ai_validation"]["status"],
+        "completed"
+    );
+    assert_eq!(
+        manifest["findings"][0]["ai_validation"]["assessment"],
+        "uncertain"
+    );
     assert_eq!(manifest["summary"]["ai_calls"], 1);
     assert_eq!(manifest["summary"]["ai_input_tokens"], 500);
     validate_with_schema("secureflow-run-v1.schema.json", &manifest);
@@ -681,10 +919,9 @@ fn validate_run_rejects_unknown_contract_fields() {
         "secureflow-cli-unknown-field-{}.json",
         std::process::id()
     ));
-    let mut value: serde_json::Value = serde_json::from_slice(
-        &std::fs::read(fixture()).expect("fixture should be readable"),
-    )
-    .expect("fixture should be JSON");
+    let mut value: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(fixture()).expect("fixture should be readable"))
+            .expect("fixture should be JSON");
     value
         .as_object_mut()
         .expect("manifest object")
@@ -802,6 +1039,7 @@ fn scan_fails_closed_when_the_target_changes_during_execution() {
         .arg(&root)
         .arg("--authorized")
         .args(["--authorization-reviewer", "test-runner"])
+        .args(["--sandbox", "disabled"])
         .args(["--output"])
         .arg(&report)
         .args(["--manifest-output"])
@@ -865,14 +1103,20 @@ fn scan_records_explicit_authorization_and_target_revision() {
         .arg(&manifest)
         .output()
         .expect("CLI should start");
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
-    let value: serde_json::Value = serde_json::from_slice(
-        &std::fs::read(&manifest).expect("manifest should be readable"),
-    )
-    .expect("manifest should be JSON");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let value: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&manifest).expect("manifest should be readable"))
+            .expect("manifest should be JSON");
     assert_eq!(value["target"]["authorization"]["reviewer"], "Daniel");
     assert_eq!(value["target"]["authorization"]["basis"], "written-consent");
-    assert_eq!(value["target"]["authorization"]["reference"], "scope-ticket-123");
+    assert_eq!(
+        value["target"]["authorization"]["reference"],
+        "scope-ticket-123"
+    );
     assert_eq!(value["target"]["revision"]["kind"], "git");
     assert_eq!(value["target"]["revision"]["value"], revision);
     assert_ne!(value["created_at"], value["completed_at"]);

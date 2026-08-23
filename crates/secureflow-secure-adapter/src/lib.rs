@@ -268,12 +268,7 @@ impl ReviewFinding {
         validate_text(&self.source_to_sink, "finding.source_to_sink", 10_000)?;
         self.attacker_path.validate()?;
         validate_text(&self.impact, "finding.impact", 10_000)?;
-        validate_string_list(
-            &self.prerequisites,
-            "finding.prerequisites",
-            4_000,
-            false,
-        )?;
+        validate_string_list(&self.prerequisites, "finding.prerequisites", 4_000, false)?;
         validate_text(&self.recommendation, "finding.recommendation", 10_000)?;
         validate_text(&self.residual_risk, "finding.residual_risk", 10_000)
     }
@@ -345,12 +340,7 @@ impl AttackerPath {
             "finding.attacker_path.victim_action",
             4_000,
         )?;
-        validate_string_list(
-            &self.steps,
-            "finding.attacker_path.steps",
-            4_000,
-            true,
-        )?;
+        validate_string_list(&self.steps, "finding.attacker_path.steps", 4_000, true)?;
         validate_text(
             &self.achieved_result,
             "finding.attacker_path.achieved_result",
@@ -437,12 +427,7 @@ pub struct Coverage {
 impl Coverage {
     fn validate(&self) -> Result<(), AdapterError> {
         validate_string_list(&self.reviewed, "coverage.reviewed", 2_000, false)?;
-        validate_string_list(
-            &self.not_reviewed,
-            "coverage.not_reviewed",
-            2_000,
-            false,
-        )
+        validate_string_list(&self.not_reviewed, "coverage.not_reviewed", 2_000, false)
     }
 }
 
@@ -517,11 +502,7 @@ pub fn load_source_provenance(
     })?;
     verify_git_revision_if_present(&root, revision)?;
     let package = read_source_file(&root, Path::new("package.json"), MAX_PACKAGE_BYTES)?;
-    let skill = read_source_file(
-        &root,
-        Path::new("skills/secure/SKILL.md"),
-        MAX_SKILL_BYTES,
-    )?;
+    let skill = read_source_file(&root, Path::new("skills/secure/SKILL.md"), MAX_SKILL_BYTES)?;
     let contract = read_source_file(
         &root,
         Path::new("skills/secure/references/review-contract.json"),
@@ -620,11 +601,7 @@ pub fn read_bounded(path: &Path, maximum: u64) -> Result<Vec<u8>, AdapterError> 
     Ok(bytes)
 }
 
-fn read_source_file(
-    root: &Path,
-    relative: &Path,
-    maximum: u64,
-) -> Result<Vec<u8>, AdapterError> {
+fn read_source_file(root: &Path, relative: &Path, maximum: u64) -> Result<Vec<u8>, AdapterError> {
     let path = root.join(relative);
     let canonical = fs::canonicalize(&path).map_err(|source| AdapterError::Read {
         path: path.display().to_string(),
@@ -912,7 +889,10 @@ mod tests {
             "\"schema_version\":\"1.1\"",
             "\"schema_version\":\"1.1\",\"validated\":true",
         );
-        assert!(matches!(parse_review(input.as_bytes()), Err(AdapterError::Json(_))));
+        assert!(matches!(
+            parse_review(input.as_bytes()),
+            Err(AdapterError::Json(_))
+        ));
     }
 
     #[test]

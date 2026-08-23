@@ -1,0 +1,95 @@
+{
+  "evidence_version": "secureflow-real-advisory-pilot-v1",
+  "observed_at": "2026-08-23",
+  "classification": "local engineering evidence; not a vulnerability efficacy result",
+  "snapshots": [
+    {
+      "ecosystem": "crates.io",
+      "snapshot_id": "sf_snapshot_abe239c5b443fa7fbd453c11b7a3b01a80cac71b29b76181f788892d9eadde8f",
+      "manifest_sha256": "5271d0384e2801df880b99d1f91671bbeb453d130ebc86548c0db83855101fef",
+      "artifact_sha256": "b98ec709558b10b4d527780e9b67b211e04977bdeae80458079a0843733c69ea",
+      "artifact_revision": "gcs-generation:1787294011094729;etag:d236bef757753b28811534ab3f0b5f64",
+      "accepted_records": 2730,
+      "quarantined_records": 19
+    },
+    {
+      "ecosystem": "GitHub Actions",
+      "snapshot_id": "sf_snapshot_9dc834e9c152e2aadf557301aafcd9d5ad72c2146dbd6d343cff8aa23b7a9ced",
+      "manifest_sha256": "75fe871f5bebe2824f42dfacbf403e27d268ffb44b0f4505ca1fd48b2a427274",
+      "artifact_sha256": "fde25556d937f742809f2fa004d07583f7234358f3cf64e69a2a0b214bc5291b",
+      "artifact_revision": "gcs-generation:1786975460709466;etag:812b80d0968e0b8bbb4e803fdda99882",
+      "accepted_records": 55,
+      "quarantined_records": 0
+    },
+    {
+      "ecosystem": "npm",
+      "snapshot_id": "sf_snapshot_6b6b14cd0d8cfdc8ef229b02b7dd056c76522fd3b601020f5a8d2ed0f040e688",
+      "manifest_sha256": "37ef8a74e134997f525c03a5639b5bead7d6ff8282e273d087d2d18812446a93",
+      "artifact_sha256": "57da6aa2a72c5763ae02fae23a0df0b3dc5d18684e8e6169346836fc68501ec4",
+      "artifact_revision": "gcs-generation:1787506440759918",
+      "artifact_etag": "37928e636b4235ef041a55698c4545ae",
+      "archive_bytes": 220123507,
+      "archive_entries": 227187,
+      "archive_uncompressed_bytes": 373806994,
+      "accepted_records": 226859,
+      "quarantined_records": 328,
+      "accepted_github_advisory_records": 7201,
+      "accepted_openssf_malicious_package_records": 219658,
+      "quarantined_malicious_package_provenance": 326,
+      "quarantined_unsupported_primary_id": 2
+    }
+  ],
+  "license_evidence": [
+    {
+      "source": "GitHub Advisory Database",
+      "spdx": "CC-BY-4.0",
+      "sha256": "9e5f1b3c610b9c2da5c313bf81d577a7d1acec686bdb0384edefa6df0f90cd94"
+    },
+    {
+      "source": "RustSec advisory-db policy",
+      "spdx": "CC0-1.0 or per-record CC-BY-4.0",
+      "sha256": "ef4d4e4d2b55b98ea8479caef59907ca64b912e6d7a1423957f394dd0d86b1c4"
+    },
+    {
+      "source": "OpenSSF Malicious Packages",
+      "revision": "45d3bf791f637bfe917a22c54b31e5a1a1115e87",
+      "spdx": "Apache-2.0",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    }
+  ],
+  "catalog": {
+    "schema_version": 2,
+    "source_records": 229644,
+    "active_source_records": 229644,
+    "canonical_security_records": 228674,
+    "identifiers": 266228,
+    "relationships": 271090,
+    "affected_packages": 233702,
+    "references": 100827,
+    "raw_revision_bytes": 379785473,
+    "primary_database_bytes": 1202384896,
+    "primary_database_sha256": "68f55e3aa64802b8307a848cd6718972b8e90d88d1c1abdb0983b692b0a86982",
+    "quick_check": "ok",
+    "foreign_key_violations": 0,
+    "search_index_status": "ready",
+    "canonical_rebuild_id": "sf_canonical_6d26186565121489aa2fd2acba588e3dfb4e948ef2ba3c92faef5ec7258bb257"
+  },
+  "operational_backup": {
+    "backup_id": "sf_catalog_backup_501f827422563ad3bbb4c175918ab49dcaf1d3b837bc2351fe866f737235c521",
+    "backup_sha256": "501f827422563ad3bbb4c175918ab49dcaf1d3b837bc2351fe866f737235c521",
+    "manifest_sha256": "48fc216dee120bcfd25959593054a7437a3f0a89dab2c3e5a0b01f76bd50d79e",
+    "bytes": 1202384896,
+    "elapsed_seconds": 45.96,
+    "max_rss_kb": 148200,
+    "file_mode_unix": "0600",
+    "quick_check": "ok",
+    "foreign_key_violations": 0,
+    "restore_at_full_scale": "not-run; round-trip restore is covered by the automated fixture"
+  },
+  "claim_boundaries": [
+    "Counts measure ingested security records and exact-alias components, not human-validated vulnerabilities.",
+    "Malicious-package reports are not relabeled as CVEs or independently verified vulnerabilities.",
+    "The pilot measures ingestion, attribution, quarantine, deduplication and local query infrastructure; it does not measure scanner precision or recall.",
+    "The retained source artifacts live under a local /tmp directory and are not part of the repository or a release bundle."
+  ]
+}

@@ -4,6 +4,8 @@
 //! envelope deliberately forbids ranking, superiority and production-safety
 //! claims regardless of the imported measurements.
 
+pub mod prospective;
+
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -92,10 +94,7 @@ impl SecureBenchProvenance {
                 self.result_contract.clone(),
             ));
         }
-        validate_sha256(
-            &self.result_schema_sha256,
-            "source.result_schema_sha256",
-        )?;
+        validate_sha256(&self.result_schema_sha256, "source.result_schema_sha256")?;
         validate_text(&self.license_spdx, "source.license_spdx", 100)?;
         validate_sha256(&self.license_sha256, "source.license_sha256")
     }
@@ -115,12 +114,13 @@ pub struct BenchmarkArtifacts {
 impl BenchmarkArtifacts {
     fn validate(&self) -> Result<(), BenchAdapterError> {
         validate_sha256(&self.result_sha256, "artifacts.result_sha256")?;
-        validate_sha256(
-            &self.run_manifest_sha256,
-            "artifacts.run_manifest_sha256",
-        )?;
+        validate_sha256(&self.run_manifest_sha256, "artifacts.run_manifest_sha256")?;
         validate_sha256(&self.suite_sha256, "artifacts.suite_sha256")?;
-        validate_size(self.result_bytes, MAX_RESULT_BYTES, "artifacts.result_bytes")?;
+        validate_size(
+            self.result_bytes,
+            MAX_RESULT_BYTES,
+            "artifacts.result_bytes",
+        )?;
         validate_size(
             self.run_manifest_bytes,
             MAX_INPUT_ARTIFACT_BYTES,
@@ -356,9 +356,7 @@ impl RatioMetric {
         let expected = if self.denominator == 0 {
             None
         } else {
-            Some(
-                ((u128::from(self.numerator) * 10_000) / u128::from(self.denominator)) as u32,
-            )
+            Some(((u128::from(self.numerator) * 10_000) / u128::from(self.denominator)) as u32)
         };
         if self.basis_points != expected {
             return Err(BenchAdapterError::InvalidRatio(field));
@@ -378,8 +376,10 @@ pub struct PerformanceSummary {
 
 impl PerformanceSummary {
     fn validate(&self) -> Result<(), BenchAdapterError> {
-        self.cold_duration_ms.validate("performance.cold_duration_ms")?;
-        self.warm_duration_ms.validate("performance.warm_duration_ms")?;
+        self.cold_duration_ms
+            .validate("performance.cold_duration_ms")?;
+        self.warm_duration_ms
+            .validate("performance.warm_duration_ms")?;
         self.peak_memory_bytes
             .validate("performance.peak_memory_bytes")?;
         self.output_bytes.validate("performance.output_bytes")
@@ -442,9 +442,7 @@ impl ResultProvenance {
             "result.provenance.report_fingerprint",
         )?;
         if self.schemas.is_empty() {
-            return Err(BenchAdapterError::InvalidField(
-                "result.provenance.schemas",
-            ));
+            return Err(BenchAdapterError::InvalidField("result.provenance.schemas"));
         }
         for value in self.schemas.values() {
             validate_text(value, "result.provenance.schemas", 200)?;
@@ -464,18 +462,16 @@ pub struct BenchmarkImport<'a> {
     pub source: SecureBenchProvenance,
 }
 
-pub fn import_benchmark(input: BenchmarkImport<'_>) -> Result<BenchmarkEnvelope, BenchAdapterError> {
+pub fn import_benchmark(
+    input: BenchmarkImport<'_>,
+) -> Result<BenchmarkEnvelope, BenchAdapterError> {
     validate_size(input.result.len() as u64, MAX_RESULT_BYTES, "result")?;
     validate_size(
         input.run_manifest.len() as u64,
         MAX_INPUT_ARTIFACT_BYTES,
         "run_manifest",
     )?;
-    validate_size(
-        input.suite.len() as u64,
-        MAX_INPUT_ARTIFACT_BYTES,
-        "suite",
-    )?;
+    validate_size(input.suite.len() as u64, MAX_INPUT_ARTIFACT_BYTES, "suite")?;
     parse_timestamp(&input.imported_at, "imported_at")?;
     input.source.validate()?;
     if sha256_hex(input.result_schema) != input.source.result_schema_sha256 {
@@ -594,10 +590,7 @@ pub fn load_source_provenance(
     Ok((source, schema))
 }
 
-fn verify_git_revision_if_present(
-    root: &Path,
-    expected: &str,
-) -> Result<(), BenchAdapterError> {
+fn verify_git_revision_if_present(root: &Path, expected: &str) -> Result<(), BenchAdapterError> {
     if !is_lower_hex_of_length(expected, 40) && !is_lower_hex_of_length(expected, 64) {
         return Err(BenchAdapterError::InvalidField("source.revision"));
     }
@@ -670,10 +663,7 @@ fn extract_summary(
         source_localization_accuracy: extract_ratio(result, "source_localization_accuracy")?,
         sink_localization_accuracy: extract_ratio(result, "sink_localization_accuracy")?,
         severity_calibration_accuracy: extract_ratio(result, "severity_calibration_accuracy")?,
-        confidence_calibration_accuracy: extract_ratio(
-            result,
-            "confidence_calibration_accuracy",
-        )?,
+        confidence_calibration_accuracy: extract_ratio(result, "confidence_calibration_accuracy")?,
         duplicate_rate: extract_ratio(result, "duplicate_rate")?,
     };
     let counts = extract_integer_map(pointer(result, "/score/counts")?, "score.counts")?;
@@ -704,11 +694,8 @@ fn extract_summary(
         version: string_at(result, "/provenance/tool/version")?.to_owned(),
         report_schema: string_at(result, "/provenance/tool/report_schema")?.to_owned(),
         binary_sha256: string_at(result, "/provenance/tool/binary_fingerprint")?.to_owned(),
-        configuration_sha256: string_at(
-            result,
-            "/provenance/tool/configuration_fingerprint",
-        )?
-        .to_owned(),
+        configuration_sha256: string_at(result, "/provenance/tool/configuration_fingerprint")?
+            .to_owned(),
     };
     let structured_error_count = pointer(result, "/errors")?
         .as_array()
@@ -742,11 +729,8 @@ fn extract_provenance(result: &serde_json::Value) -> Result<ResultProvenance, Be
     }
     Ok(ResultProvenance {
         suite_fingerprint: string_at(result, "/provenance/suite_fingerprint")?.to_owned(),
-        run_manifest_fingerprint: string_at(
-            result,
-            "/provenance/run_manifest_fingerprint",
-        )?
-        .to_owned(),
+        run_manifest_fingerprint: string_at(result, "/provenance/run_manifest_fingerprint")?
+            .to_owned(),
         report_fingerprint: string_at(result, "/provenance/report_fingerprint")?.to_owned(),
         schemas,
     })
@@ -793,7 +777,11 @@ fn extract_integer_map(
         let number = if value.is_null() {
             None
         } else {
-            Some(value.as_u64().ok_or(BenchAdapterError::InvalidField(field))?)
+            Some(
+                value
+                    .as_u64()
+                    .ok_or(BenchAdapterError::InvalidField(field))?,
+            )
         };
         output.insert(key.clone(), number);
     }
@@ -888,10 +876,7 @@ fn pointer<'a>(
         .ok_or(BenchAdapterError::MissingField(path.to_owned()))
 }
 
-fn string_at<'a>(
-    value: &'a serde_json::Value,
-    path: &str,
-) -> Result<&'a str, BenchAdapterError> {
+fn string_at<'a>(value: &'a serde_json::Value, path: &str) -> Result<&'a str, BenchAdapterError> {
     pointer(value, path)?
         .as_str()
         .ok_or_else(|| BenchAdapterError::MissingField(path.to_owned()))
@@ -928,11 +913,7 @@ fn validate_metric_map(
     Ok(())
 }
 
-fn validate_size(
-    bytes: u64,
-    maximum: u64,
-    field: &'static str,
-) -> Result<(), BenchAdapterError> {
+fn validate_size(bytes: u64, maximum: u64, field: &'static str) -> Result<(), BenchAdapterError> {
     if bytes == 0 || bytes > maximum {
         return Err(BenchAdapterError::InvalidSize {
             field,
@@ -955,7 +936,11 @@ fn validate_identifier(value: &str, field: &'static str) -> Result<(), BenchAdap
     Ok(())
 }
 
-fn validate_text(value: &str, field: &'static str, maximum: usize) -> Result<(), BenchAdapterError> {
+fn validate_text(
+    value: &str,
+    field: &'static str,
+    maximum: usize,
+) -> Result<(), BenchAdapterError> {
     if value.trim().is_empty()
         || value.chars().count() > maximum
         || value

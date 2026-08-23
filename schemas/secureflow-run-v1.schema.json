@@ -115,13 +115,19 @@
     "engine": {
       "type": "object",
       "additionalProperties": false,
+      "dependentRequired": {
+        "sandbox_name": ["sandbox_binary_sha256"],
+        "sandbox_binary_sha256": ["sandbox_name"]
+      },
       "required": ["name", "version", "binary_sha256", "report_schema", "report_sha256"],
       "properties": {
         "name": { "type": "string", "minLength": 1, "maxLength": 100 },
         "version": { "type": "string", "minLength": 1, "maxLength": 100 },
         "binary_sha256": { "$ref": "#/$defs/sha256" },
         "report_schema": { "const": "secure-json-v1" },
-        "report_sha256": { "$ref": "#/$defs/sha256" }
+        "report_sha256": { "$ref": "#/$defs/sha256" },
+        "sandbox_name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "sandbox_binary_sha256": { "$ref": "#/$defs/sha256" }
       }
     },
     "phase_status": {

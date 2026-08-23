@@ -16,6 +16,7 @@ secureflow-engine-adapter = { path = "../secureflow-engine-adapter" }
 secureflow-bench-adapter = { path = "../secureflow-bench-adapter" }
 secureflow-ai = { path = "../secureflow-ai" }
 secureflow-knowledge = { path = "../secureflow-knowledge" }
+secureflow-orchestrator = { path = "../secureflow-orchestrator" }
 secureflow-model = { path = "../secureflow-model" }
 secureflow-secure-adapter = { path = "../secureflow-secure-adapter" }
 serde_json.workspace = true

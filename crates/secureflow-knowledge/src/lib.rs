@@ -5,6 +5,9 @@
 //! provenance hashes and never stores source text or full review rationale.
 
 pub mod catalog;
+pub mod catalog_backup;
+pub mod correlation;
+pub mod snapshot;
 
 use secureflow_model::{
     Confidence, EvidenceKind, EvidenceStep, Finding, HumanDecision, Location, Revision,
@@ -225,7 +228,10 @@ pub enum KnowledgeError {
     #[error("could not write knowledge ledger {path}: {source}")]
     Write { path: PathBuf, source: io::Error },
     #[error("invalid knowledge record at line {line}: {source}")]
-    InvalidRecord { line: usize, source: serde_json::Error },
+    InvalidRecord {
+        line: usize,
+        source: serde_json::Error,
+    },
     #[error("knowledge record has unsupported version: {0}")]
     UnsupportedVersion(String),
     #[error("knowledge record is invalid: {0}")]
@@ -424,26 +430,35 @@ fn parse_existing_records(bytes: &[u8]) -> Result<Vec<KnowledgeRecord>, Knowledg
             .unwrap_or("")
             .to_owned();
         let record = match version.as_str() {
-            RECORD_VERSION_V1 => KnowledgeRecord::V1(
-                serde_json::from_slice(line).map_err(|source| KnowledgeError::InvalidRecord {
-                    line: index + 1,
-                    source,
-                })?,
-            ),
-            RECORD_VERSION => KnowledgeRecord::V2(
-                serde_json::from_slice(line).map_err(|source| KnowledgeError::InvalidRecord {
-                    line: index + 1,
-                    source,
-                })?,
-            ),
+            RECORD_VERSION_V1 => {
+                KnowledgeRecord::V1(serde_json::from_slice(line).map_err(|source| {
+                    KnowledgeError::InvalidRecord {
+                        line: index + 1,
+                        source,
+                    }
+                })?)
+            }
+            RECORD_VERSION => {
+                KnowledgeRecord::V2(serde_json::from_slice(line).map_err(|source| {
+                    KnowledgeError::InvalidRecord {
+                        line: index + 1,
+                        source,
+                    }
+                })?)
+            }
             _ => return Err(KnowledgeError::UnsupportedVersion(version)),
         };
         validate_record(&record)?;
         if !ids.insert(record.record_id().to_owned()) {
-            return Err(KnowledgeError::DuplicateRecordId(record.record_id().to_owned()));
+            return Err(KnowledgeError::DuplicateRecordId(
+                record.record_id().to_owned(),
+            ));
         }
         if let KnowledgeRecord::V2(record) = &record {
-            match (&record.duplicate_of_record_id, canonical_by_observation.get(&record.observation_fingerprint)) {
+            match (
+                &record.duplicate_of_record_id,
+                canonical_by_observation.get(&record.observation_fingerprint),
+            ) {
                 (None, None) => {
                     canonical_by_observation.insert(
                         record.observation_fingerprint.clone(),
@@ -451,7 +466,11 @@ fn parse_existing_records(bytes: &[u8]) -> Result<Vec<KnowledgeRecord>, Knowledg
                     );
                 }
                 (Some(link), Some(canonical)) if link == canonical => {}
-                _ => return Err(KnowledgeError::InvalidDuplicateLink(record.record_id.clone())),
+                _ => {
+                    return Err(KnowledgeError::InvalidDuplicateLink(
+                        record.record_id.clone(),
+                    ));
+                }
             }
         }
         records.push(record);
@@ -468,7 +487,9 @@ fn validate_record(record: &KnowledgeRecord) -> Result<(), KnowledgeError> {
 
 fn validate_record_v1(record: &KnowledgeRecordV1) -> Result<(), KnowledgeError> {
     if record.record_version != RECORD_VERSION_V1 {
-        return Err(KnowledgeError::UnsupportedVersion(record.record_version.clone()));
+        return Err(KnowledgeError::UnsupportedVersion(
+            record.record_version.clone(),
+        ));
     }
     validate_common_record(
         &record.record_id,
@@ -497,15 +518,19 @@ fn validate_record_v1(record: &KnowledgeRecordV1) -> Result<(), KnowledgeError> 
 
 fn validate_record_v2(record: &KnowledgeRecordV2) -> Result<(), KnowledgeError> {
     if record.record_version != RECORD_VERSION {
-        return Err(KnowledgeError::UnsupportedVersion(record.record_version.clone()));
+        return Err(KnowledgeError::UnsupportedVersion(
+            record.record_version.clone(),
+        ));
     }
     if !valid_prefixed_id(&record.observation_fingerprint, "sf_obs_") {
-        return Err(KnowledgeError::InvalidRecordField("observation_fingerprint"));
+        return Err(KnowledgeError::InvalidRecordField(
+            "observation_fingerprint",
+        ));
     }
-    if let Some(link) = &record.duplicate_of_record_id {
-        if !valid_prefixed_id(link, "sf_kb_") || link == &record.record_id {
-            return Err(KnowledgeError::InvalidRecordField("duplicate_of_record_id"));
-        }
+    if let Some(link) = &record.duplicate_of_record_id
+        && (!valid_prefixed_id(link, "sf_kb_") || link == &record.record_id)
+    {
+        return Err(KnowledgeError::InvalidRecordField("duplicate_of_record_id"));
     }
     if let Some(revision) = &record.target_revision {
         validate_bounded(&revision.value, "target_revision.value", 200)?;
@@ -576,12 +601,12 @@ fn validate_common_record(
             return Err(KnowledgeError::InvalidRecordField(field));
         }
     }
-    if let Some(value) = evidence_reference_sha256 {
-        if !valid_sha256(value) {
-            return Err(KnowledgeError::InvalidRecordField(
-                "evidence_reference_sha256",
-            ));
-        }
+    if let Some(value) = evidence_reference_sha256
+        && !valid_sha256(value)
+    {
+        return Err(KnowledgeError::InvalidRecordField(
+            "evidence_reference_sha256",
+        ));
     }
     if decision == HumanDecision::Pending {
         return Err(KnowledgeError::InvalidRecordField("decision"));
@@ -628,15 +653,14 @@ fn validate_location(location: &Location, field: &'static str) -> Result<(), Kno
     {
         return Err(KnowledgeError::InvalidRecordField(field));
     }
-    if let Some(end_line) = location.end_line {
-        if end_line < location.start_line
+    if let Some(end_line) = location.end_line
+        && (end_line < location.start_line
             || (end_line == location.start_line
                 && location
                     .end_column
-                    .is_some_and(|column| column < location.start_column))
-        {
-            return Err(KnowledgeError::InvalidRecordField(field));
-        }
+                    .is_some_and(|column| column < location.start_column)))
+    {
+        return Err(KnowledgeError::InvalidRecordField(field));
     }
     Ok(())
 }
@@ -669,21 +693,22 @@ fn validate_source_license(value: &SourceLicense) -> Result<(), KnowledgeError> 
             "source_license.assertion",
         ));
     }
-    if let Some(evidence_sha256) = &value.evidence_sha256 {
-        if !valid_sha256(evidence_sha256) {
-            return Err(KnowledgeError::InvalidRecordField(
-                "source_license.evidence_sha256",
-            ));
-        }
+    if let Some(evidence_sha256) = &value.evidence_sha256
+        && !valid_sha256(evidence_sha256)
+    {
+        return Err(KnowledgeError::InvalidRecordField(
+            "source_license.evidence_sha256",
+        ));
     }
     match value.status {
         SourceLicenseStatus::SpdxDeclared => {
-            let expression = value
-                .spdx_expression
-                .as_deref()
-                .ok_or(KnowledgeError::InvalidRecordField(
-                    "source_license.spdx_expression",
-                ))?;
+            let expression =
+                value
+                    .spdx_expression
+                    .as_deref()
+                    .ok_or(KnowledgeError::InvalidRecordField(
+                        "source_license.spdx_expression",
+                    ))?;
             validate_bounded(expression, "source_license.spdx_expression", 200)?;
             if value.evidence_sha256.is_none() {
                 return Err(KnowledgeError::InvalidRecordField(
@@ -709,7 +734,10 @@ fn validate_timestamp(value: &str, field: &'static str) -> Result<(), KnowledgeE
 }
 
 fn record_id(manifest_sha256: &str, finding_id: &str, decision: HumanDecision) -> String {
-    let input = format!("{manifest_sha256}|{finding_id}|{}", decision_label(decision));
+    let input = format!(
+        "{manifest_sha256}|{finding_id}|{}",
+        decision_label(decision)
+    );
     format!("sf_kb_{}", sha256_bytes(input.as_bytes()))
 }
 
@@ -742,10 +770,7 @@ fn hash_location(hasher: &mut Sha256, location: &Location) {
     hash_field(hasher, &location.start_line.to_string());
     hash_field(hasher, &location.start_column.to_string());
     hash_field(hasher, &location.end_line.unwrap_or_default().to_string());
-    hash_field(
-        hasher,
-        &location.end_column.unwrap_or_default().to_string(),
-    );
+    hash_field(hasher, &location.end_column.unwrap_or_default().to_string());
 }
 
 fn hash_field(hasher: &mut Sha256, value: &str) {
@@ -779,15 +804,13 @@ fn valid_prefixed_id(value: &str, prefix: &str) -> bool {
     let Some(suffix) = value.strip_prefix(prefix) else {
         return false;
     };
-    suffix.len() == 64 && suffix.bytes().all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+    suffix.len() == 64
+        && suffix
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
 }
 
-fn valid_identifier(
-    value: &str,
-    prefix: &str,
-    min_suffix: usize,
-    max_suffix: usize,
-) -> bool {
+fn valid_identifier(value: &str, prefix: &str, min_suffix: usize, max_suffix: usize) -> bool {
     let Some(suffix) = value.strip_prefix(prefix) else {
         return false;
     };
@@ -837,10 +860,7 @@ fn read_required_bounded(path: &Path) -> Result<Vec<u8>, KnowledgeError> {
     read_with_metadata(path, metadata)
 }
 
-fn read_with_metadata(
-    path: &Path,
-    metadata: std::fs::Metadata,
-) -> Result<Vec<u8>, KnowledgeError> {
+fn read_with_metadata(path: &Path, metadata: std::fs::Metadata) -> Result<Vec<u8>, KnowledgeError> {
     if !metadata.is_file() {
         return Err(KnowledgeError::Read {
             path: path.to_owned(),
@@ -897,10 +917,7 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), KnowledgeError> {
         .unwrap_or_else(|| std::borrow::Cow::Borrowed("knowledge.jsonl"));
     let mut temporary = None;
     for counter in 0..1024_u16 {
-        let candidate = parent.join(format!(
-            ".{name}.tmp-{}-{counter}",
-            std::process::id()
-        ));
+        let candidate = parent.join(format!(".{name}.tmp-{}-{counter}", std::process::id()));
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
         #[cfg(unix)]
@@ -1106,12 +1123,9 @@ mod tests {
             std::process::id()
         ));
         let _ = std::fs::remove_file(&path);
-        let license = SourceLicense::operator_declared(
-            SourceLicenseStatus::PrivateOrUndisclosed,
-            None,
-            None,
-        )
-        .expect("valid private state");
+        let license =
+            SourceLicense::operator_declared(SourceLicenseStatus::PrivateOrUndisclosed, None, None)
+                .expect("valid private state");
 
         let first_result = import_manifest_to_ledger(&first_bytes, &first, &path, license.clone())
             .expect("first import");

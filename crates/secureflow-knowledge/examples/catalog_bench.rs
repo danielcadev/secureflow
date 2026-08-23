@@ -47,11 +47,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn run_size(
-    count: usize,
-    iterations: usize,
-    benchmark_root: &Path,
-) -> Result<(), Box<dyn Error>> {
+fn run_size(count: usize, iterations: usize, benchmark_root: &Path) -> Result<(), Box<dyn Error>> {
     let root = benchmark_root.join(format!(
         "secureflow-catalog-bench-{}-{}-{count}",
         std::process::id(),
@@ -165,7 +161,7 @@ fn duplicate_cve_id(index: usize) -> String {
 
 fn median(samples: &[f64]) -> f64 {
     let middle = samples.len() / 2;
-    if samples.len() % 2 == 0 {
+    if samples.len().is_multiple_of(2) {
         (samples[middle - 1] + samples[middle]) / 2.0
     } else {
         samples[middle]
