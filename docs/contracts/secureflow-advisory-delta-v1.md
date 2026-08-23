@@ -1,87 +1,89 @@
-# Contrato `secureflow-advisory-delta-v1`
+# `secureflow-advisory-delta-v1` contract
 
-## Propósito
+## Purpose
 
-Procesar cambios recientes de un `modified_id.csv` **por ecosistema** de OSV
-sin volver a normalizar un ZIP completo y sin convertir ausencias en borrados.
-La adquisición ocurre fuera del parser. El manifest conserva índice, revisión,
-hash, cursor, payloads, fuentes, licencias, cuarentena y snapshot base.
+Process recent changes from an OSV **per-ecosystem** `modified_id.csv` without
+renormalizing a complete ZIP and without turning absence into deletion.
+Acquisition happens outside the parser. The manifest retains the index,
+revision, hash, cursor, payloads, sources, licenses, quarantine, and base
+snapshot.
 
-La documentación oficial de OSV define cada fila como
-`<modified RFC3339>,<ID>`, ordenada de más reciente a más antigua. Es una lista
-de registros nuevos/modificados, no un inventario completo.
+Official OSV documentation defines each row as
+`<modified RFC3339>,<ID>`, ordered newest to oldest. It lists new or modified
+records; it is not a complete inventory.
 
-## Preparación
+## Preparation
 
-`delta-prepare-osv` exige:
+`delta-prepare-osv` requires:
 
-- el índice per-ecosystem adquirido y su locator/generación/ETag;
-- un directorio plano con exactamente un `<ID>.json` por fila posterior al
-  cursor exclusivo;
-- igualdad temporal entre la fila y `record.modified`;
-- ecosistema, ID primario, fuente y licencia admitidos por la misma política de
-  snapshots;
-- un snapshot completo base y, salvo el primer delta, el ID del delta anterior;
-- timestamp de adquisición no anterior al cambio más reciente.
+- the acquired per-ecosystem index and its locator, generation, or ETag;
+- a flat directory containing exactly one `<ID>.json` for every row after the
+  exclusive cursor;
+- timestamp equality between the row and `record.modified`;
+- an ecosystem, primary identifier, source, and license accepted by the same
+  snapshot policy;
+- a complete base snapshot and, except for the first delta, the previous delta
+  identifier;
+- an acquisition timestamp no earlier than the newest change.
 
-El índice completo se retiene. Cada archivo termina en `records/` o
-`quarantine/`, usa permisos privados y queda ligado por SHA-256. Un payload
-faltante causa error; nunca significa baja. Cualquier cuarentena conserva la
-evidencia pero bloquea la aplicación y el avance del cursor.
+The complete index is retained. Each file ends in `records/` or `quarantine/`,
+uses private permissions, and is bound by SHA-256. A missing payload is an
+error, never a deactivation. Any quarantine preserves the evidence but blocks
+application and cursor advancement.
 
-## Aplicación al catálogo v3
+## Applying to catalog v3
 
 `catalog-import-delta`:
 
-1. revalida el manifest, índice y todos los archivos;
-2. migra una copia writable v2→v3 de forma transaccional cuando procede;
-3. exige que el snapshot base siga siendo la foto completa más reciente;
-4. exige una cadena lineal mediante `previous_delta_id` y cursor contiguo;
-5. rechaza forks, timestamps antiguos y contenido distinto con el mismo
-   `modified`;
-6. conserva cada revisión raw y actualiza FTS por fila en la misma transacción;
-7. reconcilia conteos por fuente y sólo entonces marca el delta `complete`.
+1. Revalidates the manifest, index, and every file.
+2. Transactionally migrates a writable v2 copy to v3 when required.
+3. Requires the base snapshot to remain the newest complete snapshot.
+4. Requires a linear `previous_delta_id` chain and contiguous cursor.
+5. Rejects forks, old timestamps, and different content with the same
+   `modified` value.
+6. Preserves each raw revision and updates FTS row-by-row in the same
+   transaction.
+7. Reconciles per-source counts before marking the delta `complete`.
 
-Un replay de un delta completo verifica cada hash contra `delta_records` y no
-reaplica estado histórico. Una interrupción entre lotes deja `preparing`; el
-mismo manifest puede continuar idempotentemente. Un delta diferente no puede
-adelantarlo. La recuperación destructiva se hace desde un backup verificado,
-no borrando filas manualmente.
+Replaying a complete delta verifies every hash against `delta_records` and does
+not reapply historical state. Interruption between batches leaves `preparing`;
+the same manifest can resume idempotently. A different delta cannot overtake
+it. Destructive recovery starts from a verified backup rather than manually
+deleting rows.
 
-La reanudación por lotes no equivale a una transacción atómica de extremo a
-extremo: los lotes ya confirmados existen físicamente mientras el delta sigue
-`preparing`. Durante ese estado, las consultas de advisories, la procedencia,
-los backups y los trabajos no relacionados fallan de forma conservadora; sólo
-se permiten diagnóstico de integridad/conteos y reanudar el manifest exacto.
-Un consumidor que abra SQLite por fuera de la API de SecureFlow debe imponer
-la misma barrera y nunca presentar el estado parcial como un cursor válido.
+Batch resume is not one end-to-end atomic transaction: committed batches exist
+physically while the delta remains `preparing`. During that state, advisory and
+provenance queries, backups, and unrelated jobs fail conservatively. Only
+integrity and count diagnosis plus resuming the exact manifest are allowed. A
+consumer that opens SQLite outside SecureFlow's API must enforce the same
+barrier and must never present partial state as a valid cursor.
 
-## Semántica de bajas
+## Deactivation semantics
 
-- `absence_deactivates_record=false` siempre;
-- un registro con `withdrawn` es un upsert explícito y se retiene con estado
-  withdrawn para trazabilidad;
-- sólo un snapshot completo posterior puede desactivar registros que ya no
-  aparecen en una fuente completa;
-- ni un modelo ni una heurística infieren borrados.
+- `absence_deactivates_record=false` always.
+- A record with `withdrawn` is an explicit upsert retained with withdrawn state
+  for traceability.
+- Only a later complete snapshot can deactivate records no longer present in a
+  complete source.
+- Neither a model nor a heuristic infers deletion.
 
-`withdrawn` tampoco demuestra que un finding concreto sea falso o verdadero.
+`withdrawn` also does not prove that a specific finding is true or false.
 
-## Compatibilidad y límites
+## Compatibility and limits
 
-- schema SQLite writable actual: v3;
-- catálogos/backups v2 permanecen verificables read-only; la primera escritura
-  migra una copia o base autorizada;
-- máximo 256 MiB por índice, 1,1 millones de filas y 4 MiB por payload aceptado;
-- sólo formato per-ecosystem en v1; el índice global con prefijos no se acepta;
-- no hay downloader dentro de SecureFlow ni polling automático;
+- Current writable SQLite schema: v3.
+- V2 catalogs and backups remain verifiable read-only; the first write migrates
+  an authorized database or copy.
+- At most 256 MiB per index, 1.1 million rows, and 4 MiB per accepted payload.
+- V1 accepts only the per-ecosystem format, not the prefixed global index.
+- SecureFlow contains no downloader or automatic polling.
 - `validation_authority=human-only`.
 
-## Evidencia actual
+## Current evidence
 
-Las pruebas cubren payload faltante, tampering, cuarentena, `withdrawn`, replay,
-interrupción/reanudación, fork y snapshot antiguo. En el catálogo real copiado
-de 229.644 registros, la migración v2→v3 conservó conteos y pasó integridad. Un
-replay solapado oficial de siete RUSTSEC quedó completo sin inserts/updates ni
-bajas; esto prueba el pipeline y su idempotencia, no la llegada de siete
-vulnerabilidades nuevas.
+Tests cover missing payloads, tampering, quarantine, `withdrawn`, replay,
+interruption and resume, forks, and old snapshots. On a copy of the real
+229,644-record catalog, the v2-to-v3 migration preserved counts and passed
+integrity checks. An official overlapping replay of seven RUSTSEC records
+completed with no inserts, updates, or deactivations. This validates the
+pipeline and idempotence, not the arrival of seven new vulnerabilities.

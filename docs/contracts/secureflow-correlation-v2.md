@@ -1,38 +1,39 @@
-# Contrato `secureflow-correlation-v2`
+# `secureflow-correlation-v2` contract
 
-V2 conserva el enlace exacto finding–ecosistema–paquete de v1 y añade una
-evaluación conservadora de la versión instalada contra datos OSV retenidos.
+V2 preserves v1's exact finding–ecosystem–package link and adds a conservative
+evaluation of an installed version against retained OSV data.
 
-## Resultado por advisory
+## Result per advisory
 
-- `affected`: coincidencia exacta en `affected.versions` o inclusión en un
-  rango OSV `SEMVER` válido;
-- `not-affected`: todos los datos soportados excluyen la versión y no existe
-  información no soportada que pueda contradecirlo;
-- `unknown`: versión inválida, JSON/eventos inválidos, datos faltantes o rangos
-  `ECOSYSTEM`/`GIT` que SecureFlow no sabe evaluar localmente;
-- `not-evaluated`: no se proporcionó versión.
+- `affected`: an exact match in `affected.versions` or membership in a valid
+  OSV `SEMVER` range;
+- `not-affected`: all supported data excludes the version and no unsupported
+  information could contradict that result;
+- `unknown`: invalid version, invalid JSON or events, missing data, or
+  `ECOSYSTEM`/`GIT` ranges that SecureFlow cannot evaluate locally;
+- `not-evaluated`: no version was provided.
 
-Los límites `fixed` son exclusivos, `last_affected` inclusivos, `introduced: 0`
-representa el inicio y la precedencia SemVer ignora build metadata. Los eventos
-deben estar ordenados y alternar intervalos de forma válida; SecureFlow se
-abstiene ante ambigüedad en vez de reparar datos silenciosamente.
+`fixed` boundaries are exclusive, `last_affected` boundaries are inclusive,
+`introduced: 0` represents the beginning, and SemVer precedence ignores build
+metadata. Events must be ordered and form valid alternating intervals.
+SecureFlow abstains on ambiguity instead of silently repairing data.
 
-Cada assessment conserva hashes de `ranges_json`/`versions_json` y, cuando un
-rango coincide, el hash del rango exacto. El resumen reconcilia affected,
-not-affected, unknown y not-evaluated.
+Each assessment preserves hashes of `ranges_json` and `versions_json` and,
+when a range matches, the hash of that exact range. The summary reconciles
+affected, not-affected, unknown, and not-evaluated counts.
 
-## Límite de autoridad
+## Authority boundary
 
-Una versión afectada significa que el advisory declara ese paquete/rango. No
-prueba que el finding tenga la misma causa, que la dependencia sea alcanzable,
-que el código sea explotable ni que la aplicación sea vulnerable. Por eso:
+An affected version means that the advisory declares the package and range. It
+does not prove that the finding has the same cause, the dependency is
+reachable, the code is exploitable, or the application is vulnerable.
+Therefore:
 
 - `version_result_validates_vulnerability=false`;
 - `causal_relationship_asserted=false`;
 - `changes_human_decision=false`;
 - `validation_authority=human-only`.
 
-V1 continúa validándose para evidencia histórica; V2 es la escritura por
-defecto. La provenance incluye snapshots completos y, cuando existen, deltas
-completos del catálogo.
+V1 remains valid for historical evidence; V2 is the default write format.
+Provenance includes complete snapshots and, when present, complete catalog
+deltas.

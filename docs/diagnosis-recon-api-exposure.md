@@ -1,199 +1,203 @@
-# Diagnóstico: SecureFlow Recon / API Exposure
+# Diagnosis: SecureFlow Recon / API Exposure
 
-## Decisión
+## Decision
 
-Sí debe existir como módulo de SecureFlow, pero **no debe implementarse aún como
-scanner de red general**. La primera frontera ya está implementada como
-`secureflow-web`: produce un inventario trazable, inferencia local y una matriz
-de cobertura sin convertir una ruta descubierta en vulnerabilidad.
+Recon/API Exposure belongs in SecureFlow, but it **must not yet become a
+general network scanner**. The first boundary is implemented as
+`secureflow-web`: it produces a traceable inventory, local inference, and a
+coverage matrix without turning a discovered route into a vulnerability.
 
-El primer incremento offline y local ya existe. El descubrimiento pasivo de
-subdominios y las comprobaciones HTTP requieren antes un contrato de
-autorización verificable, protección frente a scope escape y un benchmark
-local. “El usuario escribió `--authorized`” no es evidencia suficiente para
-automatizar tráfico contra terceros.
+The first offline increment exists. Passive subdomain discovery and HTTP checks
+first require a verifiable authorization contract, protection against scope
+escape, and a local benchmark. "The user supplied `--authorized`" is not enough
+evidence to automate traffic against third parties.
 
-## Estado implementado al 23 de agosto de 2026
+## Implemented state on 2026-08-23
 
-- contrato `secureflow-web-scope-v1` con autorización, expiración, hashes y
-  presupuestos de red obligatoriamente en cero;
-- inventario App Router/Pages Router, middleware y server actions;
-- inferencia desde llamadas literales `fetch`/Axios, OpenAPI JSON, manifests
-  Next.js retenidos, schemas GraphQL y routers tRPC simples;
-- comparación de rutas y matriz conservadora de controles;
-- outputs JSON/SARIF, IDs ligados al contenido y límites de archivos/bytes/rutas;
-- fixture sintético con seis rutas y 24 aserciones de desarrollo, todas
-  reproducibles pero explícitamente no holdout;
-- integración con el CLI principal y el plan de orquestación por hashes.
+- `secureflow-web-scope-v1` with authorization, expiration, hashes, and network
+  budgets fixed at zero;
+- App Router and Pages Router inventory, middleware, and server actions;
+- inference from literal `fetch`/Axios calls, OpenAPI JSON, retained Next.js
+  manifests, GraphQL schemas, and simple tRPC routers;
+- route comparison and a conservative control matrix;
+- JSON/SARIF output, content-bound identifiers, and file/byte/route limits;
+- a synthetic fixture with six routes and 24 reproducible development
+  assertions explicitly marked as non-holdout;
+- integration with the main CLI and hash-linked orchestration plan.
 
-No están implementados DNS/CT, crawling, tráfico HTTP, OpenAPI YAML, análisis
-AST completo, HAR/logs reales ni validación automática de vulnerabilidades.
+DNS/CT, crawling, HTTP traffic, OpenAPI YAML, complete AST analysis, real
+HAR/logs, and automatic vulnerability validation are not implemented.
 
-## Flujo propuesto
+## Proposed workflow
 
 ```text
-autorización + allowlist versionada
+authorization + versioned allowlist
               │
               ▼
-collectors offline ──► inventario normalizado ──► matriz de coverage/auth
-  Next.js                 declared                  declarada/documentada/
-  OpenAPI                 documented                observada/esperada
-  tRPC/GraphQL            observed                         │
-  HAR/logs del dueño                                      ▼
-                                                checks seguros opcionales
+offline collectors ──► normalized inventory ──► coverage/auth matrix
+  Next.js                 declared                 declared/documented/
+  OpenAPI                 documented               observed/expected
+  tRPC/GraphQL            observed                        │
+  owner HAR/logs                                         ▼
+                                                optional safe checks
                                                          │
-Secure Engine ──► inventario/coverage ──► Secure Skill ──► humano ──► Bench
+Secure Engine ──► inventory/coverage ──► Secure Skill ──► human ──► Bench
 ```
 
-Las cuatro clases no se fusionan silenciosamente:
+The four classes are never silently merged:
 
-- `declared`: extraída de código o configuración;
-- `documented`: OpenAPI/Swagger/schema entregado;
-- `observed`: build manifests, HAR o logs proporcionados por el propietario;
-- `expected-control`: método, auth, rol, tenant, cache y respuesta esperados.
+- `declared`: extracted from code or configuration;
+- `documented`: supplied OpenAPI, Swagger, or schema;
+- `observed`: build manifests, HAR, or owner-provided logs;
+- `expected-control`: expected method, authentication, role, tenant, cache, and
+  response behavior.
 
-Las diferencias generan candidatos como `declared-not-documented`,
-`observed-not-declared`, `missing-auth-expectation` o
-`inconsistent-tenant-control`. Ninguna diferencia prueba exposición ni
-exploitabilidad.
+Differences generate candidates such as `declared-not-documented`,
+`observed-not-declared`, `missing-auth-expectation`, or
+`inconsistent-tenant-control`. No difference proves exposure or exploitability.
 
-## Scope y autorización
+## Scope and authorization
 
-Antes de cualquier red, un contrato versionado debería fijar y hashear:
+Before any network access, a versioned contract must fix and hash:
 
-- propietario/autorizador, base de autorización y referencia retenida;
-- inicio, expiración y zona horaria;
-- dominios exactos, wildcards permitidos, IP/CIDR, puertos y protocolos;
-- repositorios, commits y entornos (`local`, `staging`, producción si procede);
-- métodos HTTP permitidos, identidades sintéticas y datos de prueba;
-- acciones prohibidas, máximo RPS, concurrencia, bytes y duración;
-- política de redirects, DNS, proxies y proveedores externos;
-- contacto de emergencia y reglas de parada.
+- owner or authorizer, authorization basis, and retained reference;
+- start, expiration, and time zone;
+- exact domains, allowed wildcards, IP/CIDR, ports, and protocols;
+- repositories, commits, and environments (`local`, `staging`, and production
+  only when explicitly included);
+- allowed HTTP methods, synthetic identities, and test data;
+- prohibited actions, maximum RPS, concurrency, bytes, and duration;
+- redirect, DNS, proxy, and external-provider policy;
+- emergency contact and stop rules.
 
-Cada resolución DNS y redirect debe revalidarse contra el allowlist para evitar
-rebinding o salto a un SaaS fuera de scope. Wildcard DNS, CDN compartido y
-subdominios de terceros se registran como ambiguos; no se sondean por defecto.
-La expiración o la falta de evidencia detiene la fase. El modo inicial es
-`offline/passive`; la red requiere opt-in separado y registro de cada request.
+Every DNS resolution and redirect must be revalidated against the allowlist to
+prevent rebinding or transitions to out-of-scope SaaS. Wildcard DNS, shared
+CDNs, and third-party subdomains are recorded as ambiguous and are not probed by
+default. Expiration or missing evidence stops the phase. Initial mode is
+`offline/passive`; network access requires a separate opt-in and per-request
+logging.
 
-## Inventario Next.js
+## Next.js inventory
 
-El collector local puede analizar sin ejecutar el target:
+The local collector can analyze without executing the target:
 
-- `app/**/page.*`, `layout.*`, `route.*`, `default.*` y metadata relevante;
-- `pages/**` y `pages/api/**`;
-- segmentos dinámicos/catch-all, route groups, parallel e intercepting routes;
-- `middleware.*`, matchers, rewrites, redirects, `basePath` e i18n;
-- exports de métodos en route handlers y patrones de auth cercanos;
-- manifests de build suministrados (`routes-manifest`, pages/app build manifests)
-  con versión de Next.js retenida;
-- server actions como capacidades invocables, **no** como endpoints HTTP
-  estables inferidos automáticamente.
+- `app/**/page.*`, `layout.*`, `route.*`, `default.*`, and relevant metadata;
+- `pages/**` and `pages/api/**`;
+- dynamic and catch-all segments, route groups, parallel routes, and
+  intercepting routes;
+- `middleware.*`, matchers, rewrites, redirects, `basePath`, and i18n;
+- method exports in route handlers and nearby authentication patterns;
+- supplied build manifests (`routes-manifest`, pages/app build manifests) with
+  the Next.js version retained;
+- server actions as invocable capabilities, **not** as automatically inferred
+  stable HTTP endpoints.
 
-Los manifests internos cambian entre versiones; un parser debe abstenerse ante
-un formato desconocido. No se ejecutan builds, plugins, imports ni scripts del
-repositorio durante inventario. Rutas como `/admin` sólo elevan prioridad; el
-nombre no implica que sean privadas o vulnerables.
+Internal manifests change across versions; a parser must abstain on an unknown
+format. Inventory runs no builds, plugins, imports, or repository scripts.
+Routes such as `/admin` only raise review priority; their names do not imply
+privacy or vulnerability.
 
-## Inventario de APIs
+## API inventory
 
-Adapters separados pueden importar:
+Separate adapters may import:
 
-- OpenAPI/Swagger, conservando versión, servers, security schemes y operación;
-- routers tRPC y sus middlewares/procedures desde AST o metadata entregada;
-- schemas GraphQL y resolvers desde código o introspección ya proporcionada;
-- handlers de Next.js y otros frameworks explícitamente soportados;
-- HAR/logs del propietario después de redacción, límite de tamaño y revisión de
-  licencia/privacidad.
+- OpenAPI/Swagger while retaining version, servers, security schemes, and
+  operation;
+- tRPC routers and middleware/procedures from AST or supplied metadata;
+- GraphQL schemas and resolvers from code or already supplied introspection;
+- Next.js handlers and other explicitly supported frameworks;
+- owner-provided HAR/logs after redaction, size bounds, and license/privacy
+  review.
 
-La introspección GraphQL remota, crawling y Certificate Transparency son red,
-no “offline pasivo”. Deben vivir tras el scope gate, respetar términos y poder
-desactivarse por fuente. Nunca se almacenan cookies, authorization headers,
-tokens, bodies completos o secretos; se conservan campos minimizados, hashes y
-evidencia redactada.
+Remote GraphQL introspection, crawling, and Certificate Transparency use the
+network; they are not "offline passive." They must remain behind the scope gate,
+respect terms, and be independently disabled per source. Cookies,
+authorization headers, tokens, complete bodies, and secrets are never stored;
+only minimized fields, hashes, and redacted evidence are retained.
 
-## Checks seguros futuros
+## Future safe checks
 
-Sólo sobre loopback/fixtures en el MVP. Para un entorno remoto posterior:
+MVP checks run only against loopback fixtures. A later remote environment may
+consider:
 
-- headers CORS/cache y tipos de contenido;
-- errores verbosos con patrones redactados;
-- respuesta que excede un schema o allowlist de campos;
-- diferencias de status/schema entre identidades sintéticas autorizadas;
-- endpoint esperado como autenticado que responde sin identidad;
-- aislamiento tenant usando cuentas y datos sintéticos provistos por el dueño.
+- CORS/cache headers and content types;
+- verbose errors with redacted patterns;
+- responses exceeding a schema or field allowlist;
+- status or schema differences between authorized synthetic identities;
+- an endpoint expected to require authentication responding without identity;
+- tenant isolation using owner-provided synthetic accounts and data.
 
-Incluso un `GET` puede tener side effects. No se enviarán métodos, cuerpos,
-parámetros ni credenciales que no estén preautorizados. Se prohíben explotación,
-credential stuffing, enumeración masiva, extracción de secretos, descarga de
-datos reales, bypass activo y pruebas destructivas. Las respuestas se acotan,
-redactan y hashean; una señal se valida sólo con evidencia humana.
+Even a `GET` can have side effects. Methods, bodies, parameters, and credentials
+that were not preauthorized will not be sent. Exploitation, credential
+stuffing, mass enumeration, secret extraction, real-data downloads, active
+bypass, and destructive tests are prohibited. Responses are bounded, redacted,
+and hashed. A signal is validated only through human-reviewed evidence.
 
-## Datos y almacenamiento
+## Data and storage
 
-El inventario de activos no debe mezclarse con advisories públicos ni con el
-ledger de decisiones humanas. Requiere un store local separado con TTL y nivel
-de sensibilidad. Un fixture API debería contener como mínimo:
+Asset inventory must not be mixed with public advisories or the human-decision
+ledger. It requires a separate local store with TTL and sensitivity level. An
+API fixture should contain at least:
 
-| Campo | Función |
+| Field | Purpose |
 | --- | --- |
-| framework/version | parser y compatibilidad esperada |
-| language, method, route pattern | identidad declarada |
-| origin | código, build, spec o tráfico del dueño |
-| auth, roles, tenant | controles esperados |
-| safe/vulnerable control | label privado del benchmark |
-| request fixture | sintético, acotado y no secreto |
-| expected status/schema/fields | oracle predeclarado |
-| evidence locations | líneas, manifest o intercambio redactado |
-| provenance/license | uso y redistribución permitidos |
+| framework/version | parser and expected compatibility |
+| language, method, route pattern | declared identity |
+| origin | code, build, specification, or owner traffic |
+| auth, roles, tenant | expected controls |
+| safe/vulnerable control | private benchmark label |
+| request fixture | synthetic, bounded, and non-secret |
+| expected status/schema/fields | predeclared oracle |
+| evidence locations | lines, manifest, or redacted exchange |
+| provenance/license | permitted use and redistribution |
 
-Prioridad: fixtures propios sintéticos y proyectos con licencia clara. No
-copiar endpoints privados, HAR reales o corpus de terceros a una base pública.
+Priority goes to original synthetic fixtures and clearly licensed projects.
+Private endpoints, real HAR files, and third-party corpora must not be copied
+into a public database.
 
-## MVP realista de 2–4 semanas
+## Realistic 2–4 week MVP
 
-1. Contrato de autorización/allowlist y esquema de inventario, sin red.
-2. Parser Next.js para un subconjunto versionado: App Router, Pages Router,
-   route handlers, middleware y manifests conocidos.
-3. Import OpenAPI 3.x y matriz `ruta × método × auth × rol × tenant`.
-4. Comparador de conjuntos declared/documented/observed con abstención ante
-   ambigüedad.
-5. 20–40 fixtures locales safe/vulnerable con licencias y ground truth separado.
-6. Checks HTTP únicamente contra un servidor fixture en loopback, con RPS,
-   timeout, bytes y métodos fijados.
-7. Envelope hacia Secure Skill y decisión humana; nada se marca validated solo.
-8. Adapter de Secure Bench para recall/precision de inventario y candidatos,
-   tiempo, abstenciones y fallos operativos.
+1. Authorization/allowlist contract and inventory schema without network use.
+2. Next.js parser for a versioned subset: App Router, Pages Router, route
+   handlers, middleware, and known manifests.
+3. OpenAPI 3.x import and `route × method × auth × role × tenant` matrix.
+4. Declared/documented/observed set comparison with abstention on ambiguity.
+5. 20–40 local safe/vulnerable fixtures with licenses and separate ground truth.
+6. HTTP checks only against a loopback fixture server, with fixed RPS, timeout,
+   bytes, and methods.
+7. Secure Skill envelope and human decision; nothing validates itself.
+8. Secure Bench adapter for inventory and candidate recall/precision, time,
+   abstentions, and operational failures.
 
-Subdominios remotos, crawling genérico, browser automation, GraphQL remoto y
-validación con cuentas multi-tenant reales quedan fuera del primer MVP.
+Remote subdomains, generic crawling, browser automation, remote GraphQL, and
+validation with real multi-tenant accounts remain outside the first MVP.
 
-## Cómo medirlo frente a humanos
+## Measuring against humans
 
-Tareas estrechas y adjudicables:
+Use narrow, adjudicable tasks:
 
-1. enumerar rutas/métodos reales de una aplicación Next.js congelada;
-2. completar correctamente su matriz auth/roles/tenant;
-3. detectar discrepancias entre código, OpenAPI, manifests y HAR redactado;
-4. priorizar respuestas excesivas o endpoints sin el control esperado;
-5. producir evidencia reproducible por minuto de analista.
+1. Enumerate real routes and methods in a frozen Next.js application.
+2. Correctly complete its authentication, role, and tenant matrix.
+3. Detect discrepancies across code, OpenAPI, manifests, and redacted HAR.
+4. Prioritize excessive responses or endpoints missing expected controls.
+5. Produce reproducible evidence per analyst minute.
 
-Reportar por separado recall/precision de rutas, recall/precision de
-discrepancias validadas, FP/FN, minutos, wall-clock, abstenciones y cobertura de
-framework. Un estudio crossover ciego debe usar un holdout nuevo y revisores
-externos al corpus. Superar la mediana de una cohorte en esas tareas no equivale
-a superar “al mejor humano” ni a garantizar seguridad del sistema.
+Report route recall/precision, validated-discrepancy recall/precision, FP/FN,
+analyst minutes, wall-clock time, abstentions, and framework coverage
+separately. A blind crossover study requires a new holdout and reviewers
+external to corpus creation. Beating a cohort median on these tasks does not
+mean beating "the best human" or guaranteeing system security.
 
-## Riesgos y condiciones de avance
+## Risks and advancement conditions
 
-- legal/scope: autorización débil, activos compartidos o expirados;
-- seguridad: SSRF, DNS rebinding, redirects, side effects y fuga en logs;
-- exactitud: rutas dinámicas, rewrites, generación runtime y server actions;
-- privacidad: HAR, tokens, PII y nombres internos;
-- licencia: specs/builds/código privados y fuentes CT;
-- reproducibilidad: builds y tráfico volátiles;
-- coste: crawling y análisis IA innecesarios.
+- legal/scope: weak authorization or shared/expired assets;
+- security: SSRF, DNS rebinding, redirects, side effects, and log leakage;
+- accuracy: dynamic routes, rewrites, runtime generation, and server actions;
+- privacy: HAR, tokens, PII, and internal names;
+- licensing: private specifications, builds, code, and CT sources;
+- reproducibility: volatile builds and traffic;
+- cost: unnecessary crawling and AI analysis.
 
-El crate offline se creó después de fijar el scope, fixtures y métricas. Una ADR
-separada, pruebas loopback y revisión explícita siguen siendo requisitos antes
-de autorizar cualquier adapter de red.
+The offline crate was created only after scope, fixtures, and metrics were
+fixed. A separate ADR, loopback tests, and explicit review remain prerequisites
+for authorizing any network adapter.

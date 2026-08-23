@@ -1,29 +1,29 @@
-# ADR 0005: knowledge v2 y deduplicación exacta trazable
+# ADR 0005: Versioned knowledge v2 and traceable exact deduplication
 
-## Estado
+## Status
 
-Aceptado para el MVP.
+Accepted for the MVP.
 
-## Contexto
+## Context
 
-El registro v1 preservaba la decisión y provenance del scanner, pero no hacía
-explícita la licencia del source ni podía enlazar la misma observación entre
-ejecuciones. Cambiar v1 en sitio haría ambiguos los artefactos ya creados.
+The v1 record preserved the decision and scanner provenance, but did not make
+the source license explicit or link the same observation across runs. Changing
+v1 in place would make existing artifacts ambiguous.
 
-## Decisión
+## Decision
 
-- conservar lectura estricta de v1;
-- escribir nuevas importaciones como `secureflow-knowledge-record-v2`;
-- exigir al operador un estado de licencia, permitiendo `unknown`;
-- requerir evidencia hasheada para una declaración SPDX;
-- conservar observaciones repetidas y enlazarlas al primer registro v2;
-- limitar el ledger a 128 MiB y mantener un único writer durante el MVP;
-- no inferir equivalencia entre engines ni migrar v1 automáticamente.
+- Preserve strict v1 reads.
+- Write new imports as `secureflow-knowledge-record-v2`.
+- Require an operator-declared license status, including `unknown`.
+- Require hashed evidence for an SPDX declaration.
+- Preserve repeated observations and link them to the first v2 record.
+- Limit the ledger to 128 MiB and one writer during the MVP.
+- Do not infer equivalence across engines or migrate v1 automatically.
 
-## Consecuencias
+## Consequences
 
-El historial y los desacuerdos humanos permanecen auditables. El ledger puede
-contener v1 y v2, por lo que los consumidores deben mirar `record_version` por
-registro. La deduplicación es deliberadamente conservadora y puede dejar
-duplicados semánticos; reducirlos requerirá un reconciliador evaluado por
-separado. La declaración de licencia no constituye asesoría legal.
+History and human disagreements remain auditable. A ledger may contain v1 and
+v2, so consumers must inspect `record_version` per record. Deduplication is
+deliberately conservative and may retain semantic duplicates; reducing them
+requires a separately evaluated reconciler. A license declaration is not legal
+advice.

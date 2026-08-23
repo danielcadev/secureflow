@@ -1,127 +1,125 @@
-# MVP de SecureFlow
+# SecureFlow MVP
 
-## Alcance
+## Scope
 
-El MVP debe responder una sola pregunta:
+The MVP answers one question:
 
-> ¿Puede un investigador analizar un repositorio autorizado, recibir candidatos
-> deterministas priorizados y validar cada uno con evidencia reproducible sin
-> depender de una IA?
+> Can a researcher analyze an authorized repository, receive prioritized
+> deterministic candidates, and validate each one with reproducible evidence
+> without depending on AI?
 
-## Entregables
+## Deliverables
 
-1. CLI Rust local. **Implementado en la primera vertical.**
-2. Adapter de Secure Engine por proceso externo. **Implementado con límites
-   de tiempo y salida.**
-3. Validación de `secure-json-v1`. **Implementado.**
-4. Manifiesto `secureflow-run-v1`. **Implementado; conserva hashes y deja la
-   decisión humana en `pending`.**
-5. Priorización determinista y deduplicación. El ordenamiento y la
-   deduplicación exacta dentro de un engine ya están implementados; la
-   equivalencia entre engines sigue pendiente.
-6. Estados `pending`, `validated`, `rejected` y `abstained`. El modelo y el
-   comando `review-run` ya los soportan con reviewer, timestamp y rationale.
-7. Informe JSON y Markdown. **Implementado:** conserva provenance, accounting,
-   evidencia y limitaciones, no llama candidatos “vulnerabilidades” y omite la
-   rationale humana por defecto.
-8. Almacenamiento local con autoridades separadas. **Ledger JSONL v2
-   implementado** para decisiones humanas y **catálogo SQLite/FTS5 v1
-   implementado** para registros externos. La capacidad se midió con 100k,
-   500k y 1M sintéticos y con 229.644 registros reales aceptados de snapshots
-   crates.io, GitHub Actions y npm. Estos conteos no equivalen a
-   vulnerabilidades humanas validadas.
-9. Fixtures positivos y controles seguros. Hay una prueba mínima y se validó
-   la integración con un fixture vulnerable de Secure Engine. El adapter de
-   Secure Bench importa result-v2 con hashes y métricas separadas, y un script
-   separado ejecuta sus 7 casos vulnerables y 7 controles como diagnóstico
-   local. Falta definir y congelar un corpus nuevo/holdout antes de cualquier
-   ejecución publicable.
-10. Ruta IA opcional, redacted y con presupuesto. **Preparación local y
-    accounting de respuesta implementados; desactivada por defecto y sin cliente
-    de red. El transporte real sigue pendiente.**
-11. Adapter contextual de Secure Skill. **Implementado para importar y validar
-    review-contract 1.1 con provenance; no ejecuta la skill ni concede autoridad
-    de validación.**
-12. Adapter de Secure Bench. **Implementado para importar resultados v2
-    retenidos, verificar fingerprints y separar métricas; no ejecuta scanners ni
-    permite rankings o claims de superioridad.**
-13. Recon/API Exposure offline. **Implementado como `secureflow-web`: scope
-    autorizado, inventario Next.js, inferencia desde artefactos locales,
-    evaluación JSON/SARIF y 24 aserciones sintéticas de desarrollo. No existe
-    adquisición DNS/CT, crawling ni tráfico HTTP.**
+1. Local Rust CLI. **Implemented in the first vertical.**
+2. External-process Secure Engine adapter. **Implemented with time and output
+   limits.**
+3. `secure-json-v1` validation. **Implemented.**
+4. `secureflow-run-v1` manifest. **Implemented; it preserves hashes and leaves
+   the human decision `pending`.**
+5. Deterministic prioritization and deduplication. Exact ordering and
+   within-engine deduplication are implemented; cross-engine equivalence remains
+   pending.
+6. `pending`, `validated`, `rejected`, and `abstained` states. The model and
+   `review-run` support them with reviewer, timestamp, and rationale.
+7. JSON and Markdown reports. **Implemented:** they preserve provenance,
+   accounting, evidence, and limitations, do not call candidates
+   "vulnerabilities," and omit human rationale by default.
+8. Local storage with separate authorities. A **JSONL v2 ledger** stores human
+   decisions and a separate **SQLite/FTS5 catalog** stores external records.
+   Capacity was measured with 100k, 500k, and 1M synthetic records and 229,644
+   accepted real source records from crates.io, GitHub Actions, and npm
+   snapshots. These counts are not human-validated vulnerabilities.
+9. Positive fixtures and safe controls. A minimal integration test uses a
+   vulnerable Secure Engine fixture. The Secure Bench adapter imports
+   `result-v2` with hashes and separate metrics, while a separate script runs
+   seven vulnerable and seven safe-control cases as a local diagnostic. A new
+   holdout must be defined and frozen before any publishable efficacy run.
+10. Optional, redacted, budgeted AI path. **Local preparation and response
+    accounting are implemented, disabled by default, with no network client.
+    Real transport remains pending.**
+11. Contextual Secure Skill adapter. **Implemented for provenance-bound import
+    and validation of review-contract 1.1; it neither executes the Skill nor
+    grants validation authority.**
+12. Secure Bench adapter. **Implemented for retained v2 result import,
+    fingerprint checks, and separate metrics; it runs no scanners and permits
+    no ranking or superiority claims.**
+13. Offline Recon/API Exposure. **Implemented as `secureflow-web`: authorized
+    scope, Next.js inventory, inference from local artifacts, JSON/SARIF
+    evaluation, and 24 synthetic development assertions. There is no DNS/CT
+    acquisition, crawling, or HTTP traffic.**
 
-## Orden de implementación
+## Implementation order
 
-### Fase 1 — Contrato y adapter
+### Phase 1 — Contract and adapter
 
-- [x] cargar un binario explícito;
-- [x] registrar versión y SHA-256;
-- [x] ejecutar sin shell;
-- [x] capturar stdout/stderr separadamente;
-- [x] rechazar schema, paths o reportes inválidos;
-- [x] conservar el raw sin modificar;
-- [x] aislar el grupo de procesos y matarlo completo al vencer el timeout;
-- [x] aplicar en Linux límites de memoria, CPU, descriptores y core dumps;
-- [x] exigir Bubblewrap por defecto en Linux, con root RO y red privada;
-- [ ] evaluar Landlock/VM/contenedor para perfiles que necesiten aislamiento
-  más fuerte o portabilidad fuera de Linux.
+- [x] load an explicit binary;
+- [x] record version and SHA-256;
+- [x] execute without a shell;
+- [x] capture stdout and stderr separately;
+- [x] reject invalid schemas, paths, or reports;
+- [x] preserve raw output unchanged;
+- [x] isolate the process group and kill all descendants on timeout;
+- [x] apply Linux memory, CPU, descriptor, and core-dump limits;
+- [x] require Bubblewrap by default on Linux with read-only root and private
+  network;
+- [ ] evaluate Landlock, a VM, or a container for profiles requiring stronger
+  isolation or non-Linux portability.
 
-### Fase 2 — Modelo y revisión
+### Phase 2 — Model and review
 
-- [x] transformar candidatos a findings canónicos;
-- [x] ordenar candidatos de forma determinista sin convertir el orden en una
-  afirmación de validez;
-- [x] deduplicar candidatos exactos por fingerprint, regla y ubicaciones;
-- [x] mostrar source, sink, flujo, limitaciones y regla;
-- [x] exigir decisión humana antes de marcar `validated`.
+- [x] project candidates into canonical findings;
+- [x] order candidates deterministically without turning order into validity;
+- [x] deduplicate exact candidates by fingerprint, rule, and locations;
+- [x] show source, sink, flow, limitations, and rule;
+- [x] require a human decision before marking `validated`.
 
-### Fase 3 — Knowledge base
+### Phase 3 — Knowledge base
 
-- [x] comenzar con decenas de registros, no cientos de miles;
-- [x] guardar fuente, licencia declarada, hash, versión y relación con el finding;
-- [x] distinguir observación exacta y decisión humana mediante campos separados;
-- [x] separar el ledger humano del catálogo de advisories externos;
-- [x] importar OSV local, conservar revisiones y consultar alias/FTS/paquetes;
-- [x] medir capacidad sintética en 100k, 500k y 1M registros;
-- [x] validar adapters, licencias y rechazos con snapshots reales;
-- [x] implementar `modified_id.csv` per-ecosystem con cadena, replay,
-  `withdrawn` explícito y recovery; la ausencia nunca se interpreta como baja;
-- [ ] medir 5–20 millones de relaciones y concurrencia antes de prometerlos;
-- [ ] reconciliar claims/reglas entre engines sólo después de construir un corpus
-  etiquetado para medir merges incorrectos.
+- [x] start with tens of records, not hundreds of thousands;
+- [x] store source, declared license, hash, version, and finding relationship;
+- [x] separate exact observation from human decision;
+- [x] separate the human ledger from the external advisory catalog;
+- [x] import local OSV, retain revisions, and query aliases, FTS, and packages;
+- [x] measure synthetic capacity at 100k, 500k, and 1M records;
+- [x] validate adapters, licenses, and rejections with real snapshots;
+- [x] implement per-ecosystem `modified_id.csv` with chaining, replay, explicit
+  `withdrawn`, and recovery; absence never means deactivation;
+- [ ] measure 5–20 million relationships and concurrency before promising them;
+- [ ] reconcile claims or rules across engines only after a labeled corpus can
+  measure incorrect merges.
 
-### Fase 4 — IA medida
+### Phase 4 — Measured AI
 
-- [x] preparar sólo findings seleccionados, sin transmitirlos;
-- [x] usar Luna como familia lógica por defecto;
-- [x] representar escalado sólo para casos ambiguos y bajo aprobación humana;
-- [x] registrar presupuestos/tokens, modelo y prompt versionado;
-- [x] comprobar que la IA no cambia la decisión humana;
-- [ ] medir coste y calidad reales sólo después de aprobar un transporte de
-  proveedor y una política de datos.
+- [x] prepare only selected findings without transmitting them;
+- [x] use Luna as the default logical family;
+- [x] represent escalation only for ambiguous cases under human approval;
+- [x] record budgets, tokens, model, and versioned prompt;
+- [x] verify that AI cannot change the human decision;
+- [ ] measure real cost and quality only after provider transport and a data
+  policy are approved.
 
-## Criterios de aceptación
+## Acceptance criteria
 
-- dos ejecuciones iguales producen el mismo resultado semántico;
-- una ejecución sin binario falla claramente y no simula un scan limpio;
-- un reporte inválido queda como error operativo;
-- un candidato sin evidencia suficiente puede quedar `abstained`;
-- ningún finding se valida automáticamente;
-- el código fuente no sale del equipo por defecto;
-- el consumo de tokens se mide por finding y por fase;
-- los repositorios originales no sufren cambios.
+- Equivalent runs produce the same semantic result.
+- A run without a binary fails clearly and never simulates a clean scan.
+- An invalid report remains an operational error.
+- A candidate without enough evidence can remain `abstained`.
+- No finding is validated automatically.
+- Source code does not leave the machine by default.
+- Token usage is measured per finding and phase.
+- Original repositories remain unchanged.
 
-## Fuera de alcance
+## Out of scope
 
-- active scanning o explotación automática;
-- parches autónomos;
-- despliegue o acciones contra terceros;
-- dashboard web completo;
-- descarga o ingestión indiscriminada de CVE/NVD/OSV;
-- benchmark competitivo o leaderboard;
-- soporte universal de lenguajes.
+- active scanning or automatic exploitation;
+- autonomous patches;
+- deployment or actions against third parties;
+- a complete web dashboard;
+- indiscriminate CVE/NVD/OSV acquisition or ingestion;
+- competitive benchmarks or leaderboards;
+- universal language support.
 
-La fase offline de Recon/API Exposure forma parte del MVP ejecutable. Su
-diagnóstico y la frontera futura de red están en
-[`diagnosis-recon-api-exposure.md`](./diagnosis-recon-api-exposure.md); no se ha
-creado un scanner de red.
+The offline Recon/API Exposure phase is part of the executable MVP. Its
+diagnosis and future network boundary are documented in
+[`diagnosis-recon-api-exposure.md`](./diagnosis-recon-api-exposure.md). No
+network scanner has been created.

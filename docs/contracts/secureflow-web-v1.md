@@ -1,81 +1,82 @@
 # SecureFlow Web v1
 
-## Propósito
+## Purpose
 
-SecureFlow Web v1 construye un inventario determinista de APIs web en targets
-explícitamente autorizados y compara rutas implementadas, documentadas,
-observadas y protegidas. La primera vertical soporta convenciones locales de
-Next.js App Router y Pages Router.
+SecureFlow Web v1 builds a deterministic web API inventory for explicitly
+authorized targets and compares implemented, documented, observed, and
+protected routes. The first vertical supports local Next.js App Router and
+Pages Router conventions.
 
-V1 no ejecuta código del target, no abre conexiones de red y no interpreta una
-ruta oculta o no documentada como protegida.
+V1 does not execute target code, open network connections, or interpret a
+hidden or undocumented route as protected.
 
-## Contratos
+## Contracts
 
-- `secureflow-web-scope-v1`: autorización vigente, repositorios y assets
-  permitidos, límites y política offline.
-- `secureflow-web-inventory-v1`: fuentes con licencia/provenance, rutas,
-  parámetros, controles conocidos, evidencia, limitaciones y accounting.
-- `secureflow-web-inference-v1`: candidatos de API correlacionados desde código
-  cliente, manifests y contratos locales, con confianza, provenance,
-  abstenciones y estado de presencia.
-- `secureflow-web-assessment-v1`: candidatos, hardening, abstenciones y
-  validaciones humanas reproducibles.
-- `secureflow-web-case-v1`: ground truth de un caso sintético o licenciado.
-- `secureflow-web-lab-result-v1`: comparación evaluativa de rutas con
-  precision, recall, F1, faltantes y reportes inesperados.
-- `secureflow-web-development-corpus-v1`: 20–40 aserciones sintéticas de
-  desarrollo, con licencia, procedencia y split explícito.
-- `secureflow-web-corpus-result-v1`: resultados por caso que bloquean claims de
-  holdout, superioridad y seguridad de producción.
+- `secureflow-web-scope-v1`: current authorization, allowed repositories and
+  assets, limits, and offline policy.
+- `secureflow-web-inventory-v1`: licensed and provenance-bound sources, routes,
+  parameters, known controls, evidence, limitations, and accounting.
+- `secureflow-web-inference-v1`: correlated API candidates from client code,
+  manifests, and local contracts, with confidence, provenance, abstention, and
+  presence state.
+- `secureflow-web-assessment-v1`: candidates, hardening observations,
+  abstentions, and reproducible human validations.
+- `secureflow-web-case-v1`: ground truth for a synthetic or licensed case.
+- `secureflow-web-lab-result-v1`: route comparison with precision, recall, F1,
+  missing routes, and unexpected reports.
+- `secureflow-web-development-corpus-v1`: 20–40 licensed synthetic development
+  assertions with provenance and an explicit split.
+- `secureflow-web-corpus-result-v1`: per-case results that block holdout,
+  superiority, and production-safety claims.
 
-Los schemas normativos viven en `schemas/` y rechazan campos desconocidos.
+Normative schemas live in `schemas/` and reject unknown fields.
 
-## Invariantes
+## Invariants
 
-- La autorización debe existir, tener referencia, reviewer y expiración futura.
-- `network_execution` es `disabled`; todos los presupuestos de requests son cero.
-- El root se liga mediante un hash determinista del árbol antes y después del
-  inventario. Un cambio concurrente invalida la ejecución.
-- No se siguen symlinks ni se leen rutas fuera del root.
-- Los controles desconocidos no se consideran seguros.
-- Una API no documentada produce hardening, no una vulnerabilidad automática.
-- Una ruta inferida siempre conserva `classification=candidate` y
-  `vulnerability_status=not-assessed`; la confianza no sustituye validación.
-- Sólo se aceptan rutas same-origin que comiencen en `/`; URLs externas y
-  traversal no se convierten en targets. Strings dinámicos no resueltos quedan
-  como candidatos abstained sin una ruta ejecutable.
-- Sólo una observación con evidencia de reproducción y decisión humana puede
-  usar `human-validated-vulnerability`.
-- Una revisión humana crea un assessment derivado con
-  `parent_assessment_id`; preserva el artefacto previo y liga la evidencia
-  retenida por SHA-256 en vez de sobrescribir la decisión original.
-- Cero observaciones no prueba seguridad.
-- Los IDs de fuentes, casos y resultados son identidades ligadas al contenido;
-  detectan inconsistencias accidentales, pero no son firmas ni acreditan quién
-  produjo el artefacto.
+- Authorization exists and has a reference, reviewer, and future expiration.
+- `network_execution` is `disabled`; every request budget is zero.
+- A deterministic tree hash binds the root before and after inventory. A
+  concurrent change invalidates the run.
+- Symlinks are not followed and paths outside the root are not read.
+- Unknown controls are never considered safe.
+- An undocumented API produces hardening guidance, not an automatic
+  vulnerability.
+- An inferred route always retains `classification=candidate` and
+  `vulnerability_status=not-assessed`; confidence does not replace validation.
+- Only same-origin paths beginning with `/` are accepted. External URLs and
+  traversal never become targets. Unresolved dynamic strings remain abstained
+  candidates without an executable route.
+- Only an observation with reproduction evidence and a human decision can use
+  `human-validated-vulnerability`.
+- Human review creates a derived assessment with `parent_assessment_id`,
+  preserves the previous artifact, and binds retained evidence by SHA-256
+  instead of overwriting the original decision.
+- Zero observations does not prove safety.
+- Source, case, and result identifiers are content-bound identities. They
+  detect accidental inconsistency but are not signatures and do not establish
+  who produced an artifact.
 
-## Laboratorio local
+## Local lab
 
-El fixture `tests/fixtures/web-nextjs` es sintético, no contiene APIs privadas y
-cubre App Router, Pages Router, route groups, parámetros dinámicos, middleware,
-server actions, llamadas cliente, un manifest retenido y artefactos
-OpenAPI/GraphQL/tRPC.
+The `tests/fixtures/web-nextjs` fixture is synthetic, contains no private APIs,
+and covers App Router, Pages Router, route groups, dynamic parameters,
+middleware, server actions, client calls, a retained manifest, and
+OpenAPI/GraphQL/tRPC artifacts.
 
-Las pruebas comparan la salida real con `expected.json`, validan los contratos,
-comprueban determinismo y verifican que el hash del target no cambie. El binario
-`secureflow-web-lab` compara un inventario retenido con un caso y escribe JSON y
-SARIF mediante creación sin overwrite:
+Tests compare actual output with `expected.json`, validate contracts, check
+determinism, and verify that the target hash does not change. The
+`secureflow-web-lab` binary compares a retained inventory with a case and
+writes JSON and SARIF through no-overwrite creation:
 
 ```bash
 cargo run -p secureflow-web --bin secureflow-web-lab -- \
   inventory.json expected.json result.json result.sarif
 ```
 
-El resultado es diagnóstico de desarrollo. Sus campos de claims prohíben usarlo
-como evidencia de superioridad o production readiness.
+The result is a development diagnostic. Its claim fields prohibit using it as
+evidence of superiority or production readiness.
 
-El CLI principal expone el flujo sin depender de los binarios auxiliares:
+The main CLI exposes the workflow without depending on helper binaries:
 
 ```bash
 cargo run -p secureflow -- web-scope-create --help
@@ -87,35 +88,34 @@ cargo run -p secureflow -- web-lab --help
 cargo run -p secureflow -- web-corpus-evaluate --help
 ```
 
-El corpus versionado en `tests/fixtures/web-nextjs/corpus.json` contiene 24
-aserciones atómicas sobre inventario, correlación, decoys y semántica segura.
-La ejecución retenida pasó 24/24. Es un corpus conocido por los desarrolladores,
-no una prueba independiente ni un estudio con humanos.
+The versioned corpus in `tests/fixtures/web-nextjs/corpus.json` contains 24
+atomic assertions about inventory, correlation, decoys, and safe semantics.
+The retained run passed 24/24. This corpus is known to developers; it is neither
+an independent test nor a human study.
 
-La inferencia local consume un scope sellado y un inventario ya producido. La
-salida debe quedar fuera del target para conservar el árbol autorizado:
+Local inference consumes a sealed scope and an existing inventory. Output must
+remain outside the target to preserve the authorized tree:
 
 ```bash
 cargo run -p secureflow-web --bin secureflow-web-infer -- \
-  /target/autorizado scope.json inventory.json /evidencia/inference.json
+  /authorized/target scope.json inventory.json /evidence/inference.json
 ```
 
-## Límites actuales
+## Current limitations
 
-- La detección de métodos de App Router reconoce exports nombrados sin ejecutar
-  TypeScript; Pages Router conserva métodos como desconocidos.
-- Middleware matchers y alcance real de server actions aún requieren análisis
-  adicional.
-- V1 infiere desde OpenAPI JSON, schemas GraphQL, routers tRPC simples,
-  llamadas literales `fetch`/Axios y manifests Next.js retenidos. OpenAPI YAML,
-  composición de routers, aliases, strings dinámicos y tráfico autorizado aún
-  requieren adaptadores posteriores.
-- `.next` se excluye del hash actual y no se lee directamente. Los manifests se
-  analizan sólo cuando están retenidos dentro del árbol autorizado y hasheado.
-- No existe adquisición DNS/CT real. Los futuros tests usarán respuestas
-  simuladas antes de considerar un adapter pasivo en red.
-- El uso de `symlink_metadata`, lectura y hash antes/después reduce cambios
-  concurrentes, pero no forma un snapshot transaccional. Un atacante local que
-  pueda intercambiar y restaurar archivos durante la lectura conserva una
-  ventana TOCTOU residual; targets hostiles requieren aislamiento de filesystem
-  más fuerte.
+- App Router method detection recognizes named exports without executing
+  TypeScript. Pages Router methods remain unknown.
+- Middleware matchers and the effective scope of server actions need deeper
+  analysis.
+- V1 infers from OpenAPI JSON, GraphQL schemas, simple tRPC routers, literal
+  `fetch`/Axios calls, and retained Next.js manifests. OpenAPI YAML, router
+  composition, aliases, dynamic strings, and authorized traffic require later
+  adapters.
+- `.next` is excluded from the current hash and is not read directly. Manifests
+  are analyzed only when retained inside the authorized, hashed tree.
+- There is no real DNS or Certificate Transparency acquisition. Future tests
+  use simulated responses before any passive network adapter is considered.
+- `symlink_metadata`, reading, and before/after hashing reduce concurrent-change
+  risk but do not create a transactional snapshot. A local attacker able to
+  swap and restore files during reads retains a TOCTOU window. Hostile targets
+  require stronger filesystem isolation.

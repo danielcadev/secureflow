@@ -1,128 +1,125 @@
-# Contrato `secureflow-run-v1`
+# `secureflow-run-v1` contract
 
-## Propósito
+## Purpose
 
-`secureflow-run-v1` es el manifiesto local de una ejecución de SecureFlow. Une
-el alcance autorizado, la provenance del análisis, los artefactos producidos,
-los candidatos deterministas, la priorización y la decisión humana.
+`secureflow-run-v1` is the local manifest for a SecureFlow run. It joins the
+authorized scope, analysis provenance, produced artifacts, deterministic
+candidates, prioritization, and human decision.
 
-El contrato no contiene el código fuente completo. Las ubicaciones exportadas
-son relativas al repositorio y los artefactos se referencian por hash.
+The contract does not contain complete source code. Exported locations are
+repository-relative and artifacts are referenced by hash.
 
-El schema normativo está en
+The normative schema is
 [`schemas/secureflow-run-v1.schema.json`](../../schemas/secureflow-run-v1.schema.json).
 
-## Principios normativos
+## Normative principles
 
-1. La ejecución debe tener un `target` y un `authorization` explícitos.
-2. El análisis determinista ocurre antes de cualquier llamada a un modelo.
-3. La IA sólo puede enriquecer o priorizar un candidato existente.
-4. La IA nunca puede escribir `human_review.decision`.
-5. Sólo `human_review.decision = validated` permite tratar un candidato como
-   vulnerabilidad validada.
-6. El investigador humano conserva el juicio superior y la autoridad final;
-   SecureFlow no puede sustituirlo y debe abstenerse cuando falte evidencia.
-7. `rejected` y `abstained` son resultados válidos, no errores.
-8. Toda afirmación importante debe apuntar a una ubicación, artefacto o hash.
-9. Los paths exportados deben ser relativos, POSIX y no contener `..`.
-10. Un fallo de scanner, timeout o reporte inválido no se convierte en “limpio”.
-11. La evaluación de Secure Bench permanece separada de la decisión de
-    producción y no puede inyectar expectativas en el análisis.
+1. Every run has an explicit `target` and `authorization`.
+2. Deterministic analysis occurs before any model call.
+3. AI may only enrich or prioritize an existing candidate.
+4. AI can never write `human_review.decision`.
+5. Only `human_review.decision = validated` permits treating a candidate as a
+   validated vulnerability.
+6. The human researcher retains superior contextual judgment and final
+   authority. SecureFlow cannot replace that authority and must abstain when
+   evidence is insufficient.
+7. `rejected` and `abstained` are valid outcomes, not errors.
+8. Every material claim points to a location, artifact, or hash.
+9. Exported paths are relative, POSIX, and contain no `..`.
+10. A scanner failure, timeout, or invalid report never becomes "clean."
+11. Secure Bench evaluation remains separate from production decisions and
+    cannot inject expectations into analysis.
 
-El CLI exige un reviewer de autorización. Consentimiento escrito, política de
-organización y otras bases documentadas requieren una referencia; una
-autorización expirada falla antes de ejecutar el engine. Estos campos son
-declaraciones auditables del operador, no una firma criptográfica ni una prueba
-legal automática de permiso.
+The CLI requires an authorization reviewer. Written consent, organization
+policy, and other documented bases require a reference. Expired authorization
+fails before the engine runs. These fields are auditable operator declarations,
+not cryptographic signatures or automatic legal proof of permission.
 
-## Estados
+## States
 
-### Ejecución
+### Run
 
 `created`, `running`, `completed`, `partial`, `failed`, `cancelled`.
 
-### Revisión humana
+### Human review
 
 `pending`, `validated`, `rejected`, `abstained`.
 
-`abstained` significa que no hay evidencia suficiente para decidir. No debe
-contarse como vulnerabilidad ni como control limpio.
+`abstained` means that evidence is insufficient for a decision. It must count
+as neither a vulnerability nor a clean control.
 
-La revisión local produce un manifiesto derivado: el input de una revisión no
-se sobrescribe implícitamente, y una decisión ya tomada no puede cambiarse con
-`review-run`.
+Local review creates a derived manifest. The review input is never implicitly
+overwritten, and `review-run` cannot change an existing terminal decision.
 
-### Validación IA
+### AI validation
 
 `not_requested`, `queued`, `completed`, `failed`, `skipped`.
 
-Su estado es auxiliar y nunca sustituye la revisión humana.
+Its state is auxiliary and never replaces human review.
 
-## Identidad y reproducibilidad
+## Identity and reproducibility
 
-- `run_id` identifica la ejecución.
-- `target.root_sha256` identifica los bytes del árbol analizado mediante
-  `secureflow-target-sha256-v2`. El stream canónico separa tipo, cantidad y
-  bytes totales, y prefija longitudes de paths y contenidos para que dos árboles
-  distintos no compartan la misma serialización antes de SHA-256. `.git` queda
-  excluido y cualquier symlink falla cerrado.
-- `target.revision` identifica el commit o snapshot cuando existe.
-- `engine.binary_sha256` identifica el binario exacto.
-- `engine.report_sha256` identifica el reporte recibido.
-- `configuration_sha256` identifica la configuración efectiva.
-- En el adapter actual, ese hash liga argumentos, timeout, límite de output,
-  memoria, CPU y descriptores. No demuestra aislamiento del filesystem.
-- El CLI comprueba el hash del target y del binario antes y después del proceso;
-  si alguno cambia, falla sin escribir reporte o manifiesto. Es detección
-  fail-closed, no un snapshot transaccional: un cambio revertido entre ambas
-  mediciones podría no observarse.
-- Los outputs derivados no pueden aliasar sus inputs; en Unix también se
-  comparan device/inode para rechazar hardlinks. `scan` rechaza además outputs
-  dentro del árbol analizado. La comprobación y la escritura no son una única
-  operación atómica frente a un actor local concurrente.
-- El fingerprint tiene límites fijos de 250.000 archivos, 500.000 entradas,
-  16 GiB totales, 2 GiB por archivo y 256 niveles; paths no UTF-8 se rechazan.
-  Estos límites previenen entradas no acotadas, pero el tiempo de hashing
-  ocurre antes del timeout del engine.
-- Los timestamps sirven para auditoría, pero no para identidad semántica.
-- Los estados terminales (`completed`, `partial`, `failed`, `cancelled`)
-  requieren `completed_at`; `created` y `running` no pueden incluirlo.
-- Una decisión humana distinta de `pending` requiere reviewer, timestamp y
-  rationale. Un finding `pending` no puede aparentar revisión parcial mediante
-  esos campos.
+- `run_id` identifies the run.
+- `target.root_sha256` identifies analyzed tree bytes through
+  `secureflow-target-sha256-v2`. The canonical stream separates type, count,
+  and total bytes, and length-prefixes paths and content so distinct trees do
+  not share the same pre-hash serialization. `.git` is excluded and every
+  symlink fails closed.
+- `target.revision` identifies the commit or snapshot when available.
+- `engine.binary_sha256` identifies the exact binary.
+- `engine.report_sha256` identifies the received report.
+- `configuration_sha256` identifies the effective configuration.
+- In the current adapter, that hash binds arguments, timeout, output limit,
+  memory, CPU, and descriptor limits. It does not prove filesystem isolation.
+- The CLI checks target and binary hashes before and after the process. If
+  either changes, it fails without writing the report or manifest. This is
+  fail-closed detection, not a transactional snapshot; a change reverted
+  between measurements may remain undetected.
+- Derived outputs cannot alias their inputs. Unix also compares device and
+  inode to reject hardlinks. `scan` rejects outputs inside the analyzed tree.
+  Check and write are not a single atomic operation against a concurrent local
+  actor.
+- The fingerprint is capped at 250,000 files, 500,000 entries, 16 GiB total,
+  2 GiB per file, and 256 levels. Non-UTF-8 paths are rejected. These bounds
+  prevent unbounded input, but hashing occurs before the engine timeout.
+- Timestamps support auditing but not semantic identity.
+- Terminal states (`completed`, `partial`, `failed`, `cancelled`) require
+  `completed_at`; `created` and `running` cannot include it.
+- A human decision other than `pending` requires a reviewer, timestamp, and
+  rationale. A pending finding cannot mimic a partial review with those fields.
 
-En la primera vertical, el array `findings` se ordena de forma determinista por
-severidad, confianza, regla, ubicación de origen, ubicación de sink e ID. Este
-orden sólo ayuda a revisar; no es un score de riesgo ni una decisión humana.
-Los duplicados exactos dentro de una ejecución se eliminan después de ordenar,
-y `summary.duplicate_count` registra cuántos se descartaron. No se afirma
-equivalencia entre engines distintos.
+In the first vertical, `findings` are ordered deterministically by severity,
+confidence, rule, source location, sink location, and identifier. Ordering only
+supports review; it is neither a risk score nor a human decision. Exact
+duplicates within a run are removed after ordering, and
+`summary.duplicate_count` records how many were dropped. No equivalence across
+different engines is asserted.
 
-## Política de privacidad
+## Privacy policy
 
-El manifiesto puede vivir localmente junto con el reporte, pero una exportación
-externa debe excluir:
+The manifest may live locally next to the report, but external export must
+exclude:
 
-- rutas absolutas del equipo;
-- secretos, tokens y variables de entorno completas;
-- contenido fuente no necesario para la evidencia;
-- prompts o respuestas completas del proveedor si contienen datos no aprobados.
+- absolute machine paths;
+- secrets, tokens, and complete environment variables;
+- source content not required as evidence;
+- complete provider prompts or responses containing unapproved data.
 
-El payload IA debe conservar una vista redacted y su hash, además del modelo,
-versión de prompt, presupuesto y consumo.
+The AI payload retains a redacted view and its hash, plus model, prompt version,
+budget, and usage.
 
-`ai_validation` es una evaluación advisory separada de `human_review`. Los
-estados inactivos no pueden cargar metadata; `queued` requiere request ID,
-provider, modelo, prompt y hash del payload; `completed` exige además hash de
-respuesta, tokens y assessment. Los contadores del summary deben coincidir con
-los estados y consumos por finding. Ningún estado IA cambia una decisión humana.
+`ai_validation` is an advisory assessment separate from `human_review`.
+Inactive states cannot carry metadata. `queued` requires a request identifier,
+provider, model, prompt, and payload hash. `completed` additionally requires a
+response hash, tokens, and assessment. Summary counters must match per-finding
+states and usage. No AI state changes a human decision.
 
-El ledger local escribe `secureflow-knowledge-record-v2` y puede importar sólo
-findings con decisión humana. Guarda hashes de la rationale, referencia de
-evidencia y evidencia de licencia, no sus textos completos ni código fuente.
-El lector mantiene compatibilidad estricta con v1 sin migrarlo silenciosamente.
+The local ledger writes `secureflow-knowledge-record-v2` and imports only
+findings with a human decision. It stores hashes of the rationale, evidence
+reference, and license evidence rather than complete text or source code. The
+reader maintains strict v1 compatibility without silent migration.
 
-## Ejemplo mínimo
+## Minimal example
 
 ```json
 {

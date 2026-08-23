@@ -1,30 +1,29 @@
-# ADR 0004 — IA opcional, offline y contract-first
+# ADR 0004 — Optional, offline, contract-first AI
 
-## Estado
+## Status
 
-Aceptado para el MVP.
+Accepted for the MVP.
 
-## Decisión
+## Decision
 
-La primera integración IA prepara requests locales redacted y aplica respuestas
-estructuradas retenidas. El workspace no contiene aún transporte de proveedor.
+The first AI integration prepares redacted local requests and applies retained
+structured responses. The workspace does not contain provider transport.
 
-## Razones
+## Rationale
 
-- permite auditar exactamente qué podría salir del equipo antes de habilitar
-  red;
-- hace medibles budgets, modelo, prompt y tokens sin convertir el modelo en
-  autoridad de seguridad;
-- evita gastar tokens en findings no seleccionados;
-- permite probar invariantes de privacidad y accounting sin credenciales;
-- desacopla la familia lógica Luna de identificadores concretos de API.
+- Audit exactly what could leave the machine before enabling network access.
+- Measure budgets, model family, prompt version, and tokens without granting
+  the model security authority.
+- Avoid spending tokens on unselected findings.
+- Test privacy and accounting invariants without credentials.
+- Decouple the logical Luna family from concrete API model identifiers.
 
-## Consecuencias
+## Consequences
 
-- `ai-prepare` falla si falta enablement o consentimiento explícitos;
-- un payload minimizado puede perder contexto y debe abstenerse cuando no basta;
-- la respuesta completa se conserva como artefacto local y el run guarda su
-  hash y resultado estructurado;
-- una futura fase de transporte necesita revisión separada de credenciales,
-  residencia de datos, retry, costes, rate limits y logging;
-- los modelos más fuertes no se seleccionan automáticamente.
+- `ai-prepare` fails without explicit enablement and consent.
+- A minimized payload can lose context and must abstain when insufficient.
+- The full response remains a local artifact; the run records its hash and
+  structured result.
+- Future transport requires a separate review of credentials, data residency,
+  retries, cost, rate limits, and logging.
+- Stronger models are never selected automatically.

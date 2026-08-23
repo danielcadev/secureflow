@@ -1,11 +1,12 @@
-# Contrato `secureflow-orchestration-v1`
+# `secureflow-orchestration-v1` contract
 
-Es una máquina de estados local y determinista. Ordena autorización, análisis,
-priorización, contexto opcional, IA advisory opcional, validación humana y
-evaluación reproducible. No ejecuta red ni scanners.
+This is a local, deterministic state machine. It orders authorization,
+analysis, prioritization, optional context, optional advisory AI, human
+validation, and reproducible evaluation. It runs neither network operations
+nor scanners.
 
-Los artefactos suplementarios se validan y se enlazan por hashes al mismo run.
-Si quedan candidatos pendientes, la siguiente acción sólo puede ser revisión
-humana o abstención; el benchmark queda bloqueado. IA y contexto enriquecen,
-pero nunca son prerrequisitos para que una persona revise ni autoridad para
-validar.
+Supplemental artifacts are validated and linked by hash to the same run. If
+pending candidates remain, the next action can only be human review or
+abstention; benchmarking stays blocked. AI and context may enrich a review,
+but they are never prerequisites for human review and never have validation
+authority.

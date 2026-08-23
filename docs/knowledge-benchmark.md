@@ -1,33 +1,33 @@
-# Benchmarks del almacenamiento local
+# Local storage benchmarks
 
-## Preguntas
+## Questions
 
-1. ¿Hasta qué punto es suficiente el ledger JSONL para decisiones humanas?
-2. ¿Puede un catálogo SQLite local normalizar y consultar 100k, 500k y 1M de
-   registros sin depender de IA ni servicios externos?
+1. How far can a JSONL ledger support human decisions?
+2. Can a local SQLite catalog normalize and query 100k, 500k, and 1M records
+   without AI or external services?
 
-Son workloads distintos. JSONL conserva un historial pequeño y auditable de
-decisiones humanas. SQLite sirve advisories externos, alias, paquetes,
-revisiones y texto. No se comparan productos ni se mide detección de
-vulnerabilidades.
+These are different workloads. JSONL preserves a small, auditable history of
+human decisions. SQLite serves external advisories, aliases, packages,
+revisions, and text. This benchmark neither compares products nor measures
+vulnerability detection.
 
-## Entorno
+## Environment
 
-Fecha: 2026-08-23.
+Date: 2026-08-23.
 
 - Fedora Linux 7.1.8, x86_64;
-- Rust/Cargo 1.97.1, perfil `release`;
+- Rust/Cargo 1.97.1, `release` profile;
 - AMD Ryzen 7 5700X, 8 cores/16 threads;
-- 15 GiB de RAM;
-- resultados principales sobre NVMe con Btrfs en `/home`;
-- cinco consultas por clase; se reporta la mediana.
+- 15 GiB RAM;
+- primary results on NVMe with Btrfs under `/home`;
+- five queries per class, reporting the median.
 
-Los resultados de `tmpfs` usados durante desarrollo no forman parte de la
-tabla principal, porque serían optimistas frente a almacenamiento persistente.
+Development results from `tmpfs` are excluded from the primary table because
+they would be optimistic relative to persistent storage.
 
 ## Ledger JSONL v2
 
-Comando:
+Command:
 
 ```bash
 cargo run --release -p secureflow-knowledge \
@@ -35,21 +35,22 @@ cargo run --release -p secureflow-knowledge \
   --record-version v2 --iterations 5 100 1000 10000
 ```
 
-El fixture se replica con IDs únicos. La generación/escritura no se mide; cada
-muestra carga, parsea y valida todo el ledger antes del filtro.
+The fixture is replicated with unique identifiers. Generation and writing are
+not measured; every sample loads, parses, and validates the complete ledger
+before filtering.
 
-| Registros | Tamaño | Carga + validación mediana | Máximo | Filtro exacto |
+| Records | Size | Median load + validation | Maximum | Exact filter |
 | ---: | ---: | ---: | ---: | ---: |
-| 100 | 141.500 B | 0,920 ms | 1,188 ms | 0,270 μs |
-| 1.000 | 1.415.000 B | 8,717 ms | 10,197 ms | 3,650 μs |
-| 10.000 | 14.150.000 B | 91,508 ms | 102,523 ms | 131,172 μs |
+| 100 | 141,500 B | 0.920 ms | 1.188 ms | 0.270 μs |
+| 1,000 | 1,415,000 B | 8.717 ms | 10.197 ms | 3.650 μs |
+| 10,000 | 14,150,000 B | 91.508 ms | 102.523 ms | 131.172 μs |
 
-Decisión: conservar JSONL para el ledger pequeño, con un writer y cerca de 10k
-registros. No usarlo como catálogo global ni extrapolarlo linealmente.
+Decision: keep JSONL for the small ledger, with one writer and roughly 10k
+records. Do not use it as a global catalog or extrapolate linearly.
 
-## Catálogo SQLite/FTS5
+## SQLite/FTS5 catalog
 
-Comando principal:
+Primary command:
 
 ```bash
 cargo run --release -p secureflow-knowledge \
@@ -58,64 +59,63 @@ cargo run --release -p secureflow-knowledge \
   100000 500000 1000000 --iterations 5
 ```
 
-Cada registro es OSV sintético y acotado. El 10% comparte un alias exacto con
-el registro anterior; por eso 1M registros producen 900k entidades canónicas.
-Cada registro tiene un paquete/rango. No son vulnerabilidades reales.
+Each record is bounded, synthetic OSV. Ten percent share an exact alias with the
+previous record, so 1M source records produce 900k canonical entities. Every
+record has one package/range. They are not real vulnerabilities.
 
-`normalize_ms` incluye generación JSON, parseo, validación, hashing, revisiones
-raw, relaciones, paquetes y deduplicación. `index_build_ms` reconstruye FTS5 y
-cierra el WAL. `database_bytes` es el archivo final después del checkpoint.
+`normalize_ms` includes JSON generation, parsing, validation, hashing, raw
+revisions, relationships, packages, and deduplication. `index_build_ms`
+rebuilds FTS5 and checkpoints the WAL. `database_bytes` is the final file after
+the checkpoint.
 
-| Origen | Canónicas | DB final | Normalización | FTS | Total | Registros/s |
+| Source records | Canonical entities | Final DB | Normalization | FTS | Total | Records/s |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 100.000 | 90.000 | 206.221.312 B | 3,481 s | 0,844 s | 4,326 s | 23.117,1 |
-| 500.000 | 450.000 | 1.036.513.280 B | 30,192 s | 10,157 s | 40,348 s | 12.392,2 |
-| 1.000.000 | 900.000 | 2.072.891.392 B | 80,797 s | 23,939 s | 104,736 s | 9.547,8 |
+| 100,000 | 90,000 | 206,221,312 B | 3.481 s | 0.844 s | 4.326 s | 23,117.1 |
+| 500,000 | 450,000 | 1,036,513,280 B | 30.192 s | 10.157 s | 40.348 s | 12,392.2 |
+| 1,000,000 | 900,000 | 2,072,891,392 B | 80.797 s | 23.939 s | 104.736 s | 9,547.8 |
 
-| Origen | Alias exacto | FTS peor caso | Paquete exacto |
+| Source records | Exact alias | Worst-case FTS | Exact package |
 | ---: | ---: | ---: | ---: |
-| 100.000 | 46,680 μs | 70,584 ms | 112,841 μs |
-| 500.000 | 68,291 μs | 408,601 ms | 260,053 μs |
-| 1.000.000 | 66,451 μs | 843,406 ms | 450,295 μs |
+| 100,000 | 46.680 μs | 70.584 ms | 112.841 μs |
+| 500,000 | 68.291 μs | 408.601 ms | 260.053 μs |
+| 1,000,000 | 66.451 μs | 843.406 ms | 450.295 μs |
 
-La consulta FTS busca una frase presente en todos los registros y devuelve sólo
-20 resultados: es deliberadamente un caso difícil. Las búsquedas de alias y
-paquete son selectivas.
+The FTS query searches for a phrase present in every record and returns only 20
+results; it is deliberately difficult. Alias and package lookups are selective.
 
-El CSV exacto está en
+The exact CSV is retained at
 [`docs/evidence/catalog-benchmark-2026-08-23.csv`](./evidence/catalog-benchmark-2026-08-23.csv).
 
-## Decisión
+## Decision
 
-- La escala objetivo de V1 —300k a 500k entidades canónicas— es técnicamente
-  plausible en este host.
-- La capacidad de 1M registros de origen está demostrada para este corpus
-  sintético, con aproximadamente 2,07 GB y 104,7 s de carga inicial.
-- La carga masiva sigue siendo determinista y local; ningún registro pasa por
-  un modelo.
-- El pipeline incremental per-ecosystem ya procesa sólo la ventana posterior
-  al cursor y mantiene FTS por fila. Sobre una copia del catálogo real, una
-  ventana oficial solapada de 7 RUSTSEC tardó 3,99 s al registrarse y 0,99 s al
-  replay; fueron 7 unchanged porque el índice no tenía cambios posteriores al
-  snapshot. Aún falta medir una ventana real con inserts/updates.
-- JSONL y SQLite se mantienen separados porque resuelven autoridades y
-  workloads diferentes.
+- The V1 target of 300k–500k canonical entities is technically plausible on
+  this host.
+- Capacity for 1M source records is demonstrated for this synthetic corpus,
+  using about 2.07 GB and 104.7 seconds for initial loading.
+- Bulk loading remains deterministic and local; no record passes through a
+  model.
+- The per-ecosystem incremental pipeline processes only the window after the
+  cursor and maintains FTS per row. On a copy of the real catalog, an official
+  overlapping window of seven RUSTSEC records took 3.99 seconds to register and
+  0.99 seconds to replay. All seven were unchanged because the index contained
+  no changes after the snapshot. A real insert/update window remains unmeasured.
+- JSONL and SQLite remain separate because they serve different authorities and
+  workloads.
 
-## Límites y trabajo no medido
+## Limitations and unmeasured work
 
-- Los records reales pueden ser mucho mayores y contener más rangos,
-  referencias y revisiones.
-- No se midieron todavía 5–20 millones de relaciones; el millón sintético tiene
-  aproximadamente una relación primaria y un paquete por registro.
-- No se midieron writers concurrentes, crash recovery bajo carga ni hardware de
-  baja potencia.
-- No se midió una descarga ni actualización de OSV/GHSA/NVD/RustSec.
-- El máximo de 4 MiB por record puede rechazar casos reales grandes; un adapter
-  debe contabilizarlos y nunca omitirlos silenciosamente.
-- El benchmark no mide precisión, falsos positivos, cobertura ni calidad de
-  deduplicación semántica.
-- Cinco muestras de consulta no permiten presentar p95/p99.
+- Real records may be much larger and contain more ranges, references, and
+  revisions.
+- Five to twenty million relationships remain unmeasured. The synthetic million
+  has roughly one primary relationship and one package per record.
+- Concurrent writers, crash recovery under load, and low-power hardware remain
+  unmeasured.
+- No OSV/GHSA/NVD/RustSec download or refresh was timed.
+- The 4 MiB record limit may reject large real cases; an adapter must account
+  for them and never omit them silently.
+- This benchmark does not measure precision, false positives, coverage, or
+  semantic-deduplication quality.
+- Five query samples do not support p95 or p99 reporting.
 
-Por tanto, la evidencia permite afirmar “catálogo local medido hasta 1M de
-registros sintéticos”, no “base global de 1M vulnerabilidades” ni
-“production-ready”.
+The evidence therefore supports "local catalog measured to 1M synthetic source
+records," not "global database of 1M vulnerabilities" or "production-ready."

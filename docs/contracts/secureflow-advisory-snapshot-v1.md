@@ -1,42 +1,44 @@
-# Contrato `secureflow-advisory-snapshot-v1`
+# `secureflow-advisory-snapshot-v1` contract
 
-Un snapshot es el límite reproducible entre adquisición de red y procesamiento
-local. SecureFlow no descarga dentro del parser: recibe un ZIP OSV ya adquirido
-y exige locator, revisión inmutable, timestamp, hash y evidencia local de
-licencia.
+A snapshot is the reproducible boundary between network acquisition and local
+processing. SecureFlow does not download inside the parser. It receives an
+already acquired OSV ZIP and requires a locator, immutable revision, timestamp,
+hash, and local license evidence.
 
-## Invariantes
+## Invariants
 
-- ZIP máximo de 512 MiB, 16 GiB descomprimidos, 1,1 millones de entradas y
-  4 MiB por registro;
-- rechazo de symlinks, cifrado, path traversal, nombres duplicados, archivos
-  especiales y ratios de compresión mayores a 1.000:1;
-- cada entrada termina exactamente en `records/` o `quarantine/`; el accounting
-  debe reconciliar el total del archivo;
-- raw JSON se conserva byte a byte; sólo los campos indexados normalizan
-  controles de terminal;
-- archivos `0600`, directorios `0700`, publicación por rename a un directorio
-  nuevo y validación posterior de todos los hashes;
-- GHSA requiere evidencia CC-BY-4.0; RUSTSEC requiere su licencia soportada por
-  registro; MAL requiere Apache-2.0 de OpenSSF y que cada objeto `affected`
-  apunte al path oficial `ossf/malicious-packages/.../osv/malicious/...`;
-- un registro desconocido o sin procedencia admitida se conserva en cuarentena,
-  nunca desaparece ni se importa;
-- `validation_authority` siempre es `human-only`.
+- At most 512 MiB compressed, 16 GiB decompressed, 1.1 million entries, and
+  4 MiB per record.
+- Reject symlinks, encryption, path traversal, duplicate names, special files,
+  and compression ratios greater than 1,000:1.
+- Every entry ends in exactly one of `records/` or `quarantine/`; accounting
+  must reconcile the whole archive.
+- Raw JSON is preserved byte-for-byte. Only indexed fields normalize terminal
+  control characters.
+- Files use `0600`, directories use `0700`, publication renames into a new
+  directory, and every hash is validated afterward.
+- GHSA requires CC-BY-4.0 evidence; RUSTSEC requires its supported per-record
+  license; MAL requires OpenSSF Apache-2.0 evidence and every `affected` object
+  must point to the official
+  `ossf/malicious-packages/.../osv/malicious/...` path.
+- An unknown record or one without accepted provenance remains in quarantine;
+  it never disappears or enters the catalog.
+- `validation_authority` is always `human-only`.
 
-La política v2 añade la comprobación específica de OpenSSF. El validador sigue
-leyendo snapshots históricos v1 para no romper evidencia retenida.
+Policy v2 adds the OpenSSF-specific check. The validator continues to read
+historical v1 snapshots so retained evidence remains valid.
 
-## Ciclo del catálogo
+## Catalog lifecycle
 
-`catalog-import-snapshot` registra primero el snapshot como `preparing`, importa
-lotes idempotentes, completa cada fuente, desactiva registros ausentes en una
-foto completa y finalmente marca el snapshot `complete`. Un artefacto anterior
-queda bloqueado. Reprocesar el mismo hash/revisión/timestamp con otra política
-sí está permitido; un artefacto distinto con timestamp igual no.
+`catalog-import-snapshot` first records the snapshot as `preparing`, imports
+idempotent batches, completes each source, deactivates records proven absent
+from a complete source, and finally marks the snapshot `complete`. Older
+artifacts are blocked. Reprocessing the same hash, revision, and timestamp under
+a different policy is allowed; a different artifact with the same timestamp is
+not.
 
-La actualización mediante `modified_id.csv` usa ahora el contrato separado
-`secureflow-advisory-delta-v1`, con cadena al snapshot base, replay, recovery y
-`withdrawn` explícito. La ausencia en el índice nunca desactiva. Los ZIP
-completos siguen siendo la autoridad para presencia/ausencia y reconciliación
-periódica.
+Updates through `modified_id.csv` use the separate
+`secureflow-advisory-delta-v1` contract, chained to the base snapshot with
+replay, recovery, and explicit `withdrawn` handling. Absence from the index
+never deactivates a record. Complete ZIPs remain authoritative for periodic
+presence and absence reconciliation.

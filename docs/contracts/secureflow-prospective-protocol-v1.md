@@ -1,21 +1,22 @@
-# Contrato `secureflow-prospective-protocol-v1`
+# `secureflow-prospective-protocol-v1` contract
 
-Sella antes de observar resultados la pregunta, corpus, licencias, sistemas,
-capacidades, blinding, recursos, retry/crash policy, métricas, incertidumbre y
-criterio de éxito. El ID cambia ante cualquier modificación.
+Before results are observed, this contract seals the research question,
+corpus, licenses, systems, capabilities, blinding, resources, retry and crash
+policy, metrics, uncertainty, and success criterion. Any modification changes
+the identifier.
 
-El mínimo técnico exige 20 casos (10 vulnerables y 10 controles), holdout no
-visto, etiquetas ocultas, SecureFlow, cohorte humana, dos adjudicadores,
-precision/recall/tiempo separados, abstenciones y publicación de resultados
-negativos. Esto permite una comparación acotada a la tarea; prohíbe claims de
-superioridad global y seguridad de producción.
+The technical minimum requires 20 cases (10 vulnerable and 10 controls), an
+unseen holdout, hidden labels, SecureFlow, a human cohort, two adjudicators,
+separate precision, recall, and time, abstentions, and publication of negative
+results. This permits a task-bounded comparison while prohibiting claims of
+global superiority or production safety.
 
-El fixture incluido sólo prueba el contrato con hashes sintéticos. No es un
-preregistro real ni un corpus ejecutado.
+The included fixture only tests the contract with synthetic hashes. It is not
+a real preregistration or an executed corpus.
 
-Para material real, `benchmark-protocol-preflight` recalcula antes de sellar
-los hashes del manifest público del corpus, provenance, licencias y entorno.
-El comando no recibe ground truth; no puede verificar por sí mismo que el
-custodio realmente mantuvo las etiquetas ocultas ni que la cohorte declarada
-existe. Esas evidencias siguen siendo humanas/externas. Véase el
-[`runbook prospectivo`](../prospective-study-runbook.md).
+For real material, `benchmark-protocol-preflight` recomputes hashes for the
+public corpus manifest, provenance, licenses, and environment before sealing.
+The command never receives ground truth; it cannot prove that the custodian
+kept labels hidden or that the declared cohort exists. That evidence remains
+human and external. See the
+[`prospective study runbook`](../prospective-study-runbook.md).

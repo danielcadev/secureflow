@@ -1,10 +1,11 @@
-# Contrato `secureflow-catalog-backup-v1`
+# `secureflow-catalog-backup-v1` contract
 
-`catalog-backup` usa la API online de SQLite, escribe en un temporal privado,
-verifica `quick_check` y claves foráneas y publica por hardlink sin overwrite.
-El manifest liga SHA-256, bytes, schema, application ID, stats, snapshots y
-canonicalización.
+`catalog-backup` uses SQLite's online backup API, writes to a private temporary
+file, verifies `quick_check` and foreign keys, and publishes through a hardlink
+without overwriting. The manifest binds SHA-256, byte size, schema, application
+ID, statistics, snapshots, and canonicalization state.
 
-`catalog-backup-verify` rehace hashes e integridad. `catalog-restore` sólo parte
-de un backup verificado y crea otra base y otro manifest nuevos. Un proceso
-interrumpido no publica una base final bajo el nombre solicitado.
+`catalog-backup-verify` recomputes hashes and integrity checks.
+`catalog-restore` starts only from a verified backup and creates a new database
+and manifest. An interrupted process never publishes a final database under
+the requested name.

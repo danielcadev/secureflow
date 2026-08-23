@@ -1,55 +1,53 @@
-# ADR 0006: catálogo SQLite separado a escala V1
+# ADR 0006: Separate SQLite advisory catalog at V1 scale
 
-## Estado
+## Status
 
-Aceptado para el prototipo local, 2026-08-23.
+Accepted for the local prototype on 2026-08-23.
 
-## Contexto
+## Context
 
-El ledger JSONL de decisiones humanas fue medido hasta 10.000 registros. A esa
-escala carga y valida todo el archivo en aproximadamente 91,5 ms de mediana,
-pero reescribe el ledger completo, tiene un límite de 128 MiB y no ofrece
-búsqueda textual ni concurrencia de lectura eficiente. Extrapolarlo a cientos
-de miles de advisories no era justificable.
+The human-decision JSONL ledger was measured up to 10,000 records. At that
+scale it loads and validates the whole file in a median of about 91.5 ms, but
+rewrites the full ledger, is capped at 128 MiB, and lacks efficient full-text
+search and concurrent reads. Extrapolating it to hundreds of thousands of
+advisories was not justified.
 
-La meta se reformuló en unidades distintas:
+The target was restated using separate units:
 
-- 300.000–500.000 vulnerabilidades canónicas como alcance V1 eventual;
-- 1.000.000 o más registros de origen/revisiones como capacidad técnica;
-- relaciones como una dimensión separada, no como vulnerabilidades adicionales.
+- 300,000–500,000 canonical vulnerabilities as an eventual V1 scope;
+- 1,000,000 or more source records and revisions as technical capacity;
+- relationships as a separate dimension, not additional vulnerabilities.
 
-## Decisión
+## Decision
 
-- mantener JSONL v2 para el historial pequeño de decisiones humanas;
-- añadir dentro de `secureflow-knowledge` un catálogo SQLite v1 para advisories;
-- importar OSV desde archivos locales, sin transporte de red;
-- conservar cada revisión raw y su hash;
-- registrar fuente, licencia declarada, evidencia hasheada y locator;
-- fusionar sólo IDs primarios/`aliases` exactos;
-- conservar `upstream`/`related` sin fusionarlos;
-- usar rangos compactos, sin materializar todas las versiones;
-- usar FTS5 contentless y reconstrucción al final de una carga masiva;
-- limitar memoria por número de registros y bytes por lote;
-- reservar la IA para priorización posterior, nunca para la ingestión masiva.
+- Keep JSONL v2 for the small human-decision history.
+- Add a separate SQLite advisory catalog inside `secureflow-knowledge`.
+- Import OSV from local files without network transport.
+- Preserve every raw revision and its hash.
+- Record source, declared license, hashed evidence, and locator.
+- Merge only exact primary identifiers and `aliases`.
+- Preserve `upstream` and `related` links without merging them.
+- Store compact ranges instead of materializing every version.
+- Use contentless FTS5 and rebuild after bulk loads.
+- Bound memory by record count and batch bytes.
+- Reserve AI for later prioritization, never bulk ingestion.
 
-## Evidencia
+## Evidence
 
-El benchmark release sobre NVMe/Btrfs del host documentado midió 100k, 500k y
-1M registros sintéticos. Un millón produjo 900k entidades canónicas, ocupó
-2,07 GB decimales y terminó normalización + FTS en 104,736 s. La búsqueda exacta
-tuvo mediana de 66,451 μs. Véase `docs/knowledge-benchmark.md` para método,
-resultados completos y límites.
+The release benchmark on the documented NVMe/Btrfs host measured 100k, 500k,
+and 1M synthetic records. One million source records produced 900k canonical
+entities, used 2.07 decimal GB, and completed normalization plus FTS in 104.736
+seconds. Exact lookup had a median of 66.451 microseconds. See
+`docs/knowledge-benchmark.md` for the method, full results, and limitations.
 
-## Consecuencias
+## Consequences
 
-La infraestructura ya demuestra capacidad para un millón de registros
-sintéticos sin modelos ni servicios externos. Esto no significa que SecureFlow
-ya posea un millón de vulnerabilidades reales, ni que 2,07 GB sea una estimación
-válida para feeds reales. El tamaño depende de detalles, rangos, referencias y
-revisiones históricas.
+The infrastructure demonstrates capacity for one million synthetic records
+without models or external services. It does not mean that SecureFlow contains
+one million real vulnerabilities, or that 2.07 GB estimates real feeds. Size
+depends on detail, ranges, references, and historical revisions.
 
-La base sigue teniendo un único writer. WAL permite lectores, pero no se ha
-medido concurrencia. La eliminación upstream de un alias requiere reconstruir
-desde snapshot para dividir componentes. Antes de descargar un feed real deben
-aprobarse licencia, procedencia, estrategia incremental y tratamiento visible
-de registros rechazados.
+The database still has one writer. WAL supports readers, but concurrency has
+not been measured. Removing an upstream alias requires a snapshot rebuild to
+split components. Before acquiring a real feed, its license, provenance,
+incremental strategy, and visible rejection handling must be approved.

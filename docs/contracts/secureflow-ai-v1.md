@@ -1,71 +1,70 @@
-# Contratos IA v1
+# AI contracts v1
 
-## Estado
+## Status
 
-SecureFlow implementa preparación local y accounting de respuestas. No incluye
-un cliente de red ni afirma haber llamado a un modelo real.
+SecureFlow implements local preparation and response accounting. It includes
+no network client and does not claim to have called a real model.
 
-Schemas normativos:
+Normative schemas:
 
 - [`secureflow-ai-request-v1`](../../schemas/secureflow-ai-request-v1.schema.json)
 - [`secureflow-ai-response-v1`](../../schemas/secureflow-ai-response-v1.schema.json)
 
-## Request redacted
+## Redacted request
 
-`ai-prepare` requiere simultáneamente `--enable-ai` y
-`--consent-redacted-export`. El consentimiento se registra para un envío
-posterior, pero el comando sólo escribe un archivo local y reporta
-`transmitted=false`.
+`ai-prepare` requires both `--enable-ai` and `--consent-redacted-export`.
+Consent is recorded for a possible later transmission, but the command only
+writes a local file and reports `transmitted=false`.
 
-El payload incluye únicamente metadatos necesarios del finding:
+The payload includes only required finding metadata:
 
-- regla, taxonomía, severidad y confianza;
-- paths relativos y coordenadas source/sink;
-- tipos y coordenadas de los hops;
-- invariante y limitaciones filtradas.
+- rule, taxonomy, severity, and confidence;
+- relative paths and source/sink coordinates;
+- hop types and coordinates;
+- invariant and filtered limitations.
 
-Excluye deliberadamente:
+It deliberately excludes:
 
 - source code;
-- descripciones de evidencia, que pueden contener snippets;
-- rationale, identidad y demás metadata de revisión humana;
-- paths absolutos.
+- evidence descriptions, which may contain snippets;
+- rationale, identity, and all other human-review metadata;
+- absolute paths.
 
-Un filtro conservador reemplaza campos completos cuando detecta bearer tokens,
-authorization headers, asignaciones típicas de secretos, URLs, correos o tokens
-largos. Esta redacción reduce riesgo, pero no prueba ausencia perfecta de datos
-sensibles; el humano debe inspeccionar el JSON antes de transmitirlo.
+A conservative filter replaces complete fields when it detects bearer tokens,
+authorization headers, common secret assignments, URLs, email addresses, or
+long tokens. Redaction reduces risk but does not prove that sensitive data is
+absent; a human must inspect the JSON before transmission.
 
-## Routing y presupuesto
+## Routing and budget
 
-- proveedor lógico: `openai`;
-- familia por defecto: `luna`;
-- prompt: `secureflow-ai-triage-v1`;
-- máximo: un call por request;
-- defaults: 6000 input tokens, 1000 output tokens y 16 KiB de payload;
-- se reservan 700 tokens para instrucciones;
-- el número de bytes UTF-8 del payload se usa como upper bound conservador de
-  tokens del payload, no como medición de tokenizer del proveedor;
-- el transporte futuro deberá hacer tokenización real y volver a aplicar los
-  límites antes de enviar.
+- Logical provider: `openai`.
+- Default family: `luna`.
+- Prompt: `secureflow-ai-triage-v1`.
+- Maximum: one call per request.
+- Defaults: 6,000 input tokens, 1,000 output tokens, and a 16 KiB payload.
+- 700 tokens are reserved for instructions.
+- UTF-8 payload bytes are used as a conservative upper bound for payload tokens,
+  not as a provider-tokenizer measurement.
+- Future transport must perform real tokenization and reapply limits before
+  sending.
 
-El escalado sólo puede ocurrir ante ambigüedad, nunca automáticamente y siempre
-requiere aprobación humana. Este contrato no selecciona aún un identificador
-de modelo de API concreto; `luna` es una familia lógica para no acoplar el
-contrato estable a nombres de release cambiantes.
+Escalation is allowed only for ambiguity, never automatically, and always
+requires human approval. This contract does not select a concrete API model
+identifier. `luna` is a logical family that avoids coupling the stable contract
+to changing release names.
 
-## Response y autoridad
+## Response and authority
 
-Una respuesta contiene assessment, resumen corto, limitaciones tipadas y uso de
-tokens. `ai-apply-response` verifica que request, payload, modelo, prompt, run,
-target y finding coincidan, y que el consumo esté dentro del presupuesto.
+A response contains an assessment, short summary, typed limitations, and token
+usage. `ai-apply-response` verifies that request, payload, model, prompt, run,
+target, and finding match and that usage stays within budget.
 
-La aplicación escribe otro manifiesto y registra request ID, hashes, modelo,
-assessment y tokens. La decisión humana se compara antes/después y debe quedar
-idéntica. Incluso `assessment: supports` continúa siendo advisory; no puede
-producir `human_review.decision: validated`.
+Application writes another manifest and records the request identifier, hashes,
+model, assessment, and tokens. The human decision is compared before and after
+and must remain identical. Even `assessment: supports` remains advisory and
+cannot produce `human_review.decision: validated`.
 
-## Comandos
+## Commands
 
 ```bash
 cargo run -p secureflow -- ai-prepare \
@@ -85,6 +84,6 @@ cargo run -p secureflow -- ai-apply-response \
   --output /tmp/secureflow-run-with-ai.json
 ```
 
-La preparación real de demostración generó 899 bytes para un finding SE1006 y
-no transmitió datos. La aplicación de respuestas se verificó sólo con una
-respuesta sintética de prueba; no se reporta como evaluación de Luna.
+The retained demonstration preparation produced 899 bytes for an SE1006 finding
+and transmitted no data. Response application was verified only with a
+synthetic test response and is not reported as a Luna evaluation.

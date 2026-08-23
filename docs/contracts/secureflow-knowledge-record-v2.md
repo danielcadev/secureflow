@@ -1,55 +1,55 @@
-# Contrato `secureflow-knowledge-record-v2`
+# `secureflow-knowledge-record-v2` contract
 
-## Propósito
+## Purpose
 
-Este contrato representa una observación de seguridad con decisión humana en
-el ledger JSONL local. No es una base mundial de vulnerabilidades ni convierte
-un candidato en verdad por aparecer repetido.
+This contract represents a security observation with a human decision in the
+local JSONL ledger. It is not a global vulnerability database and repetition
+does not turn a candidate into truth.
 
-El schema normativo está en
+The normative schema is
 [`schemas/secureflow-knowledge-record-v2.schema.json`](../../schemas/secureflow-knowledge-record-v2.schema.json).
-El lector conserva compatibilidad con v1; las nuevas importaciones escriben v2
-y no migran ni reinterpretan registros anteriores.
+The reader preserves v1 compatibility. New imports write v2 and neither migrate
+nor reinterpret older records.
 
-## Provenance y licencia
+## Provenance and license
 
-Cada registro fija hashes del manifiesto, target y binario, la versión del
-engine y, cuando existe, la revisión del target. `source_license` es una
-declaración explícita del operador, no una conclusión legal de SecureFlow:
+Each record fixes hashes for the manifest, target, and binary, the engine
+version, and the target revision when available. `source_license` is an
+explicit operator declaration, not a legal conclusion by SecureFlow:
 
-- `spdx-declared` requiere una expresión declarada y el SHA-256 de evidencia
-  local, por ejemplo un archivo `LICENSE`;
-- `private-or-undisclosed` expresa que el código no se está incorporando como
-  corpus público;
-- `unknown` conserva la incertidumbre en vez de inventar una licencia.
+- `spdx-declared` requires a declared expression and the SHA-256 of local
+  evidence, such as a `LICENSE` file;
+- `private-or-undisclosed` states that the code is not being incorporated into
+  a public corpus;
+- `unknown` preserves uncertainty instead of inventing a license.
 
-SecureFlow guarda el hash de la evidencia de licencia, no su contenido ni su
-ruta absoluta. La expresión SPDX todavía no se resuelve ni se valida contra un
-catálogo externo.
+SecureFlow stores the license-evidence hash, not its content or absolute path.
+The SPDX expression is not resolved or validated against an external catalog.
 
-## Deduplicación trazable
+## Traceable deduplication
 
-`observation_fingerprint` identifica una observación exacta mediante un hash de
-campos con longitudes prefijadas. Incluye el snapshot del target, nombre del
-engine, regla, fingerprint upstream o finding ID, ubicaciones, invariante y
-evidence path. No incluye timestamps ni la decisión humana.
+`observation_fingerprint` identifies an exact observation by hashing
+length-prefixed fields. It includes the target snapshot, engine name, rule,
+upstream fingerprint or finding ID, locations, invariant, and evidence path.
+It excludes timestamps and the human decision.
 
-Cuando otra importación produce el mismo fingerprint:
+When another import produces the same fingerprint:
 
-1. el nuevo registro se conserva como evidencia longitudinal;
-2. `duplicate_of_record_id` apunta al primer registro v2 de esa observación;
-3. decisiones humanas diferentes continúan visibles;
-4. no se deduplica entre targets, engines o evidencias distintas;
-5. los registros v1 no reciben fingerprints inferidos retroactivamente.
+1. The new record remains as longitudinal evidence.
+2. `duplicate_of_record_id` points to the first v2 record for that observation.
+3. Different human decisions remain visible.
+4. Records are not deduplicated across targets, engines, or distinct evidence.
+5. V1 records never receive retroactively inferred fingerprints.
 
-Esto es deduplicación exacta y conservadora. No demuestra equivalencia
-semántica entre scanners ni entre versiones modificadas de un repositorio.
+This is exact, conservative deduplication. It does not establish semantic
+equivalence between scanners or modified repository versions.
 
-## Límites operativos
+## Operational limits
 
-- sólo se importan findings con decisión humana terminal;
-- rationale y referencia de evidencia se guardan por SHA-256;
-- no se guarda código fuente;
-- un ledger mayor de 128 MiB se rechaza en esta implementación;
-- el writer sigue siendo único y reescribe el archivo atómicamente;
-- SQLite/FTS5 permanece condicionado a mediciones y consultas reales.
+- Only findings with a terminal human decision can be imported.
+- Rationale and evidence references are stored by SHA-256.
+- Source code is not stored.
+- This implementation rejects ledgers larger than 128 MiB.
+- A single writer atomically replaces the file.
+- SQLite/FTS5 remains a separate catalog selected through measurement and real
+  query requirements.

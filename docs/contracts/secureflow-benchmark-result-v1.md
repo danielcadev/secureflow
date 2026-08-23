@@ -1,53 +1,52 @@
-# Contrato `secureflow-benchmark-result-v1`
+# `secureflow-benchmark-result-v1` contract
 
-## Propósito
+## Purpose
 
-Este contrato resume un resultado retenido `secure-bench-result-v2` sin
-ejecutar el benchmark ni ningún scanner. Secure Bench permanece fuera de la
-ruta que decide si un finding de producción es válido.
+This contract summarizes a retained `secure-bench-result-v2` without running
+the benchmark or any scanner. Secure Bench remains outside the path that
+decides whether a production finding is valid.
 
-El schema normativo está en
+The normative schema is
 [`schemas/secureflow-benchmark-result-v1.schema.json`](../../schemas/secureflow-benchmark-result-v1.schema.json).
 
-## Verificación de entrada
+## Input verification
 
-La importación requiere cuatro entradas explícitas:
+Import requires four explicit inputs:
 
-1. resultado `secure-bench-result-v2`;
-2. run manifest exacto referenciado por el resultado;
-3. suite exacta referenciada por el resultado;
-4. root y commit exactos de Secure Bench.
+1. the `secure-bench-result-v2` result;
+2. the exact run manifest referenced by the result;
+3. the exact suite referenced by the result;
+4. the exact Secure Bench root and commit.
 
-El adapter carga `schemas/result-v2.schema.json` desde ese root, valida el
-resultado con el schema upstream y comprueba que los SHA-256 calculados de
-suite y run coincidan con `provenance.suite_fingerprint` y
-`provenance.run_manifest_fingerprint`. También conserva hashes del resultado,
-schema, licencia y binario evaluado. Si el root contiene `.git`, el commit
-declarado debe coincidir con `HEAD`; en un snapshot sin `.git`, la revisión es
-una declaración del operador ligada a hashes de contenido.
+The adapter loads `schemas/result-v2.schema.json` from that root, validates the
+result against the upstream schema, and checks that computed suite and run
+SHA-256 values match `provenance.suite_fingerprint` and
+`provenance.run_manifest_fingerprint`. It also retains hashes for the result,
+schema, license, and evaluated binary. If the root contains `.git`, the
+declared commit must match `HEAD`. In a snapshot without `.git`, the revision
+is an operator declaration bound to content hashes.
 
-No se ejecuta Cargo, Secure Bench, Secure Engine ni código del corpus durante
-la importación.
+Import runs neither Cargo, Secure Bench, Secure Engine, nor corpus code.
 
-## Métricas separadas
+## Separate metrics
 
-SecureFlow no inventa un score compuesto. Conserva las diez ratios de calidad,
-counts, fallos y mediciones de rendimiento de Secure Bench. La proyección
-TP/FP/TN/FN explicita unidades distintas:
+SecureFlow does not invent a composite score. It preserves Secure Bench's ten
+quality ratios, counts, failures, and performance measurements. TP/FP/TN/FN
+projection makes the distinct units explicit:
 
-- TP: expectativas vulnerables detectadas;
-- FN: expectativas vulnerables elegibles sin crédito de detección;
-- FP: casos de control seguro con al menos una alerta;
-- TN: casos de control seguro completados sin alerta.
+- TP: detected vulnerable expectations;
+- FN: eligible vulnerable expectations without detection credit;
+- FP: safe-control cases with at least one alert;
+- TN: completed safe-control cases without an alert.
 
-TP/FN usan `vulnerable-expectation`; FP/TN usan `safe-control-case`. Por ello no
-deben sumarse ciegamente para producir una exactitud global. Un crash, timeout,
-missing, unsupported o parse failure nunca se transforma en un control limpio;
-en el lado vulnerable, un caso elegible sin detección no recibe crédito.
+TP/FN use `vulnerable-expectation`; FP/TN use `safe-control-case`. They must not
+be blindly summed into global accuracy. A crash, timeout, missing result,
+unsupported case, or parse failure never becomes a clean control. On the
+vulnerable side, an eligible case without detection receives no credit.
 
-## Frontera de claims
+## Claim boundary
 
-Todo envelope fija:
+Every envelope fixes:
 
 ```json
 {
@@ -60,39 +59,38 @@ Todo envelope fija:
 }
 ```
 
-`study_kind` es una clasificación declarada por el operador, no inferida por el
-adapter. Debe contrastarse con la metodología y las limitaciones del estudio
-original antes de publicar resultados.
+`study_kind` is an operator-declared classification, not an adapter inference.
+It must be checked against the original study methodology and limitations
+before publishing results.
 
-`local-development-diagnostic` identifica ejecuciones iterativas visibles para
-los desarrolladores. No es preregistro, holdout ni evidencia publicable de
-superioridad.
+`local-development-diagnostic` identifies iterative runs visible to developers.
+It is not a preregistration, holdout, or publishable superiority evidence.
 
-## Baseline histórico verificado
+## Verified historical baseline
 
-El 23 de agosto de 2026 se importó, sin reejecutarlo, el baseline público Phase
-1 de Secure Engine 0.1.0:
+On 2026-08-23, the public Secure Engine 0.1.0 Phase 1 baseline was imported
+without rerunning it:
 
-| Campo | Valor retenido |
+| Field | Retained value |
 | --- | ---: |
 | Suite | `phase-1-javascript-typescript` |
-| Casos vulnerables / controles seguros | 7 / 7 |
-| TP expectativas | 0 |
-| FN expectativas | 7 |
-| FP controles seguros | 3 |
-| TN controles seguros | 4 |
-| Recall vulnerable | 0/7 (0.00%) |
-| Tasa FP en controles intentados | 3/7 (42.85%) |
-| Cobertura limpia de controles elegibles | 4/7 (57.14%) |
-| Fallos operativos | 0 |
-| Duración cold total | 70 ms / 14 muestras |
+| Vulnerable cases / safe controls | 7 / 7 |
+| TP expectations | 0 |
+| FN expectations | 7 |
+| FP safe controls | 3 |
+| TN safe controls | 4 |
+| Vulnerable recall | 0/7 (0.00%) |
+| FP rate over attempted controls | 3/7 (42.85%) |
+| Clean coverage of eligible controls | 4/7 (57.14%) |
+| Operational failures | 0 |
+| Total cold duration | 70 ms / 14 samples |
 
-El resultado es sintético, histórico y público. No mide el Secure Engine actual,
-no permite afirmar superioridad o inferioridad general y no es evidencia de
-production readiness. Su valor aquí es demostrar importación neutral y
-reproducible, incluso cuando el resultado es desfavorable.
+The result is synthetic, historical, and public. It does not measure the
+current Secure Engine, support a general superiority or inferiority claim, or
+establish production readiness. Its value is demonstrating neutral,
+reproducible import even when the result is unfavorable.
 
-Provenance de la comprobación:
+Verification provenance:
 
 - Secure Bench commit `485402e099f7e99577203e56604bbaadec0623fa`;
 - result SHA-256 `b16c374c21e5738967c82eb836992dc41a8ea0bd10627f34b4dda304b58f7099`;
@@ -104,17 +102,17 @@ Provenance de la comprobación:
 
 ```bash
 cargo run -p secureflow -- benchmark-import \
-  --result /ruta/result.json \
-  --run-manifest /ruta/run.json \
-  --suite /ruta/suite.toml \
-  --secure-bench-root /ruta/secure-bench \
-  --secure-bench-revision <commit-completo> \
+  --result /path/result.json \
+  --run-manifest /path/run.json \
+  --suite /path/suite.toml \
+  --secure-bench-root /path/secure-bench \
+  --secure-bench-revision <full-commit> \
   --study-kind historical-public-diagnostic \
-  --output /ruta/benchmark-envelope.json
+  --output /path/benchmark-envelope.json
 
 cargo run -p secureflow -- benchmark-validate \
-  /ruta/benchmark-envelope.json
+  /path/benchmark-envelope.json
 
 cargo run -p secureflow -- benchmark-summary \
-  /ruta/benchmark-envelope.json --format text
+  /path/benchmark-envelope.json --format text
 ```

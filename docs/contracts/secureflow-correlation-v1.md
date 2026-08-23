@@ -1,10 +1,10 @@
-# Contrato `secureflow-correlation-v1`
+# `secureflow-correlation-v1` contract
 
-Vincula un finding exacto con contexto de paquete declarado por el operador y
-coincidencias del catálogo por ecosistema+nombre. Conserva hash del run,
-snapshots completos y reconstrucción canónica.
+This contract links one exact finding to operator-declared package context and
+catalog matches by ecosystem and package name. It retains the run hash,
+complete snapshots, and canonical rebuild state.
 
-No evalúa rangos de versión, no afirma causalidad y no cambia la decisión
-humana. Una lista vacía no prueba seguridad; una lista no vacía tampoco valida
-el finding. El ID se deriva del contenido estable y no del timestamp de
-creación.
+It does not evaluate version ranges, assert causality, or change the human
+decision. An empty list does not prove safety, and a non-empty list does not
+validate the finding. The identifier is derived from stable content rather
+than the creation timestamp.

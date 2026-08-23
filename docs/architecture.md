@@ -1,87 +1,87 @@
-# Arquitectura inicial
+# Initial architecture
 
-## Objetivo
+## Objective
 
-SecureFlow coordina herramientas especializadas sin convertirlas en una única
-caja negra. Cada etapa conserva sus entradas, salidas, hashes, limitaciones y
-decisiones.
+SecureFlow coordinates specialized tools without turning them into one black
+box. Every stage preserves its inputs, outputs, hashes, limitations, and
+decisions.
 
-## Capas propuestas
+## Layers
 
 ```text
 secureflow-cli
-    ├── scope y autorización
-    ├── configuración local
-    ├── consulta JSON/texto de findings, ledger y catálogo
-    └── review-run que escribe un manifiesto derivado
+    ├── scope and authorization
+    ├── local configuration
+    ├── JSON/text queries for findings, ledger, and catalog
+    └── review-run writes a derived manifest
 
 secureflow-orchestrator
-    ├── state machine de siete fases
-    ├── enlaces por hash y siguiente acción fail-closed
-    └── IA opcional, benchmark evaluativo y abstención explícita
+    ├── seven-phase state machine
+    ├── hash links and a fail-closed next action
+    └── optional AI, evaluation-only benchmark, and explicit abstention
 
 secureflow-engine-adapter
-    ├── Secure Engine como proceso externo
+    ├── Secure Engine as an external process
     ├── secure-json-v1
-    ├── timeout, grupo de procesos y output acotado
-    ├── rlimits Linux de memoria/CPU/descriptores/core
-    ├── Bubblewrap requerido por defecto: root RO y red privada
-    └── provenance del binario y reporte
+    ├── timeout, process group, and bounded output
+    ├── Linux memory/CPU/descriptor/core resource limits
+    ├── Bubblewrap required by default: read-only root and private network
+    └── binary and report provenance
 
 secureflow-model
-    ├── findings canónicos
+    ├── canonical findings
     ├── source/sink/evidence
-    ├── ordenamiento y deduplicación exactos por ejecución
-    ├── estados humanos
-    └── contratos de exportación
+    ├── deterministic ordering and exact per-run deduplication
+    ├── human states
+    └── export contracts
 
 secureflow-secure-adapter
-    ├── import estricto de review-contract 1.1
-    ├── hashes de skill, contrato, licencia y payload
-    ├── vínculo con run y target autorizados
-    └── candidatos contextuales con autoridad humana
+    ├── strict review-contract 1.1 import
+    ├── Skill, contract, license, and payload hashes
+    ├── link to an authorized run and target
+    └── contextual candidates under human authority
 
 secureflow-knowledge
-    ├── ledger JSONL v2 compatible con v1
-    ├── decisiones humanas y observaciones exactas repetidas
-    ├── catálogo SQLite v3 separado para registros de seguridad externos
-    ├── snapshots OSV y deltas encadenados, licencia y cuarentena
-    ├── revisiones raw, fuentes, licencias y provenance hasheada
-    ├── unión conservadora por aliases exactos; no por texto/IA
-    ├── paquetes/rangos compactos e índices de consulta
-    ├── correlación conservadora finding-paquete-versión-advisory
-    └── FTS5, canonicalización y backups reconstruibles
+    ├── v1-compatible JSONL v2 ledger
+    ├── human decisions and repeated exact observations
+    ├── separate SQLite v3 catalog for external security records
+    ├── OSV snapshots, chained deltas, licensing, and quarantine
+    ├── raw revisions, sources, licenses, and hashed provenance
+    ├── conservative exact-alias joins; never text/AI joins
+    ├── compact package ranges and query indexes
+    ├── conservative finding-package-version-advisory correlation
+    └── FTS5, canonicalization, and reconstructible backups
 
 secureflow-ai
-    ├── preparación local con Luna como familia lógica
-    ├── payloads mínimos y redacted
-    ├── un call, presupuestos y accounting
-    ├── escalado sólo ambiguo con aprobación humana
-    └── sin transporte de red en el MVP actual
+    ├── local preparation with Luna as the logical family
+    ├── minimized, redacted payloads
+    ├── one call, budgets, and accounting
+    ├── escalation only for ambiguity with human approval
+    └── no network transport in the current MVP
 
 secureflow-bench-adapter
-    ├── Secure Bench separado de la ruta de producción
-    ├── validación de result-v2 y fingerprints
-    ├── TP/FN por expectativas y FP/TN por controles
-    ├── protocolo prospectivo sellado con cohorte humana y blinding
-    └── sin ranking, superioridad global ni claims de producción
+    ├── Secure Bench separated from the production path
+    ├── result-v2 and fingerprint validation
+    ├── TP/FN by expectation and FP/TN by safe control
+    ├── sealed prospective protocol with human cohort and blinding
+    └── no ranking, global superiority, or production claims
 
 secureflow-web
-    ├── scope de repositorio autorizado, hasheado y con expiración
-    ├── inventario offline Next.js sin ejecutar código del target
-    ├── inferencia desde cliente, OpenAPI, manifests, tRPC y GraphQL
-    ├── matriz de controles y observaciones candidatas/hardening
-    ├── lab JSON/SARIF y corpus sintético de 24 casos de desarrollo
-    └── sin red, sin validación automática y con outputs privados
+    ├── authorized, hashed, expiring repository scope
+    ├── offline Next.js inventory without target-code execution
+    ├── inference from client code, OpenAPI, manifests, tRPC, and GraphQL
+    ├── control matrix with candidate and hardening observations
+    ├── JSON/SARIF lab and 24-case synthetic development corpus
+    └── no network, no automatic validation, and private outputs
 
-secureflow-recon-network (propuesto; no implementado)
-    ├── allowlist verificable y autorización adicional antes de cada request
-    ├── revalidación de DNS, redirects y activos compartidos
-    ├── adquisición pasiva acotada y checks seguros primero en loopback
-    └── rate limits, redacción, stop rules y revisión humana
+secureflow-recon-network (proposed; not implemented)
+    ├── verifiable allowlist and additional authorization before each request
+    ├── DNS, redirect, and shared-asset revalidation
+    ├── bounded passive acquisition and loopback-first safe checks
+    └── rate limits, redaction, stop rules, and human review
 ```
 
-## Estructura futura del repositorio
+## Repository structure
 
 ```text
 secureflow/
@@ -109,36 +109,37 @@ secureflow/
 └── tools/
 ```
 
-La estructura es una propuesta. No se deben crear crates adicionales hasta que
-exista una frontera de responsabilidad y una prueba que justifique cada uno.
+Additional crates should not be created until a responsibility boundary and a
+test justify each one.
 
-## Límites de integración
+## Integration boundaries
 
-- Secure Engine sigue siendo el dueño de `secure-json-v1`.
-- Secure Skill sigue siendo instalable y utilizable sin SecureFlow.
-- La salida de Secure Skill se conserva en un envelope contextual separado;
-  `verified` upstream no equivale a validación humana de SecureFlow.
-- Secure Bench no participa en la decisión de producción.
-- El adapter de benchmark sólo importa evidencia retenida; no ejecuta scanners
-  ni recalcula resultados históricos.
-- Los proyectos originales no se copian al monorepo.
-- La primera integración es por procesos externos y contratos versionados.
-- Una futura dependencia Rust directa requiere una decisión de compatibilidad,
-  licencia y ciclo de release separado.
+- Secure Engine remains the owner of `secure-json-v1`.
+- Secure Skill remains installable and usable without SecureFlow.
+- Secure Skill output remains a separate contextual envelope; upstream
+  `verified` is not SecureFlow human validation.
+- Secure Bench does not participate in production decisions.
+- The benchmark adapter only imports retained evidence; it runs no scanners and
+  does not recompute historical results.
+- Original projects are not copied into the monorepo.
+- Initial integration uses external processes and versioned contracts.
+- A future direct Rust dependency requires a separate compatibility, licensing,
+  and release-cycle decision.
 
-## Invariantes de seguridad
+## Security invariants
 
-- el target debe estar autorizado antes de ejecutar una fase;
-- el análisis estático no ejecuta scripts del target;
-- la red está desactivada por defecto;
-- ningún path exportado escapa del root lógico del target;
-- los secretos nunca forman parte de un payload IA sin redacción y consentimiento;
-- el investigador humano sigue siendo mejor para el juicio contextual y sólo
-  una decisión humana puede validar un hallazgo;
-- cada retry debe ser idempotente y conservar el intento anterior;
-- un fallo operativo nunca equivale a un resultado limpio.
+- A target is authorized before any phase executes.
+- Static analysis never executes target scripts.
+- Network access is disabled by default.
+- No exported path escapes the target's logical root.
+- Secrets never enter an AI payload without redaction and consent.
+- Human contextual judgment remains authoritative; only a human decision can
+  validate a finding.
+- Every retry is idempotent and preserves the previous attempt.
+- An operational failure never equals a clean result.
 
-El diagnóstico y los límites de recon están en
-[`diagnosis-recon-api-exposure.md`](./diagnosis-recon-api-exposure.md). La fase
-offline ya existe como `secureflow-web`; no se habilitará tráfico remoto hasta
-aprobar una ADR adicional, tests loopback, límites y un benchmark independiente.
+The recon diagnosis and boundaries are documented in
+[`diagnosis-recon-api-exposure.md`](./diagnosis-recon-api-exposure.md). The
+offline phase already exists as `secureflow-web`. Remote traffic remains
+disabled until an additional ADR, loopback tests, limits, and an independent
+benchmark are approved.

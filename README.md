@@ -4,84 +4,84 @@
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](./LICENSE-MIT)
 [![Rust 1.92](https://img.shields.io/badge/Rust-1.92-orange.svg)](./rust-toolchain.toml)
 
-SecureFlow es una plataforma local-first para analizar código autorizado,
-priorizar señales de seguridad y ayudar a un investigador humano a validar
-vulnerabilidades con evidencia reproducible.
+SecureFlow is a local-first platform for analyzing authorized code, prioritizing
+security signals, and helping a human researcher validate vulnerabilities with
+reproducible evidence.
 
-El proyecto combina, mediante contratos versionados y procesos separados:
+The project combines separate, versioned contracts and processes for:
 
-- Secure Engine para análisis determinista de flujos source-to-sink.
-- Secure Skill para revisión contextual de invariantes de seguridad.
-- Secure Bench para evaluación reproducible y métricas separadas.
-- Una knowledge base local con provenance, deduplicación y versionado.
-- Agentes de IA opcionales para priorización e investigación de casos ambiguos.
+- Secure Engine deterministic source-to-sink analysis;
+- Secure Skill contextual review of security invariants;
+- Secure Bench reproducible evaluation with separated metrics;
+- a local knowledge base with provenance, deduplication, and versioning;
+- optional AI agents for prioritization and investigation of ambiguous cases.
 
-La decisión humana es siempre autoritativa. Un candidato no se convierte en
-vulnerabilidad sólo porque lo sugiera un scanner o un modelo.
+Human judgment is always authoritative. A candidate does not become a
+vulnerability merely because a scanner or model suggests it.
 
-La meta investigativa es superar baselines humanos en tareas estrechas y
-medibles de cobertura, velocidad, memoria de patrones y reproducibilidad. Eso
-debe demostrarse con un estudio ciego; no transfiere la autoridad final. El
-juicio contextual y la validación de una vulnerabilidad siguen siendo humanos,
-y SecureFlow debe abstenerse cuando no tenga evidencia suficiente.
+The research goal is to outperform human baselines on narrow, measurable tasks
+in coverage, speed, pattern memory, and reproducibility. That must be
+demonstrated through a blind study and does not transfer final authority.
+Contextual judgment and vulnerability validation remain human responsibilities,
+and SecureFlow must abstain when evidence is insufficient.
 
-## SecureFlow Web: inventario de APIs sin red
+## SecureFlow Web: offline API inventory
 
-La vertical Web implementada sella un scope local con autorización y
-expiración, inventaría rutas Next.js, correlaciona llamadas cliente, OpenAPI,
-manifests, GraphQL y tRPC, y conserva todo como candidatos. No ejecuta código
-del target ni realiza requests:
+The implemented Web vertical seals a local scope with authorization and expiry,
+inventories Next.js routes, correlates client calls, OpenAPI, manifests,
+GraphQL, and tRPC, and retains everything as candidates. It neither executes
+target code nor sends requests:
 
 ```bash
 cargo run -p secureflow -- web-scope-create \
-  --root /ruta/al/target \
-  --repository-label mi-app \
-  --authorization-reference "repositorio propio" \
+  --root /path/to/target \
+  --repository-label my-app \
+  --authorization-reference "repository owned by operator" \
   --authorization-reviewer "Daniel" \
   --authorization-expires-at 2027-01-01T00:00:00Z \
   --output /tmp/web-scope.json
 
 cargo run -p secureflow -- web-inventory-nextjs \
-  --root /ruta/al/target \
+  --root /path/to/target \
   --scope /tmp/web-scope.json \
-  --source-name mi-app \
-  --source-revision <commit-o-snapshot> \
+  --source-name my-app \
+  --source-revision <commit-or-snapshot> \
   --source-license-spdx MIT \
   --output /tmp/web-inventory.json
 
 cargo run -p secureflow -- web-infer \
-  --root /ruta/al/target \
+  --root /path/to/target \
   --scope /tmp/web-scope.json \
   --inventory /tmp/web-inventory.json \
   --output /tmp/web-inference.json
 
-# Una matriz de cobertura revisada por el operador produce sólo candidatos,
-# hardening y abstenciones; nunca valida automáticamente una vulnerabilidad.
+# An operator-reviewed coverage matrix produces candidates, hardening notes,
+# and abstentions only; it never validates a vulnerability automatically.
 cargo run -p secureflow -- web-assess \
   --scope /tmp/web-scope.json \
   --inventory /tmp/web-inventory.json \
-  --coverage /ruta/coverage-routes.json \
+  --coverage /path/to/coverage-routes.json \
   --output /tmp/web-assessment.json
 
-# Sólo una persona, con evidencia local retenida, puede elevar un candidato.
+# Only a person with retained local evidence can promote a candidate.
 cargo run -p secureflow -- web-review-assessment \
   --assessment /tmp/web-assessment.json \
   --observation-id sf_web_observation_<hash> \
   --reviewer "Daniel" \
-  --rationale "reproducción autorizada y verificada" \
-  --evidence /ruta/reproduccion-redactada.json \
-  --evidence-reference reproducciones/WEB-001.json \
-  --evidence-description "reproducción local retenida" \
+  --rationale "authorized reproduction verified locally" \
+  --evidence /path/to/redacted-reproduction.json \
+  --evidence-reference reproductions/WEB-001.json \
+  --evidence-description "retained local reproduction" \
   --output /tmp/web-assessment-reviewed.json
 ```
 
-El fixture público contiene 24 aserciones de desarrollo. La ejecución retenida
-pasó 24/24 y el inventario de seis rutas obtuvo 6/6, pero ambos contratos dicen
-explícitamente `independent_holdout=false` o
-`superiority_claim_allowed=false`: son pruebas del pipeline, no evidencia de
-generalización. Resultados:
+The public fixture contains 24 development assertions. The retained execution
+passed 24/24, and the six-route inventory achieved 6/6. Both result contracts,
+however, explicitly set `independent_holdout=false` or
+`superiority_claim_allowed=false`: these results test the pipeline and do not
+show generalization. Results:
 [`web-development-corpus-2026-08-23.json`](./docs/evidence/web-development-corpus-2026-08-23.json)
-y [`web-route-lab-2026-08-23.json`](./docs/evidence/web-route-lab-2026-08-23.json).
+and [`web-route-lab-2026-08-23.json`](./docs/evidence/web-route-lab-2026-08-23.json).
 
 ```bash
 cargo run -p secureflow -- web-lab \
@@ -97,42 +97,42 @@ cargo run -p secureflow -- web-corpus-evaluate \
   --output /tmp/web-corpus-result.json
 ```
 
-## Primera ejecución reproducible
+## First reproducible run
 
-El CLI actual ejecuta un binario de Secure Engine indicado explícitamente,
-conserva su `secure-json-v1` sin reserializar y genera un manifiesto
-`secureflow-run-v1`. El reconocimiento de autorización es obligatorio:
+The current CLI runs an explicitly selected Secure Engine binary, retains its
+`secure-json-v1` output without reserializing it, and generates a
+`secureflow-run-v1` manifest. Authorization acknowledgement is mandatory:
 
 ```bash
 cargo run -p secureflow -- scan \
-  --binary /ruta/a/secure \
+  --binary /path/to/secure \
   --authorized \
   --authorization-reviewer "Daniel" \
-  --authorization-reference "repositorio local propio" \
+  --authorization-reference "local repository owned by operator" \
   --output /tmp/secureflow-report.json \
   --manifest-output /tmp/secureflow-run.json \
-  /ruta/al/target
+  /path/to/target
 ```
 
-En Linux el CLI exige Bubblewrap por defecto: red privada y filesystem del host
-de sólo lectura. El run conserva el hash del binario `/usr/bin/bwrap`. Sólo una
-decisión operativa explícita puede usar `--sandbox disabled`; nunca hay fallback
-silencioso si el sandbox requerido no está disponible.
+On Linux, the CLI requires Bubblewrap by default, with a private network and a
+read-only host filesystem. The run retains the hash of `/usr/bin/bwrap`. Only
+an explicit operational choice may select `--sandbox disabled`; there is no
+silent fallback when the required sandbox is unavailable.
 
-`--authorization-reviewer` es obligatorio. Las bases `written-consent`,
-`organization-policy` y `other-documented` exigen además
-`--authorization-reference`; una expiración RFC3339 vencida falla antes de
-ejecutar el engine. `--target-revision-kind` y `--target-revision` permiten
-ligar el run a un commit o snapshot explícito; una revisión Git debe ser el
-object ID completo en minúsculas.
+`--authorization-reviewer` is required. The `written-consent`,
+`organization-policy`, and `other-documented` bases also require
+`--authorization-reference`; an expired RFC3339 timestamp fails before the
+engine runs. `--target-revision-kind` and `--target-revision` bind the run to an
+explicit commit or snapshot. A Git revision must be a complete lowercase
+object ID.
 
-Después se puede validar el manifiesto sin ejecutar ningún scanner:
+The manifest can then be validated without running a scanner:
 
 ```bash
 cargo run -p secureflow -- validate-run /tmp/secureflow-run.json
 ```
 
-Los candidatos se pueden consultar sin abrir el JSON manualmente:
+Candidates can be queried without manually opening the JSON:
 
 ```bash
 cargo run -p secureflow -- list-findings \
@@ -142,8 +142,8 @@ cargo run -p secureflow -- show-finding \
   /tmp/secureflow-run.json sf_finding_<id>
 ```
 
-También se puede generar un informe Markdown local. Por defecto no incluye el
-texto de la rationale humana, aunque sí conserva su decisión:
+A local Markdown report can also be generated. By default, it records a human
+decision but omits the human rationale text:
 
 ```bash
 cargo run -p secureflow -- export-report \
@@ -151,12 +151,11 @@ cargo run -p secureflow -- export-report \
   --output /tmp/secureflow-report.md
 ```
 
-El informe declara explícitamente que los findings son candidatos y que cero
-candidatos no constituye una garantía de seguridad. La opción
-`--include-human-rationale` sólo debe usarse cuando el destino del informe esté
-autorizado para recibir ese contexto.
+The report explicitly states that findings are candidates and that zero
+candidates is not a security guarantee. Use `--include-human-rationale` only
+when the report destination is authorized to receive that context.
 
-Una revisión humana se escribe en otro manifiesto; el original queda intacto:
+A human review is written to a separate manifest, leaving the original intact:
 
 ```bash
 cargo run -p secureflow -- review-run \
@@ -164,11 +163,11 @@ cargo run -p secureflow -- review-run \
   --finding-id sf_finding_<id> \
   --decision validated \
   --reviewer "Daniel" \
-  --rationale "La ruta source-to-sink fue verificada localmente" \
+  --rationale "The source-to-sink path was verified locally" \
   --output /tmp/secureflow-run-reviewed.json
 ```
 
-Los findings ya revisados pueden entrar a un ledger local append-only:
+Reviewed findings can enter a local append-only ledger:
 
 ```bash
 cargo run -p secureflow -- knowledge-import \
@@ -176,50 +175,50 @@ cargo run -p secureflow -- knowledge-import \
   --ledger .secureflow/knowledge.jsonl \
   --source-license-status spdx-declared \
   --source-license-expression MIT \
-  --source-license-evidence /ruta/al/target/LICENSE
+  --source-license-evidence /path/to/target/LICENSE
 
 cargo run -p secureflow -- knowledge-list \
   .secureflow/knowledge.jsonl --decision validated --format json
 ```
 
-El ledger v2 guarda provenance, revisión del target, licencia declarada con
-evidencia hasheada, ubicaciones relativas y hashes de la rationale/referencia;
-no guarda el texto fuente ni la rationale completa. Observaciones exactas
-repetidas se conservan y enlazan al primer registro, sin inferir equivalencia
-entre engines. También se puede declarar `private-or-undisclosed` o `unknown`
-en vez de inventar una licencia. Los schemas normativos se imprimen con
-`secureflow schema` y `secureflow knowledge-schema`; v1 permanece disponible
-mediante `secureflow knowledge-schema --version v1`.
+The v2 ledger stores provenance, the target revision, a declared license with
+hashed evidence, relative locations, and hashes of the rationale/reference. It
+does not store source text or the full rationale. Exact repeated observations
+are retained and linked to the first record without inferring equivalence
+across engines. A source can instead be declared `private-or-undisclosed` or
+`unknown`; a license is never invented. Normative schemas are printed with
+`secureflow schema` and `secureflow knowledge-schema`; v1 remains available
+through `secureflow knowledge-schema --version v1`.
 
-Los advisories públicos viven en un catálogo SQLite separado para no confundir
-conocimiento externo con decisiones humanas. La ruta reproducible prepara un
-ZIP OSV adquirido externamente, conserva todos los aceptados y rechazados,
-evidencia de licencia y accounting exacto:
+Public advisories live in a separate SQLite catalog so external knowledge is
+not confused with human decisions. The reproducible path prepares an
+externally acquired OSV ZIP and retains every accepted and rejected record,
+license evidence, and exact accounting:
 
 ```bash
 cargo run -p secureflow -- snapshot-prepare-osv \
-  --archive /ruta/npm-all.zip \
+  --archive /path/to/npm-all.zip \
   --output .secureflow/npm-snapshot \
   --artifact-locator https://osv-vulnerabilities.storage.googleapis.com/npm/all.zip \
   --artifact-revision gcs-generation:<id> \
   --expected-ecosystem npm \
   --acquired-at 2026-08-23T17:47:25Z \
-  --github-license-evidence /ruta/GHAD-LICENSE.md \
-  --openssf-malicious-packages-license-evidence /ruta/OPENSSF-LICENSE
+  --github-license-evidence /path/to/GHAD-LICENSE.md \
+  --openssf-malicious-packages-license-evidence /path/to/OPENSSF-LICENSE
 
 cargo run -p secureflow -- catalog-import-snapshot \
   --database .secureflow/advisories.sqlite3 \
   --manifest .secureflow/npm-snapshot/manifest.json \
-  --archive /ruta/npm-all.zip
+  --archive /path/to/npm-all.zip
 ```
 
-Después de una foto completa, los cambios de un `modified_id.csv` por
-ecosistema se preparan fuera de red y se encadenan al snapshot/delta anterior:
+After a complete snapshot, changes from a per-ecosystem `modified_id.csv` are
+prepared offline and chained to the previous snapshot or delta:
 
 ```bash
 cargo run -p secureflow -- delta-prepare-osv \
-  --modified-index /ruta/modified_id.csv \
-  --records /ruta/payloads-json \
+  --modified-index /path/to/modified_id.csv \
+  --records /path/to/payloads-json \
   --output .secureflow/crates-delta \
   --index-locator https://storage.googleapis.com/osv-vulnerabilities/crates.io/modified_id.csv \
   --index-revision gcs-generation:<id> \
@@ -227,26 +226,26 @@ cargo run -p secureflow -- delta-prepare-osv \
   --acquired-at 2026-08-23T19:07:52Z \
   --after-modified 2026-08-21T01:00:00Z \
   --base-snapshot-id sf_snapshot_<hash> \
-  --rustsec-license-evidence /ruta/RUSTSEC-README.md
+  --rustsec-license-evidence /path/to/RUSTSEC-README.md
 
 cargo run -p secureflow -- catalog-import-delta \
   --database .secureflow/advisories.sqlite3 \
   --manifest .secureflow/crates-delta/manifest.json
 ```
 
-Un payload faltante o en cuarentena bloquea el cursor. La ausencia nunca
-desactiva; `withdrawn` explícito se conserva como estado retirado y sólo un
-snapshot completo posterior puede marcar registros ausentes como inactivos.
+A missing or quarantined payload blocks cursor advancement. Absence never
+deactivates a record. Explicit `withdrawn` data is retained as withdrawn, and
+only a later full snapshot may mark absent records inactive.
 
-La importación manual de OSV JSON sigue disponible para fuentes explícitas:
+Manual OSV JSON import remains available for explicit sources:
 
 ```bash
 cargo run -p secureflow -- catalog-import-osv \
   --database .secureflow/advisories.sqlite3 \
-  --input /ruta/al/snapshot-osv \
+  --input /path/to/osv-snapshot \
   --source-name github-advisory-database \
   --source-license-expression CC-BY-4.0 \
-  --source-license-evidence /ruta/al/snapshot-osv/LICENSE \
+  --source-license-evidence /path/to/osv-snapshot/LICENSE \
   --source-locator https://github.com/github/advisory-database
 
 cargo run -p secureflow -- catalog-lookup \
@@ -256,33 +255,33 @@ cargo run -p secureflow -- catalog-search \
   --database .secureflow/advisories.sqlite3 "command injection" --format json
 
 cargo run -p secureflow -- catalog-package \
-  --database .secureflow/advisories.sqlite3 crates.io nombre-del-crate --format json
+  --database .secureflow/advisories.sqlite3 crates.io crate-name --format json
 
 cargo run -p secureflow -- catalog-stats .secureflow/advisories.sqlite3
 cargo run -p secureflow -- catalog-check .secureflow/advisories.sqlite3
 ```
 
-La base v3 conserva revisiones raw, snapshots/deltas, alias exactos y rangos
-compactos; `upstream` y `related` no fusionan vulnerabilidades. Durante
-importaciones masivas FTS se reconstruye al final y queda `dirty` si el proceso
-se interrumpe; se recupera con `catalog-rebuild-index`. Los deltas pequeños
-mantienen FTS por fila dentro de cada transacción de lote y bloquean consultas
-de advisories mientras permanezcan `preparing`. Los componentes exactos de
-aliases se pueden
-reconstruir con `catalog-rebuild-canonicalization`, incluyendo splits cuando
-una revisión retira un alias. Toda consulta estructurada mantiene
-`validation_authority=human-only`.
+The v3 database retains raw revisions, snapshots/deltas, exact aliases, and
+compact ranges; `upstream` and `related` do not merge vulnerabilities. During
+bulk imports, FTS is rebuilt at the end and remains `dirty` after an interrupted
+process; `catalog-rebuild-index` recovers it. Small deltas update FTS per row in
+each batch transaction and block advisory queries while they remain
+`preparing`. Exact alias components can be rebuilt with
+`catalog-rebuild-canonicalization`, including splits when a revision removes an
+alias. Every structured query retains `validation_authority=human-only`.
 
-El piloto real de crates.io, GitHub Actions y npm procesó 229.644 registros
-fuente activos como 228.674 entidades canónicas en una base de 1,20 GB. Incluye
-219.658 reportes de paquetes maliciosos OpenSSF; por eso esas cifras son
-registros de seguridad, no vulnerabilidades humanas validadas. 328 registros
-npm sin procedencia admitida quedaron en cuarentena. Evidencia exacta:
-[`docs/evidence/real-advisory-pilot-2026-08-23.json`](./docs/evidence/real-advisory-pilot-2026-08-23.json).
+The real crates.io, GitHub Actions, and npm pilot processed 229,644 active
+source records into 228,674 canonical entities in a 1.20 GB database. It
+includes 219,658 OpenSSF malicious-package reports, so these figures describe
+security records, not human-validated vulnerabilities. The pipeline quarantined
+347 records in total: 19 crates.io records and 328 npm records, of which 326
+failed malicious-package provenance checks and 2 used unsupported primary IDs.
+Exact evidence:
+[`real-advisory-pilot-2026-08-23.json`](./docs/evidence/real-advisory-pilot-2026-08-23.json).
 
-Un finding se enlaza conservadoramente con advisories de un paquete. V2 evalúa
-listas exactas y rangos OSV `SEMVER`; datos inválidos o rangos `GIT`/`ECOSYSTEM`
-quedan `unknown`. Ni siquiera `affected` afirma causalidad o validación:
+A finding is conservatively linked to advisories for a package. V2 evaluates
+exact lists and OSV `SEMVER` ranges; invalid data and `GIT`/`ECOSYSTEM` ranges
+remain `unknown`. Even `affected` asserts neither causality nor validation:
 
 ```bash
 cargo run -p secureflow -- correlate-package \
@@ -298,7 +297,7 @@ cargo run -p secureflow -- orchestrate-plan \
   --output /tmp/secureflow-plan.json
 ```
 
-Backups y restores crean destinos nuevos, hasheados y verificados:
+Backups and restores create new, hashed, verified destinations:
 
 ```bash
 cargo run -p secureflow -- catalog-backup \
@@ -311,43 +310,43 @@ cargo run -p secureflow -- catalog-backup-verify \
   --manifest /backups/advisories.backup.json
 ```
 
-En el host documentado se midieron 100k, 500k y 1M registros sintéticos. El
-millón produjo 900k entidades canónicas, ocupó 2,07 GB y tardó 104,7 s en NVMe/
-Btrfs. Esto demuestra capacidad del almacenamiento, no la existencia de un
-millón de vulnerabilidades reales. Método y límites:
+The documented host was measured with 100k, 500k, and 1M synthetic records. At
+1M, it produced 900k canonical entities, occupied 2.07 GB, and took 104.7
+seconds on NVMe/Btrfs. This demonstrates storage capacity, not the existence of
+one million real vulnerabilities. Method and limits:
 [`docs/knowledge-benchmark.md`](./docs/knowledge-benchmark.md).
 
-Una salida estructurada `review-contract` 1.1 de Secure Skill puede importarse
-como candidatos contextuales vinculados a un run autorizado:
+A structured Secure Skill `review-contract` 1.1 output can be imported as
+contextual candidates linked to an authorized run:
 
 ```bash
 cargo run -p secureflow -- secure-review-import \
-  --review /ruta/review.json \
+  --review /path/to/review.json \
   --manifest /tmp/secureflow-run.json \
-  --secure-skill-root /ruta/secure-skill \
-  --secure-skill-revision <commit-completo> \
+  --secure-skill-root /path/to/secure-skill \
+  --secure-skill-revision <full-commit> \
   --output /tmp/secureflow-contextual-review.json
 
 cargo run -p secureflow -- secure-review-list \
   /tmp/secureflow-contextual-review.json --format text
 ```
 
-El importador registra hashes, versión, commit y licencia, y verifica el commit
-contra `HEAD` cuando el source root conserva `.git`; no ejecuta la skill. Sus
-findings permanecen `contextual-candidates`, la autoridad de
-validación es `human-only` y cero findings nunca significa que el target sea
-seguro. El tercer schema se imprime con `secureflow secure-review-schema`.
+The importer records hashes, version, commit, and license and checks the commit
+against `HEAD` when the source root retains `.git`; it does not run the Skill.
+Its findings remain `contextual-candidates`, validation authority is
+`human-only`, and zero findings never means that the target is secure. Print
+the third schema with `secureflow secure-review-schema`.
 
-Un resultado retenido de Secure Bench se importa por una ruta de evaluación
-separada, verificando el schema upstream y los fingerprints de suite y run:
+A retained Secure Bench result is imported through a separate evaluation path
+that verifies the upstream schema and suite/run fingerprints:
 
 ```bash
 cargo run -p secureflow -- benchmark-import \
-  --result /ruta/result.json \
-  --run-manifest /ruta/run.json \
-  --suite /ruta/suite.toml \
-  --secure-bench-root /ruta/secure-bench \
-  --secure-bench-revision <commit-completo> \
+  --result /path/to/result.json \
+  --run-manifest /path/to/run.json \
+  --suite /path/to/suite.toml \
+  --secure-bench-root /path/to/secure-bench \
+  --secure-bench-revision <full-commit> \
   --study-kind historical-public-diagnostic \
   --output /tmp/secureflow-benchmark.json
 
@@ -355,38 +354,38 @@ cargo run -p secureflow -- benchmark-summary \
   /tmp/secureflow-benchmark.json --format text
 ```
 
-La salida mantiene TP/FN por expectativa vulnerable, FP/TN por control seguro,
-ratios con denominadores, fallos y rendimiento separados. Nunca habilita
-rankings, claims de superioridad ni production readiness. Su schema se imprime
-con `secureflow benchmark-schema`.
+The output keeps TP/FN per vulnerable expectation, FP/TN per safe control,
+ratios with denominators, failures, and performance separate. It never enables
+rankings, superiority claims, or production-readiness claims. Print its schema
+with `secureflow benchmark-schema`.
 
-La ruta evaluativa completa y separada puede ejecutar los 14 fixtures
-sintéticos locales sin modificar Secure Bench:
+The complete, separated evaluation path can run the 14 local synthetic fixtures
+without modifying Secure Bench:
 
 ```bash
 bash scripts/eval-local.sh
 ```
 
-El protocolo, resultado observado y límites están en
+The protocol, observed result, and limitations are in
 [`docs/evaluation.md`](./docs/evaluation.md).
 
-Antes de un estudio nuevo se puede sellar un protocolo prospectivo con holdout,
-cohorte humana, blinding, adjudicación, costes y límites de claims:
+Before a new study, a prospective protocol can be sealed with a holdout, human
+cohort, blinding, adjudication, costs, and claim limits:
 
 ```bash
 cargo run -p secureflow -- benchmark-protocol-seal \
-  --draft /ruta/protocol-draft.json \
-  --output /ruta/protocol-sealed.json
+  --draft /path/to/protocol-draft.json \
+  --output /path/to/protocol-sealed.json
 ```
 
-Para un estudio real debe usarse `benchmark-protocol-preflight`, que comprueba
-los hashes del manifest público del holdout, provenance, licencias y entorno
-antes de sellar, sin recibir ni abrir labels. El fixture del repositorio sólo
-prueba el contrato; no es un preregistro real. Runbook:
+A real study must use `benchmark-protocol-preflight`, which checks hashes for
+the public holdout manifest, provenance, licenses, and environment before
+sealing without receiving or opening labels. The repository fixture tests only
+the contract; it is not a real preregistration. Runbook:
 [`docs/prospective-study-runbook.md`](./docs/prospective-study-runbook.md).
 
-La IA opcional empieza con un contrato offline. El CLI prepara un solo finding
-redacted y presupuestado, pero no hace llamadas de red:
+Optional AI begins with an offline contract. The CLI prepares one redacted,
+budgeted finding but makes no network call:
 
 ```bash
 cargo run -p secureflow -- ai-prepare \
@@ -397,111 +396,110 @@ cargo run -p secureflow -- ai-prepare \
   --output /tmp/secureflow-ai-request.json
 ```
 
-La familia lógica por defecto es Luna. El payload excluye código, descripciones
-de evidencia, metadata humana y paths absolutos; un filtro conservador redacta
-posibles secretos. La preparación informa `transmitted=false`. Una respuesta
-estructurada puede registrarse después con `ai-apply-response`, conservando
-hashes y tokens sin cambiar la decisión humana. No hay cliente de proveedor
-implementado todavía.
+The default logical model family is Luna. The payload excludes code, evidence
+descriptions, human metadata, and absolute paths; a conservative filter redacts
+potential secrets. Preparation records `transmitted=false`. A structured
+response can later be recorded with `ai-apply-response`, retaining hashes and
+token counts without changing the human decision. No provider client is
+implemented yet.
 
-El `scan` calcula y registra el hash SHA-256 del target, del binario y del
-reporte, y comprueba target y binario antes y después de ejecutar para fallar
-si cambian durante el análisis. Proyecta los candidatos a un modelo canónico y
-deja cada revisión humana en `pending`. Sólo los códigos `0` (sin findings) y
-`1` (con findings) cuentan como ejecución completada; `2+`, señal, timeout o
-reporte inválido son fallos operativos aunque stdout contenga JSON. Los comandos
-que crean artefactos derivados rechazan una salida que
-sea la misma entrada; `scan` tampoco permite escribir resultados dentro del
-target analizado.
-El proceso se ejecuta sin shell, sin stdin y con entorno limpio. En Linux recibe
-un grupo de procesos propio, core dumps desactivados y límites de 2 GiB de
-memoria virtual, 256 descriptores y CPU ligada al timeout; el hash de esta
-configuración queda en el manifiesto. Con el modo requerido, Bubblewrap añade
-un namespace de red privado, root host de sólo lectura, `/proc` y `/dev`
-aislados; no equivale a aislamiento fuerte frente a un kernel comprometido ni
-a una VM.
+`scan` computes and records SHA-256 hashes of the target, binary, and report. It
+checks the target and binary before and after execution and fails if either
+changes. It projects candidates into a canonical model and leaves every human
+review `pending`. Only exit codes `0` (no findings) and `1` (findings) count as
+completed execution; `2+`, a signal, timeout, or invalid report is an
+operational failure even if stdout contains JSON. Commands that create derived
+artifacts reject an output that is the same as an input, and `scan` does not
+allow results to be written inside the analyzed target.
 
-El timeout aceptado es de 1 a 3.600 segundos y se acorta para terminar antes de
-una expiración de autorización registrada. Binarios mayores de 1 GiB se
-rechazan. En Unix, los artefactos derivados se crean con modo `0600`; los
-directorios nuevos del ledger usan `0700`.
+The process runs without a shell or stdin and with a clean environment. On
+Linux, it receives its own process group, disabled core dumps, a 2 GiB virtual
+memory limit, 256 file descriptors, and CPU time tied to the timeout; the
+manifest includes a hash of this configuration. In required mode, Bubblewrap
+adds a private network namespace, a read-only host root, and isolated `/proc`
+and `/dev`. This is not VM-grade isolation and cannot protect against a
+compromised kernel.
 
-El target usa el fingerprint `secureflow-target-sha256-v2`: distingue archivo
-y directorio, prefija longitudes para evitar serializaciones ambiguas, excluye
-`.git` y rechaza symlinks. El hashing falla cerrado por encima de 250.000
-archivos, 500.000 entradas, 16 GiB totales, 2 GiB por archivo o 256 niveles de
-directorio. Paths no UTF-8 también se rechazan para evitar fingerprints
-ambiguos.
+The accepted timeout is 1 to 3,600 seconds and is shortened to finish before a
+recorded authorization expiry. Binaries larger than 1 GiB are rejected. On
+Unix, derived artifacts are created with mode `0600`, and new ledger directories
+use `0700`.
 
-## Estado actual
+The target uses the `secureflow-target-sha256-v2` fingerprint: it distinguishes
+files from directories, prefixes lengths to prevent ambiguous serialization,
+excludes `.git`, and rejects symlinks. Hashing fails closed above 250,000 files,
+500,000 entries, 16 GiB total, 2 GiB per file, or 256 directory levels. Non-UTF-8
+paths are also rejected to prevent ambiguous fingerprints.
 
-Este workspace integra los proyectos originales por procesos y contratos, no
-por copia física. Secure Engine, Secure Skill, Secure Bench, CMS Nova y
-Mitiquete permanecen en sus propios directorios y conservan sus historiales.
+## Current architecture
 
-El primer contrato es [`secureflow-run-v1`](./docs/contracts/secureflow-run-v1.md).
+This workspace integrates the original projects through processes and
+contracts, not physical copies. Secure Engine, Secure Skill, Secure Bench, CMS
+Nova, and Mitiquete remain in their own directories with their histories intact.
 
-## Flujo objetivo
+The first contract is
+[`secureflow-run-v1`](./docs/contracts/secureflow-run-v1.md).
+
+## Target flow
 
 ```text
-scope autorizado
-  -> análisis determinista e inventario API local
-  -> normalización y deduplicación
-  -> priorización determinista
-  -> validación IA opcional
-  -> decisión humana
-  -> informe y knowledge base local
-  -> benchmark/evals separados
+authorized scope
+  -> deterministic analysis and local API inventory
+  -> normalization and deduplication
+  -> deterministic prioritization
+  -> optional AI validation support
+  -> human decision
+  -> report and local knowledge base
+  -> separate benchmarks/evaluations
 ```
 
-## Límites
+## Limits
 
-- No se escanean terceros sin autorización explícita.
-- No se ejecuta el código del repositorio analizado durante el análisis estático.
-- La IA está desactivada por defecto y no puede aprobar un hallazgo.
-- No se sube código fuente automáticamente.
-- No se descargan ni mezclan feeds externos automáticamente; cada snapshot debe
-  aprobar licencia, procedencia, adapter y accounting de rechazos.
-- La capacidad sintética de 1M registros no constituye una base global real ni
-  un claim de cobertura.
+- Third parties are never scanned without explicit authorization.
+- An analyzed repository's code is not executed during static analysis.
+- AI is disabled by default and cannot approve a finding.
+- Source code is never uploaded automatically.
+- External feeds are neither downloaded nor merged automatically; every
+  snapshot must pass license, provenance, adapter, and rejection-accounting
+  review.
+- Synthetic capacity at 1M records is not a real global database or a coverage
+  claim.
 
-La arquitectura y el MVP están documentados en [`docs/`](./docs/).
-La decisión provisional JSONL vs. SQLite, repetida para knowledge v2, está respaldada por
-[`docs/knowledge-benchmark.md`](./docs/knowledge-benchmark.md).
-El flujo de demostración está en [`docs/demo.md`](./docs/demo.md) y la matriz de
-claims permitidos para CV/paper en
-[`docs/evidence-and-claims.md`](./docs/evidence-and-claims.md).
-La matriz requisito-evidencia y la auditoría de completitud están en
+The architecture and MVP are documented under [`docs/`](./docs/). The
+provisional JSONL-versus-SQLite decision, repeated for knowledge v2, is
+supported by
+[`docs/knowledge-benchmark.md`](./docs/knowledge-benchmark.md). The demo is in
+[`docs/demo.md`](./docs/demo.md), and the allowed CV/paper claim matrix is in
+[`docs/evidence-and-claims.md`](./docs/evidence-and-claims.md). The
+requirement-to-evidence matrix and completion audit are in
 [`docs/completion-audit.md`](./docs/completion-audit.md).
 
-## Estado de la implementación
+## Implementation status
 
-El MVP local está operativo: workspace Rust, contratos y schemas,
-adapter de proceso externo, proyección, ordenamiento, deduplicación dentro de
-un engine, informe Markdown, registro explícito de revisión humana y ledger
-local JSONL. La
-integración contextual de Secure Skill también está implementada mediante un
-contrato separado y provenance verificable. Secure Bench ya puede importar
-resultados v2 retenidos en una ruta exclusivamente evaluativa. El catálogo
-SQLite/FTS5 implementa revisiones de origen, alias exactos, paquetes, consultas
-e integridad local. La ruta IA ya tiene preparación redacted y accounting
-offline; el transporte a proveedor continúa deshabilitado y no se presenta
-como funcionalidad terminada.
+The local MVP is operational: Rust workspace, contracts and schemas, external
+process adapter, projection, ordering, within-engine deduplication, Markdown
+report, explicit human-review recording, and local JSONL ledger. Secure Skill
+contextual integration is also implemented through a separate contract and
+verifiable provenance. Secure Bench can import retained v2 results through an
+evaluation-only path. The SQLite/FTS5 catalog implements source revisions,
+exact aliases, packages, queries, and local integrity checks. The AI path has
+offline redacted preparation and accounting; provider transport remains
+disabled and is not presented as a completed feature.
 
-La vertical `secureflow-web` también está operativa para análisis estrictamente
-offline: scope autorizado, inventario Next.js, inferencia local, evaluación de
-rutas y corpus sintético de desarrollo. El recon remoto, DNS/CT y los checks
-HTTP siguen sin implementarse.
+The `secureflow-web` vertical is also operational for strictly offline
+analysis: authorized scope, Next.js inventory, local inference, route
+assessment, and a synthetic development corpus. Remote recon, DNS/CT, and HTTP
+checks remain unimplemented.
 
-## Seguridad y contribuciones
+## Security and contributions
 
-Consulta [`SECURITY.md`](./SECURITY.md) para reportar vulnerabilidades de forma
-privada y [`CONTRIBUTING.md`](./CONTRIBUTING.md) para reproducir los gates. El
-software sólo debe usarse sobre código y sistemas propios, open source o con
-autorización explícita.
+See [`SECURITY.md`](./SECURITY.md) for private vulnerability reporting and
+[`CONTRIBUTING.md`](./CONTRIBUTING.md) for reproducing the gates. Use this
+software only on code and systems that you own, that are open source, or for
+which you have explicit authorization.
 
-## Licencia
+## License
 
-SecureFlow se distribuye bajo los términos de MIT o Apache License 2.0, a
-elección del usuario. Consulta [`LICENSE-MIT`](./LICENSE-MIT) y
+SecureFlow is distributed under either the MIT License or Apache License 2.0,
+at the user's choice. See [`LICENSE-MIT`](./LICENSE-MIT) and
 [`LICENSE-APACHE`](./LICENSE-APACHE).

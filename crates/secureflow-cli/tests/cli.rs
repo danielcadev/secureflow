@@ -134,7 +134,10 @@ fn human_can_abstain_without_mutating_the_original_manifest() {
         .args(["--finding-id", "sf_finding_fixture_1234567890abcdef"])
         .args(["--decision", "abstained"])
         .args(["--reviewer", "Daniel"])
-        .args(["--rationale", "La evidencia disponible no permite decidir."])
+        .args([
+            "--rationale",
+            "The available evidence is insufficient to decide.",
+        ])
         .args(["--output"])
         .arg(&output_path)
         .output()

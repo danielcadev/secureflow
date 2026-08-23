@@ -1,66 +1,65 @@
-# Runbook del estudio prospectivo ciego
+# Blind prospective study runbook
 
-Estado: **preparado, no ejecutado**. No existe todavía un holdout real sellado,
-una cohorte reclutada ni resultados humanos. Este documento no autoriza claims
-de superioridad.
+Status: **prepared, not executed**. No real sealed holdout, recruited cohort, or
+human results exist yet. This document does not authorize superiority claims.
 
-## Pregunta que sí puede medirse
+## A question that can be measured
 
-SecureFlow puede aspirar a superar el desempeño humano en tareas acotadas, no
-a ser “mejor que todo humano siempre”. La primera pregunta defendible es:
+SecureFlow may aim to outperform human performance on scoped tasks, not to be
+"better than every human, always." The first defensible question is:
 
-> En un holdout autorizado de Rust y TypeScript previamente no visto, ¿mejora
-> SecureFlow el recall y la precisión de hallazgos validados por minuto frente
-> a revisión humana sin SecureFlow, bajo tiempo y capacidades predeclarados?
+> On a previously unseen, authorized Rust and TypeScript holdout, does
+> SecureFlow improve recall and precision of validated findings per minute over
+> human review without SecureFlow, under predeclared time and capability limits?
 
-También deben reportarse los casos donde el humano sea mejor. “Siempre” es un
-cuantificador universal que un corpus finito no puede demostrar.
+Cases in which the human performs better must also be reported. "Always" is a
+universal quantifier that a finite corpus cannot establish.
 
-## Diseño mínimo
+## Minimum design
 
-- 20–40 casos inicialmente, al menos mitad vulnerables y mitad controles;
-- Rust y TypeScript separados en los resultados;
-- familias predeclaradas: autorización, filesystem, parser, webhook y supply
-  chain; no añadir una familia después de ver resultados;
-- cohorte mínima de tres revisores con experiencia documentada y distinta del
-  creador del corpus;
-- diseño crossover por bloques: cada caso lo revisa una condición humana y
-  SecureFlow, pero ninguna persona ve dos variantes equivalentes;
-- orden aleatorio comprometido antes de ejecutar y límites de tiempo iguales;
-- dos adjudicadores independientes y un tercero para desacuerdos;
-- labels, PoCs y respuestas esperadas fuera del árbol entregado a participantes
-  y sistemas;
-- publicación de crashes, abstenciones y resultados negativos.
+- Start with 20–40 cases, at least half vulnerable and half controls.
+- Report Rust and TypeScript results separately.
+- Predeclare families: authorization, filesystem, parser, webhook, and supply
+  chain. Do not add a family after observing results.
+- Recruit at least three reviewers with documented experience who did not
+  create the corpus.
+- Use a blocked crossover design: every case is reviewed in one human condition
+  and by SecureFlow, but no person sees two equivalent variants.
+- Commit the randomized order before execution and apply equal time limits.
+- Use two independent adjudicators and a third for disagreements.
+- Keep labels, PoCs, and expected answers outside the tree delivered to
+  participants and systems.
+- Publish crashes, abstentions, and negative results.
 
-Un resultado inicial sólo compara esa cohorte, ese corpus y esas capacidades.
-Para acercarse a “mejor que un experto fuerte” se necesita una réplica con una
-cohorte más experimentada y un holdout nuevo; no basta comparar contra el
-propio creador o contra estudiantes sin herramientas equivalentes.
+An initial result compares only that cohort, corpus, and capability set. A
+replication with a more experienced cohort and a new holdout is necessary to
+approach a claim such as "better than a strong expert." Comparing only with the
+creator or with students who lack equivalent tools is insufficient.
 
-## Separación de artefactos
+## Artifact separation
 
 ```text
 study-root/
 ├── public/
-│   ├── corpus-manifest.json       # IDs opacos, hashes y paths; sin labels
-│   ├── provenance-manifest.json   # origen, autorización y revisión
-│   ├── license-manifest.json      # licencia por caso/fixture
-│   └── environment-manifest.json  # binarios, configs, recursos y red
-├── private-ground-truth/          # custodio distinto; nunca entra al preflight
+│   ├── corpus-manifest.json       # Opaque IDs, hashes, and paths; no labels
+│   ├── provenance-manifest.json   # Origin, authorization, and review
+│   ├── license-manifest.json      # License per case/fixture
+│   └── environment-manifest.json  # Binaries, configs, resources, and network
+├── private-ground-truth/          # Separate custodian; never enters preflight
 ├── protocol-draft.json
 ├── sealed-protocol.json
-├── submissions/                   # outputs raw, tiempo, coste y abstenciones
-└── adjudication/                  # se abre sólo al terminar submissions
+├── submissions/                   # Raw outputs, time, cost, and abstentions
+└── adjudication/                  # Opened only after submissions close
 ```
 
-El manifest público puede indicar `case-0001`, lenguaje y hash, pero no si el
-caso es vulnerable, su weakness ni la ubicación esperada. La declaración de
-autorización debe conservar propietario, alcance, vigencia y restricciones sin
-publicar datos privados.
+The public manifest may disclose `case-0001`, its language, and its hash, but
+not whether the case is vulnerable, its weakness, or the expected location.
+The authorization declaration must retain the owner, scope, validity period,
+and restrictions without publishing private data.
 
-## Preflight sin abrir labels
+## Preflight without opening labels
 
-Después de congelar una release/configuración y antes de ejecutar:
+After freezing a release/configuration and before execution:
 
 ```bash
 cargo run -p secureflow -- benchmark-protocol-preflight \
@@ -75,45 +74,44 @@ cargo run -p secureflow -- benchmark-protocol-validate \
   study-root/sealed-protocol.json
 ```
 
-El comando comprueba que los cuatro SHA-256 reales coincidan con el draft y
-entonces sella el protocolo. No inspecciona ni recibe el ground truth privado.
-El protocolo aún debe publicarse o registrarse con un sello de tiempo externo
-antes de los resultados para que el preregistro sea verificable por terceros.
+The command checks that the four real SHA-256 values match the draft and then
+seals the protocol. It neither inspects nor receives the private ground truth.
+The protocol must still be published or registered with an external timestamp
+before results so third parties can verify the preregistration.
 
-## Ejecución
+## Execution
 
-1. Congelar commit, binarios, configuración, máquina, red y presupuesto.
-2. El custodio entrega sólo los casos opacos y conserva las etiquetas.
-3. Registrar inicio/fin monotónicos, crashes, retries autorizados, tokens y
-   coste para cada caso; un timeout no cuenta como resultado limpio.
-4. Mantener raw reports y respuestas humanas por hash; no corregir outputs.
-5. Cerrar todas las submissions antes de abrir labels.
-6. Adjudicar evidencia y exploitabilidad sin conocer qué condición produjo el
-   hallazgo cuando sea posible.
-7. Calcular TP/FN y FP/TN por separado, intervalos pareados, minutos y
-   abstenciones. Publicar también desacuerdos y casos negativos.
+1. Freeze the commit, binaries, configuration, machine, network, and budget.
+2. The custodian distributes only opaque cases and retains the labels.
+3. Record monotonic start/end times, crashes, authorized retries, tokens, and
+   cost for each case; a timeout is not a clean result.
+4. Retain raw reports and human responses by hash; do not correct outputs.
+5. Close all submissions before opening labels.
+6. When feasible, adjudicate evidence and exploitability without knowing which
+   condition produced the finding.
+7. Calculate TP/FN and FP/TN separately, paired intervals, minutes, and
+   abstentions. Publish disagreements and negative cases too.
 
-## Criterio de “mejor” para la primera réplica
+## "Better" criterion for the first replication
 
-Debe fijarse antes de sellar. Una opción conservadora es exigir simultáneamente:
+It must be fixed before sealing. One conservative option is to require all of:
 
-- límite inferior del intervalo pareado de recall por encima del margen
-  predeclarado;
-- precisión no inferior dentro de un margen pequeño;
-- reducción predeclarada de mediana de minutos de analista;
-- ningún aumento oculto de crashes, abstenciones o coste;
-- análisis de sensibilidad por lenguaje, familia y revisor.
+- the lower bound of the paired recall interval above the predeclared margin;
+- non-inferior precision within a small margin;
+- a predeclared reduction in median analyst minutes;
+- no hidden increase in crashes, abstentions, or cost;
+- sensitivity analysis by language, family, and reviewer.
 
-Si cualquiera falla, el resultado es mixto o negativo. No se transforma en un
-claim de superioridad cambiando métricas después de observarlo.
+If any condition fails, the outcome is mixed or negative. It must not be turned
+into a superiority claim by changing metrics after observing it.
 
-## Bloqueos actuales
+## Current blockers
 
-- falta seleccionar y licenciar el holdout sin contaminarlo con los fixtures
-  públicos ya usados;
-- falta un custodio de labels y reclutar revisores/adjudicadores reales;
-- falta congelar la configuración exacta de SecureFlow y comparadores;
-- falta un contrato de submissions y scoring prospectivo; Secure Bench sólo
-  importa hoy resultados retenidos y no debe conocer labels durante ejecución;
-- falta definir tratamiento ético, consentimiento, compensación y privacidad
-  de participantes.
+- The holdout must be selected and licensed without contamination from the
+  public fixtures already used.
+- A label custodian and real reviewers/adjudicators must be recruited.
+- The exact SecureFlow and comparator configurations must be frozen.
+- A prospective submission and scoring contract is missing. Secure Bench
+  currently imports retained results only and must not know labels at runtime.
+- Ethical treatment, consent, compensation, and participant privacy must be
+  defined.

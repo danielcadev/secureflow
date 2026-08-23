@@ -1,39 +1,39 @@
-# ADR 0002 — Secure Skill como import contextual
+# ADR 0002 — Secure Skill as a contextual import
 
-## Estado
+## Status
 
-Aceptado para el MVP.
+Accepted for the MVP.
 
-## Decisión
+## Decision
 
-SecureFlow integra Secure Skill mediante un adapter Rust de importación y un
-envelope propio. No copia la metodología completa, no invoca el modelo y no
-proyecta automáticamente sus findings al tipo canónico validado de Secure
-Engine.
+SecureFlow integrates Secure Skill through a Rust import adapter and a separate
+envelope. It does not copy the full methodology, invoke a model, or
+automatically project its findings into Secure Engine's canonical validated
+type.
 
-## Razones
+## Rationale
 
-- Secure Skill produce razonamiento contextual, no evidencia determinista
-  equivalente a un scanner;
-- `verification_status` pertenece al contrato upstream y no demuestra que un
-  humano de SecureFlow haya validado el hallazgo;
-- conservar el payload, hashes, versión, commit y licencia permite reproducir
-  qué metodología produjo la evaluación;
-- mantener findings y non-findings separados evita inflar métricas;
-- la frontera reduce acoplamiento y permite actualizar Secure Skill sin mover
-  su código ni su historial.
+- Secure Skill produces contextual reasoning, not deterministic scanner
+  evidence.
+- `verification_status` belongs to the upstream contract and does not prove
+  that a SecureFlow human validated the finding.
+- Retaining the payload, hashes, version, commit, and license makes the method
+  that produced an assessment reproducible.
+- Keeping findings and non-findings separate prevents metric inflation.
+- The boundary reduces coupling and allows Secure Skill to evolve without
+  moving its code or history.
 
-## Consecuencias
+## Consequences
 
-- el envelope es un artefacto paralelo vinculado por `run_id` y target hash;
-- una reconciliación futura entre findings deterministas y contextuales debe
-  guardar enlaces explícitos, nunca fusionarlos sólo por similitud textual;
-- el ledger actual no acepta estos candidatos porque carecen de decisión humana
-  SecureFlow;
-- la automatización de la ejecución de la skill queda fuera de este incremento.
+- The envelope is a parallel artifact linked by `run_id` and target hash.
+- Future reconciliation between deterministic and contextual findings must use
+  explicit links and must never merge solely on textual similarity.
+- The current ledger rejects these candidates because they lack a SecureFlow
+  human decision.
+- Automating Skill execution is outside this increment.
 
-## Licencia
+## License
 
-Secure Skill declara MIT. El adapter se diseñó contra su contrato público 1.1 y
-registra el hash de la licencia usada. SecureFlow conserva una nota de terceros
-y no incorpora el texto completo de la skill.
+Secure Skill declares MIT. The adapter targets its public contract 1.1 and
+records the hash of the license used. SecureFlow retains a third-party notice
+and does not incorporate the full Skill text.

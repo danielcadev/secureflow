@@ -1,31 +1,31 @@
-# ADR 0003 — Secure Bench sólo en la ruta de evaluación
+# ADR 0003 — Secure Bench only in the evaluation path
 
-## Estado
+## Status
 
-Aceptado para el MVP.
+Accepted for the MVP.
 
-## Decisión
+## Decision
 
-SecureFlow importa resultados retenidos de Secure Bench mediante un adapter
-separado. El adapter no forma parte de `scan`, priorización, Secure Skill,
-revisión humana ni knowledge import.
+SecureFlow imports retained Secure Bench results through a separate adapter.
+The adapter is not part of `scan`, prioritization, Secure Skill, human review,
+or knowledge import.
 
-## Razones
+## Rationale
 
-- evaluar un sistema con el mismo camino que decide findings de producción
-  crea riesgo de contaminación y optimización contra el test;
-- conservar denominadores, fallos y provenance evita transformar errores en
-  resultados limpios;
-- no existe un score compuesto neutral que justifique un ranking general;
-- los estudios históricos, holdouts retirados y recuperaciones post-open tienen
-  interpretaciones distintas que no deben colapsarse.
+- Evaluating a system through the same path that decides production findings
+  creates contamination and test-optimization risk.
+- Preserving denominators, failures, and provenance prevents operational errors
+  from becoming clean results.
+- No neutral composite score justifies a general ranking.
+- Historical studies, retired holdouts, and post-open recovery runs have
+  different interpretations and must not be collapsed.
 
-## Consecuencias
+## Consequences
 
-- la importación verifica schema y hashes, pero no reejecuta el experimento;
-- `study_kind` queda marcado como declaración del operador;
-- TP/FN y FP/TN conservan sus unidades en lugar de alimentar una accuracy
-  engañosa;
-- cualquier comparación futura debe usar un protocolo preregistrado, mismas
-  capacidades, misma población, intervalos de incertidumbre y limitaciones;
-- ningún resultado habilita claims de superioridad o production readiness.
+- Import verifies schemas and hashes but does not rerun the experiment.
+- `study_kind` remains an operator declaration.
+- TP/FN and FP/TN retain their distinct units instead of feeding a misleading
+  accuracy number.
+- Any future comparison requires a preregistered protocol, equal capabilities,
+  the same population, uncertainty intervals, and stated limitations.
+- No result enables superiority or production-readiness claims.

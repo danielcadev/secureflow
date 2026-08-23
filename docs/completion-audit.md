@@ -1,121 +1,120 @@
-# Auditoría de cumplimiento del MVP
+# MVP completion audit
 
-Estado observado: 23 de agosto de 2026.
+Observed state: August 23, 2026.
 
-Esta matriz separa funcionalidad demostrable, evidencia y trabajo posterior. Un
-check técnico no constituye una afirmación de que SecureFlow encuentre todas
-las vulnerabilidades ni de que supere a un investigador humano.
+This matrix separates demonstrable functionality, evidence, and later work. A
+technical check is not a claim that SecureFlow finds every vulnerability or
+outperforms a human researcher.
 
-## Goal largo: requisito contra evidencia
+## Extended goal: requirements against evidence
 
-| Requisito | Evidencia actual | Estado y límite |
+| Requirement | Current evidence | Status and limitation |
 | --- | --- | --- |
-| Workspace Rust independiente | Nueve packages bajo `crates/`; los repositorios fuente se consumen por procesos o contratos | Cumplido para el MVP; no hay copia física de los proyectos originales |
-| Análisis determinista autorizado | `secureflow scan` exige `--authorized`, ejecuta un binario explícito sin shell y valida `secure-json-v1` | Cumplido para targets locales; la identidad y la autorización son declaraciones del operador, no firmas verificables |
-| Provenance estable | Hashes SHA-256 de target, binario, configuración y reporte; fingerprint de árbol con dominio/longitudes; target y binario se comprueban antes y después del proceso | Cumplido con límites fail-closed; no es un snapshot transaccional y un cambio que se revierta entre ambas mediciones podría no observarse |
-| Boundary de proceso | Entorno limpio, stdin nulo, stdout/stderr separados y acotados, timeout 1–3.600 s ajustado a expiración, binario máximo 1 GiB, process group, rlimits Linux y Bubblewrap requerido por defecto | Cumplido para el MVP Linux; Bubblewrap aporta root de sólo lectura y namespace de red privado, pero no reemplaza una VM ni protege frente a un kernel comprometido |
-| Contrato canónico estricto | `secureflow-run-v1`, structs con rechazo de campos desconocidos y validación semántica | Cumplido; Secure Engine conserva la propiedad de su contrato externo |
-| Priorización y deduplicación | Orden determinista y deduplicación exacta por fingerprint, regla y ubicaciones | Cumplido para una ejecución/un engine; no hay reconciliación semántica entre engines |
-| Flujo humano | `list-findings`, `show-finding`, `review-run`, decisión `abstained` e informe Markdown | Cumplido; sólo la decisión humana puede marcar `validated` |
-| Inmutabilidad de entradas | Los comandos derivados rechazan salida igual a una entrada, incluidos hardlinks en Unix; `scan` rechaza outputs dentro del target; nuevos artefactos usan `0600` y directorios del ledger `0700` | Cumplido con pruebas; sigue existiendo una ventana TOCTOU local entre comprobación y escritura |
-| Knowledge base local | JSONL v2 para decisiones humanas y catálogo SQLite v3 separado para advisories, revisiones, alias, paquetes, snapshots/deltas y FTS5 | Cumplido como infraestructura local; el piloto trazable aceptó 229.644 registros reales y puso 347 en cuarentena, sin convertirlos en validaciones humanas |
-| Decisión JSONL/SQLite basada en números | JSONL medido hasta 10k; SQLite medido en NVMe/Btrfs con 100k, 500k y 1M registros sintéticos | JSONL queda para el ledger pequeño; SQLite demostró 1M source records/900k entidades en 104,736 s y 2,07 GB, sin extrapolar a records reales |
-| Secure Skill | Import estricto de `review-contract` 1.1, commit/hashes/licencia y envelope separado; si existe `.git`, el commit debe coincidir con `HEAD` | Cumplido como adapter; un snapshot sin `.git` conserva hashes pero su revisión es declarada por el operador; no convierte `verified` upstream en validación SecureFlow |
-| Secure Bench | Import de `result-v2`, fingerprints de suite/run, verificación opcional de `HEAD`, TP/FN y FP/TN separados, claims bloqueados, protocolo prospectivo y preflight de artefactos | Cumplido como infraestructura evaluativa; el corpus Phase 1 es sintético y conocido y todavía no existe holdout/cohorte/estudio real |
-| Correlación conservadora | Enlace exacto finding-paquete-versión-advisory con hashes de run, catálogo, snapshots/deltas y canonicalización | V2 evalúa listas exactas y SEMVER, preserva unknown y no afirma causalidad; el contexto de paquete lo declara el operador |
-| Actualización incremental | `modified_id.csv` per-ecosystem, índice/payloads/licencias hasheados, cadena lineal, replay, recovery y `withdrawn` explícito | Cumplido con fixtures y replay real solapado de 7 RUSTSEC; la ausencia nunca borra y no hubo cambios nuevos posteriores al snapshot |
-| Recon/API Exposure | `secureflow-web`: scope con expiración, inventario Next.js, inferencia local OpenAPI/manifests/GraphQL/tRPC, matriz de controles, JSON/SARIF y corpus de 24 casos | Cumplido para la vertical offline; no existe scanner remoto, DNS/CT, crawling ni autorización de red automatizada |
-| Orquestación fail-closed | State machine de siete fases, artefactos retenidos por hash, abstención y siguiente acción derivada | Cumplido como plan local; no ejecuta red, IA ni revisión humana automáticamente |
-| Backups operativos | SQLite Online Backup API, manifiesto hasheado, `quick_check`, claves foráneas, creación sin overwrite y restore a destino nuevo | Cumplido con round-trip y concurrencia en pruebas; falta una política externa de retención, cifrado y recuperación ante desastre |
-| IA local-first | Preparación redacted desactivada por defecto, consentimiento, presupuesto, Luna por defecto, modelo/prompt/tokens y respuesta advisory | Cumplido como contrato offline; no hay cliente de red ni medición de calidad/coste real de un proveedor |
-| Evidencia para CV/paper | Demo, evaluación separada, schemas, ADRs y matriz de claims permitidos/prohibidos | Cumplido para describir un prototipo de ingeniería; no respalda superioridad, production readiness ni eficacia general |
-| Preservación de originales | Demo y evaluación escriben bajo `/tmp`; verificación Git posterior | Cumplido en esta sesión: los repositorios fuente permanecieron fuera de SecureFlow y no se alteraron cambios preexistentes en otros worktrees |
-| Publicación reproducible | Repositorio público `danielcadev/secureflow`, Rust 1.92 fijado, CI con acciones por commit, fmt/clippy/test/audit/build, SBOM CycloneDX determinista y bundle hasheado desde Git limpio | CI remoto aprobado; la release `v0.1.0` usa un tag anotado y checksums, pero el tag inicial no tiene firma criptográfica |
+| Independent Rust workspace | Nine packages under `crates/`; source repositories are consumed through processes or contracts | Complete for the MVP; the original projects were not physically copied |
+| Authorized deterministic analysis | `secureflow scan` requires `--authorized`, runs an explicit binary without a shell, and validates `secure-json-v1` | Complete for local targets; identity and authorization are operator declarations, not verifiable signatures |
+| Stable provenance | SHA-256 of target, binary, configuration, and report; domain- and length-prefixed tree fingerprint; target and binary checked before and after execution | Complete with fail-closed limits; not a transactional snapshot, so a change reverted between measurements might escape observation |
+| Process boundary | Clean environment, null stdin, separate bounded stdout/stderr, 1–3,600 s timeout capped by authorization expiry, 1 GiB binary maximum, process group, Linux rlimits, and Bubblewrap required by default | Complete for the Linux MVP; Bubblewrap provides a read-only host root and private network namespace, but does not replace a VM or protect against a compromised kernel |
+| Strict canonical contract | `secureflow-run-v1`, structs that reject unknown fields, and semantic validation | Complete; Secure Engine retains ownership of its external contract |
+| Prioritization and deduplication | Deterministic ordering and exact deduplication by fingerprint, rule, and locations | Complete for one execution/engine; no semantic reconciliation across engines |
+| Human workflow | `list-findings`, `show-finding`, `review-run`, an `abstained` decision, and a Markdown report | Complete; only a human decision can mark a finding `validated` |
+| Input immutability | Derived commands reject output identical to an input, including Unix hardlinks; `scan` rejects outputs inside the target; new artifacts use `0600` and ledger directories use `0700` | Complete with tests; a local TOCTOU window remains between checking and writing |
+| Local knowledge base | JSONL v2 for human decisions and a separate SQLite v3 catalog for advisories, revisions, aliases, packages, snapshots/deltas, and FTS5 | Complete as local infrastructure; the traceable pilot accepted 229,644 real records and quarantined 347 without converting them into human validations |
+| Evidence-based JSONL/SQLite choice | JSONL measured through 10k; SQLite measured on NVMe/Btrfs with 100k, 500k, and 1M synthetic records | JSONL remains for the small ledger; SQLite demonstrated 1M source records/900k entities in 104.736 s and 2.07 GB, without extrapolating to real records |
+| Secure Skill | Strict `review-contract` 1.1 import with commit/hashes/license and a separate envelope; when `.git` exists, the commit must match `HEAD` | Complete as an adapter; a snapshot without `.git` retains hashes but its revision is operator-declared; upstream `verified` is not SecureFlow validation |
+| Secure Bench | `result-v2` import, suite/run fingerprints, optional `HEAD` verification, separated TP/FN and FP/TN, blocked claims, prospective protocol, and artifact preflight | Complete as evaluation infrastructure; the Phase 1 corpus is synthetic and known, and no real holdout/cohort/study exists yet |
+| Conservative correlation | Exact finding-package-version-advisory link with run, catalog, snapshot/delta, and canonicalization hashes | V2 evaluates exact lists and `SEMVER`, preserves unknowns, and asserts no causality; package context is operator-declared |
+| Incremental updates | Per-ecosystem `modified_id.csv`, hashed index/payloads/licenses, linear chain, replay, recovery, and explicit `withdrawn` | Complete with fixtures and a real overlapping replay of 7 RUSTSEC records; absence never deletes, and there were no new post-snapshot changes |
+| Recon/API Exposure | `secureflow-web`: expiring scope, Next.js inventory, local OpenAPI/manifest/GraphQL/tRPC inference, control matrix, JSON/SARIF, and a 24-case corpus | Complete for the offline vertical; no remote scanner, DNS/CT, crawling, or automated network authorization exists |
+| Fail-closed orchestration | Seven-phase state machine, artifacts retained by hash, abstention, and derived next action | Complete as a local plan; it does not automatically execute network activity, AI, or human review |
+| Operational backups | SQLite Online Backup API, hashed manifest, `quick_check`, foreign keys, no-overwrite creation, and restore to a new destination | Complete with round-trip and concurrency tests; external retention, encryption, and disaster-recovery policies are missing |
+| Local-first AI | Redacted preparation disabled by default, consent, budget, Luna default, model/prompt/token accounting, and advisory response | Complete as an offline contract; no network client or real provider quality/cost measurement exists |
+| CV/paper evidence | Demo, separate evaluation, schemas, ADRs, and a matrix of allowed/prohibited claims | Complete for describing an engineering prototype; does not support superiority, production readiness, or general effectiveness |
+| Preservation of originals | Demo and evaluation write under `/tmp`; subsequent Git verification | Complete in this work: source repositories remained outside SecureFlow, and pre-existing changes in other worktrees were not modified |
+| Reproducible publication | Public `danielcadev/secureflow` repository, pinned Rust 1.92, commit-pinned CI actions, fmt/clippy/test/audit/build, deterministic CycloneDX SBOM, and a hashed bundle from clean Git | Remote CI passed; release `v0.1.0` uses an annotated tag and checksums, but the initial tag has no cryptographic signature |
 
-## Evidencia ejecutada
+## Executed evidence
 
-- `cargo +1.92.0 fmt --all -- --check`: aprobado.
-- `cargo +1.92.0 clippy --workspace --all-targets --locked -- -D
-  warnings`: aprobado.
-- `cargo +1.92.0 test --workspace --locked`: 138 pruebas aprobadas,
-  0 fallos.
-- `cargo +1.92.0 audit`: lockfile revisado contra 1.225 advisories,
-  sin vulnerabilidades reportadas.
-- `scripts/demo-local.sh`: 6 candidatos deterministas, todos `pending`; request
-  Luna de 899 bytes de payload, `transmitted=false`; importaciones de Secure
-  Skill y del benchmark histórico válidas. El catálogo sintético importó 2
-  registros de origen como 1 entidad canónica,
-  pasó `quick_check` y no tuvo violaciones de claves foráneas. Artefactos de
-  esta ejecución quedaron en un directorio temporal privado y no se publican.
-- `scripts/eval-local.sh`: 14 casos sintéticos, 0 TP, 7 FN, 2 FP, 5 TN, 0
-  fallos operativos y 70 ms agregados. Sus artefactos quedaron en un directorio
-  temporal privado y no se publican.
-- El SHA-256 del reporte raw de la demo coincide con el hash registrado en el
-  manifiesto; los timestamps de creación y finalización delimitan la ejecución.
-- Dos demos consecutivos conservaron exactamente el target hash, el orden y el
-  contenido de los seis findings canónicos. El raw report cambió únicamente en
-  timestamps y duraciones del engine, por lo que no se afirma identidad byte a
-  byte de telemetría volátil.
-- La auditoría de dependencias debe repetirse después de cualquier cambio al
-  lockfile.
-- Los scripts fijan `umask 077`; los artefactos nuevos de demo/evaluación no
-  deben conceder permisos a grupo u otros usuarios locales.
-- `catalog_bench` en NVMe/Btrfs: 100k/500k/1M source records sintéticos; el
-  millón produjo 900k entidades canónicas, 2.072.891.392 bytes, 104.736,081 ms
-  de carga total, lookup exacto de 66,451 μs, FTS worst-case de 843,406 ms y
-  paquete exacto de 450,295 μs. CSV retenido en
+- `cargo +1.92.0 fmt --all -- --check`: passed.
+- `cargo +1.92.0 clippy --workspace --all-targets --locked -- -D warnings`:
+  passed.
+- `cargo +1.92.0 test --workspace --locked`: 138 tests passed, 0 failed.
+- `cargo +1.92.0 audit`: lockfile checked against 1,225 advisories with no
+  reported vulnerabilities.
+- `scripts/demo-local.sh`: 6 deterministic candidates, all `pending`; a Luna
+  request with an 899-byte payload and `transmitted=false`; valid Secure Skill
+  and historical benchmark imports. The synthetic catalog imported 2 source
+  records as 1 canonical entity, passed `quick_check`, and had no foreign-key
+  violations. Artifacts from this execution remained in a private temporary
+  directory and are not published.
+- `scripts/eval-local.sh`: 14 synthetic cases, 0 TP, 7 FN, 2 FP, 5 TN, 0
+  operational failures, and 70 ms aggregate duration. Its artifacts remained
+  in a private temporary directory and are not published.
+- The raw demo report's SHA-256 matches the hash in the manifest; creation and
+  completion timestamps bound the execution.
+- Two consecutive demos retained exactly the same target hash, ordering, and
+  content for the six canonical findings. The raw report changed only in
+  engine timestamps and durations, so byte-for-byte identity is not claimed
+  for volatile telemetry.
+- The dependency audit must be repeated after any lockfile change.
+- Scripts set `umask 077`; new demo/evaluation artifacts must not grant group
+  or other local-user permissions.
+- `catalog_bench` on NVMe/Btrfs: 100k/500k/1M synthetic source records; 1M
+  produced 900k canonical entities, 2,072,891,392 bytes, 104,736.081 ms total
+  load time, 66.451 μs exact lookup, 843.406 ms worst-case FTS, and 450.295 μs
+  exact package lookup. The CSV is retained at
   `docs/evidence/catalog-benchmark-2026-08-23.csv`.
-- El piloto real aceptó 2.730 registros crates.io, 55 de GitHub Actions y
-  226.859 de npm; 347 entradas quedaron en cuarentena. El catálogo resultante
-  tiene 229.644 registros fuente activos, 228.674 componentes por aliases
-  exactos, `quick_check=ok` y cero violaciones de claves foráneas. La evidencia
-  hasheada está en `docs/evidence/real-advisory-pilot-2026-08-23.json`.
-- Dos ejecuciones del generador de SBOM produjeron el mismo SHA-256. Esto mide
-  determinismo del inventario para un `Cargo.lock`, no reproducibilidad binaria
-  entre hosts.
-- El backup online del catálogo real de 1,20 GB terminó en 45,96 s, fue creado
-  con modo `0600` y revalidó hash, `quick_check` y claves foráneas. El restore
-  completo a esa escala no se ejecutó; el round-trip está cubierto por fixture.
-- Una copia del catálogo real migró v2→v3 en 1,10 s, conservó todos los conteos
-  y pasó integridad. El backup v2 original siguió verificando read-only. Un
-  backup v3 de 1,20 GB tardó 49,96 s y su verificación 31,12 s.
-- El índice oficial crates.io no contenía cambios posteriores al snapshot. Una
-  ventana solapada de 7 RUSTSEC se preparó sin cuarentena y se aplicó a la copia
-  real como 7 unchanged/0 inserted/0 updated; primera aplicación 3,99 s y
-  replay 0,99 s, con FTS ready e integridad aprobada.
-- SecureFlow Web inventarió 6/6 rutas del fixture sintético y obtuvo 24/24
-  aserciones de desarrollo, sin red ni ejecución del target. Los artefactos
-  retenidos bloquean expresamente claims de holdout, superioridad y seguridad
-  de producción: `docs/evidence/web-route-lab-2026-08-23.json` y
+- The real pilot accepted 2,730 crates.io, 55 GitHub Actions, and 226,859 npm
+  records; 347 entries were quarantined. The resulting catalog has 229,644
+  active source records, 228,674 components through exact aliases,
+  `quick_check=ok`, and zero foreign-key violations. Hashed evidence is in
+  `docs/evidence/real-advisory-pilot-2026-08-23.json`.
+- Two SBOM generator executions produced the same SHA-256. This measures
+  inventory determinism for one `Cargo.lock`, not cross-host binary
+  reproducibility.
+- The online backup of the real 1.20 GB catalog completed in 45.96 seconds,
+  used mode `0600`, and revalidated its hash, `quick_check`, and foreign keys.
+  A full restore at this scale was not executed; a fixture covers round-trip.
+- A copy of the real catalog migrated from v2 to v3 in 1.10 seconds, retained
+  every count, and passed integrity checks. The original v2 backup continued
+  to verify read-only. A 1.20 GB v3 backup took 49.96 seconds, and its
+  verification took 31.12 seconds.
+- The official crates.io index contained no post-snapshot changes. An
+  overlapping window of 7 RUSTSEC records was prepared without quarantine and
+  applied to the real copy as 7 unchanged/0 inserted/0 updated; initial
+  application took 3.99 seconds and replay 0.99 seconds, with FTS ready and
+  integrity checks passing.
+- SecureFlow Web inventoried 6/6 routes in the synthetic fixture and passed
+  24/24 development assertions without network or target execution. Retained
+  artifacts expressly block holdout, superiority, and production-safety
+  claims: `docs/evidence/web-route-lab-2026-08-23.json` and
   `docs/evidence/web-development-corpus-2026-08-23.json`.
 
-Los paths bajo `/tmp` y los pilotos ignorados bajo `target/` son evidencia local
-retenida de la sesión, no artefactos publicables permanentes. Una release debe
-producir un bundle versionado y hasheado desde un commit limpio.
+Paths under `/tmp` and ignored pilots under `target/` are retained local session
+evidence, not permanent publishable artifacts. A release must produce a
+versioned, hashed bundle from a clean commit.
 
-## Pendientes posteriores a la publicación del MVP
+## Work after MVP publication
 
-1. Añadir firma criptográfica y procedencia verificable más fuerte a releases
-   futuras; `v0.1.0` conserva checksums y SBOM, pero su tag inicial no está
-   firmado.
-2. Corpus prospectivo congelado con controles, anti-leakage, protocolo de
-   adjudicación y comparadores bajo capacidades equivalentes.
-3. Cohorte humana y evaluación ciega antes de cualquier claim de superar a
-   personas en una tarea estrecha.
-4. Si se habilita IA real: transporte auditado, política de proveedor,
-   residencia/retención de datos, coste y calidad medidos por finding.
+1. Add cryptographic signatures and stronger verifiable provenance to future
+   releases. `v0.1.0` retains checksums and an SBOM, but its initial tag is
+   unsigned.
+2. Freeze a prospective corpus with controls, anti-leakage measures,
+   adjudication protocol, and comparators under equivalent capabilities.
+3. Run a human cohort and blind evaluation before claiming to outperform
+   people on a narrow task.
+4. If real AI is enabled, add audited transport, provider policy, data
+   residency/retention, and measured cost and quality per finding.
 
-## Qué no se construye todavía
+## What is deliberately not being built yet
 
-- descarga o ingestión indiscriminada de CVE/NVD/OSV: los snapshots actuales
-  exigen adquisición separada, revisión inmutable, política, licencia y
-  cuarentena;
-- presentar capacidad sintética como una base global de vulnerabilidades reales;
-- embeddings para todos los advisories o deduplicación IA sin labels;
-- explotación, active scanning o parches autónomos;
-- recon remoto, crawling o checks HTTP fuera de fixtures loopback antes de
-  aprobar el contrato de autorización/allowlist;
-- dashboard web o sistema distribuido;
-- deduplicación semántica sin corpus etiquetado;
-- ranking comercial o claims de superioridad;
-- sandbox parcial presentado como aislamiento completo.
+- Indiscriminate CVE/NVD/OSV download or ingestion. Current snapshots require
+  separate acquisition, immutable revision, policy, license, and quarantine.
+- Presenting synthetic capacity as a global database of real vulnerabilities.
+- Embeddings for every advisory or AI deduplication without labels.
+- Exploitation, active scanning, or autonomous patching.
+- Remote recon, crawling, or HTTP checks outside loopback fixtures before the
+  authorization/allowlist contract is approved.
+- A web dashboard or distributed system.
+- Semantic deduplication without a labeled corpus.
+- Commercial rankings or superiority claims.
+- Presenting a partial sandbox as complete isolation.

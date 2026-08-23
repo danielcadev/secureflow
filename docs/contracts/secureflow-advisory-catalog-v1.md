@@ -1,110 +1,110 @@
 # SecureFlow advisory catalog v1
 
-## Propósito
+## Purpose
 
-Este contrato describe el catálogo SQLite local de registros públicos de
-vulnerabilidades. No reemplaza el ledger JSONL de decisiones humanas: ambos
-almacenes tienen autoridades y ciclos de vida distintos.
+This contract describes the local SQLite catalog of public vulnerability
+records. It does not replace the JSONL human-decision ledger; the two stores
+have different authorities and lifecycles.
 
-- el catálogo guarda advisories externos, versiones de origen y relaciones;
-- el ledger guarda observaciones de SecureFlow que ya recibieron una decisión
-  humana;
-- ningún advisory externo ni coincidencia del catálogo valida un finding.
+- The catalog stores external advisories, source revisions, and relationships.
+- The ledger stores SecureFlow observations that already received a human
+  decision.
+- Neither an external advisory nor a catalog match validates a finding.
 
-## Identidad física
+## Physical identity
 
-- `PRAGMA application_id = 0x53464b42`;
-- `PRAGMA user_version = 3` para escritura; v2 sigue verificándose read-only y
-  migra transaccionalmente en la primera apertura writable;
-- SQLite incluido mediante `rusqlite`, con WAL, claves foráneas y
-  `trusted_schema=OFF`;
-- archivo `0600` y directorios nuevos `0700` en Unix;
-- los paths de base que sean symlinks se rechazan;
-- una base SQLite ajena no se adopta ni modifica como catálogo SecureFlow.
+- `PRAGMA application_id = 0x53464b42`.
+- `PRAGMA user_version = 3` for writes; v2 remains verifiable read-only and is
+  migrated transactionally on the first writable open.
+- SQLite is bundled through `rusqlite`, with WAL, foreign keys, and
+  `trusted_schema=OFF`.
+- Files use mode `0600` and new directories use `0700` on Unix.
+- Database paths that are symlinks are rejected.
+- An unrelated SQLite database is never adopted or modified as a SecureFlow
+  catalog.
 
-## Entidades
+## Entities
 
-| Tabla | Función |
+| Table | Purpose |
 | --- | --- |
-| `sources` | nombre estable, expresión SPDX declarada, hash de evidencia y locator |
-| `source_record_revisions` | JSON exacto, hash, fecha upstream e instante de importación |
-| `source_records` | vista normalizada vigente de cada ID en cada fuente |
-| `canonical_vulnerabilities` | identidad interna para un componente de alias exactos |
-| `canonical_redirects` | continuidad cuando dos componentes se fusionan |
-| `identifiers` | CVE, GHSA, RUSTSEC, OSV u otros IDs exactos |
-| `identifier_relationships` | `primary`, `alias`, `upstream` o `related` con provenance |
-| `affected_packages` | ecosistema, paquete, PURL y rangos/versiones sin expandirlos por versión |
-| `advisory_references` | referencias tipadas del registro de origen |
-| `source_record_fts` | índice FTS5 local de título y detalles |
-| `advisory_snapshots`, `snapshot_records`, `source_snapshot_imports` | fotos completas, presencia y bajas por ausencia comprobada |
-| `advisory_deltas`, `delta_records`, `source_delta_imports` | cadena incremental, replay y conteos por fuente |
+| `sources` | stable name, declared SPDX expression, evidence hash, and locator |
+| `source_record_revisions` | exact JSON, hash, upstream date, and import time |
+| `source_records` | current normalized view of each identifier per source |
+| `canonical_vulnerabilities` | internal identity for an exact-alias component |
+| `canonical_redirects` | continuity when two components merge |
+| `identifiers` | exact CVE, GHSA, RUSTSEC, OSV, or other identifiers |
+| `identifier_relationships` | `primary`, `alias`, `upstream`, or `related` with provenance |
+| `affected_packages` | ecosystem, package, PURL, and unexpanded ranges or versions |
+| `advisory_references` | typed references from the source record |
+| `source_record_fts` | local FTS5 index for title and details |
+| `advisory_snapshots`, `snapshot_records`, `source_snapshot_imports` | complete snapshots, presence, and deactivation from proven absence |
+| `advisory_deltas`, `delta_records`, `source_delta_imports` | incremental chain, replay, and per-source counts |
 
-## Reglas de canonicalización
+## Canonicalization rules
 
-1. El ID primario y los elementos de `aliases` forman aristas de equivalencia.
-2. La clausura es simétrica y transitiva, de acuerdo con la semántica OSV.
-3. `upstream` y `related` se conservan, pero nunca fusionan entidades.
-4. Toda fusión conserva un redirect del ID canónico anterior.
-5. No se usa similitud textual ni IA para fusionar registros.
-6. Una corrección upstream que elimine un alias requiere
-   `catalog-rebuild-canonicalization`; el rebuild desde records activos puede
-   dividir componentes y conserva redirects sólo cuando no son ambiguos.
+1. The primary identifier and `aliases` form equivalence edges.
+2. Closure is symmetric and transitive, matching OSV semantics.
+3. `upstream` and `related` links are retained but never merge entities.
+4. Every merge preserves a redirect from the previous canonical identifier.
+5. Text similarity and AI are never used to merge records.
+6. An upstream correction that removes an alias requires
+   `catalog-rebuild-canonicalization`; rebuilding from active records can split
+   components and keeps redirects only when unambiguous.
 
-## Ingestión
+## Ingestion
 
-El CLI acepta un archivo OSV JSON o un árbol local de archivos `.json`. Cada
-feed requiere:
+The CLI accepts one OSV JSON file or a local tree of `.json` files. Every feed
+requires:
 
 - `source_name`;
 - `source_license_expression`;
-- un artefacto local de licencia/términos cuyo SHA-256 se registra;
-- `source_locator` estable.
+- a local license or terms artifact whose SHA-256 is recorded;
+- a stable `source_locator`.
 
-La definición de una fuente es inmutable dentro de una base. Cambiar licencia,
-evidencia o locator requiere registrar otra fuente o una migración explícita.
-Los archivos de entrada nunca se modifican.
+A source definition is immutable within a database. Changing the license,
+evidence, or locator requires a new source or an explicit migration. Input
+files are never modified.
 
-Límites actuales:
+Current limits:
 
-- 4 MiB por registro OSV;
-- 1.100.000 archivos por invocación CLI;
-- 1.024 relaciones de identificadores por registro;
-- 4.096 paquetes afectados y 4.096 referencias por registro;
-- 100.000 versiones enumeradas por entrada afectada;
-- profundidad de directorio de entrada máxima de 64;
-- lotes máximos de 50.000 registros o 64 MiB.
+- 4 MiB per OSV record;
+- 1,100,000 files per CLI invocation;
+- 1,024 identifier relationships per record;
+- 4,096 affected packages and 4,096 references per record;
+- 100,000 enumerated versions per affected entry;
+- maximum input directory depth of 64;
+- batches capped at 50,000 records or 64 MiB.
 
-En carga masiva, FTS queda marcado `dirty` mientras se normalizan los lotes. La
-búsqueda textual falla cerrada hasta completar `rebuild_search_index`; búsquedas
-exactas y por paquete no dependen de FTS. `catalog-rebuild-index` permite
-recuperar una importación interrumpida. Los deltas mantienen FTS por fila en la
-misma transacción de cada lote y no reconstruyen el índice completo. Si un
-delta queda `preparing`, todas las consultas de advisories y procedencia fallan
-cerradas hasta reanudar el manifest exacto o restaurar un backup verificado;
-`catalog-stats` y `catalog-check` permanecen disponibles para diagnóstico.
+During bulk loading, FTS is marked `dirty` while batches are normalized. Text
+search fails closed until `rebuild_search_index` completes; exact identifier
+and package queries do not depend on FTS. `catalog-rebuild-index` recovers an
+interrupted import. Deltas maintain FTS row-by-row in the same transaction as
+each batch and do not rebuild the complete index. If a delta remains
+`preparing`, all advisory and provenance queries fail closed until the exact
+manifest resumes or a verified backup is restored. `catalog-stats` and
+`catalog-check` remain available for diagnosis.
 
-## Consultas
+## Queries
 
-- `catalog-lookup`: identificador exacto;
-- `catalog-search`: frase literal sobre título/detalles mediante FTS5;
-- `catalog-package`: ecosistema y nombre exactos;
-- `correlate-package --version`: evaluación exacta/SEMVER conservadora con
-  estados affected/not-affected/unknown/not-evaluated;
-- `catalog-stats`: conteos lógicos y tamaño físico;
-- `catalog-check`: `quick_check`, claves foráneas y estado FTS.
+- `catalog-lookup`: exact identifier;
+- `catalog-search`: literal phrase over title and details through FTS5;
+- `catalog-package`: exact ecosystem and package name;
+- `correlate-package --version`: conservative exact/SEMVER evaluation with
+  affected, not-affected, unknown, and not-evaluated states;
+- `catalog-stats`: logical counts and physical size;
+- `catalog-check`: `quick_check`, foreign keys, and FTS state.
 
-Toda salida declara `validation_authority=human-only`. Una coincidencia sólo es
-contexto para priorizar o investigar.
+Every output declares `validation_authority=human-only`. A match is context for
+prioritization or investigation only.
 
-## Compatibilidad OSV
+## OSV compatibility
 
-El parser consume los campos necesarios y tolera campos adicionales para
-mantener compatibilidad hacia adelante. Los rangos y versiones se conservan
-como JSON acotado; no se expande cada versión a una fila. Correlación v2
-interpreta sólo listas exactas y rangos `SEMVER` válidos; `GIT`, `ECOSYSTEM` o
-datos ambiguos producen `unknown`.
+The parser consumes required fields and tolerates additional fields for forward
+compatibility. Ranges and versions remain bounded JSON; individual versions are
+not expanded into rows. Correlation v2 interprets only exact lists and valid
+`SEMVER` ranges; `GIT`, `ECOSYSTEM`, or ambiguous data produces `unknown`.
 
-El formato no descarga fuentes ni infiere su licencia. Snapshots y deltas
-verifican términos, conteos, hashes y rechazos. La ausencia en
-`modified_id.csv` nunca borra; consulte
+The format neither downloads sources nor infers their licenses. Snapshots and
+deltas verify terms, counts, hashes, and rejections. Absence from
+`modified_id.csv` never deletes a record; see
 [`secureflow-advisory-delta-v1`](./secureflow-advisory-delta-v1.md).
