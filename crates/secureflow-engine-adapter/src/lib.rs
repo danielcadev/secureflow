@@ -965,6 +965,31 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn required_bubblewrap_is_read_only_and_uses_a_private_network_namespace() {
+        let bubblewrap_available = Command::new(BUBBLEWRAP_PATH)
+            .args([
+                "--die-with-parent",
+                "--new-session",
+                "--unshare-all",
+                "--ro-bind",
+                "/",
+                "/",
+                "--proc",
+                "/proc",
+                "--dev",
+                "/dev",
+                "--clearenv",
+                "--",
+                "/bin/true",
+            ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .is_ok_and(|status| status.success());
+        if !bubblewrap_available {
+            eprintln!("skipping Bubblewrap runtime test: user namespaces are unavailable");
+            return;
+        }
         let target = std::env::temp_dir().join(format!(
             "secureflow-sandbox-target-{}-{}",
             std::process::id(),

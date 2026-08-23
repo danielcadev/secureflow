@@ -1302,6 +1302,9 @@ fn scan_records_explicit_authorization_and_target_revision() {
         .args(["--authorization-expires-at", "2099-01-01T00:00:00Z"])
         .args(["--target-revision-kind", "git"])
         .args(["--target-revision", revision])
+        // This test covers authorization/revision provenance. Bubblewrap's
+        // runtime availability is exercised separately by the adapter test.
+        .args(["--sandbox", "disabled"])
         .args(["--output"])
         .arg(&report)
         .args(["--manifest-output"])
