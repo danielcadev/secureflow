@@ -14,7 +14,8 @@ almacenes tienen autoridades y ciclos de vida distintos.
 ## Identidad física
 
 - `PRAGMA application_id = 0x53464b42`;
-- `PRAGMA user_version = 1`;
+- `PRAGMA user_version = 3` para escritura; v2 sigue verificándose read-only y
+  migra transaccionalmente en la primera apertura writable;
 - SQLite incluido mediante `rusqlite`, con WAL, claves foráneas y
   `trusted_schema=OFF`;
 - archivo `0600` y directorios nuevos `0700` en Unix;
@@ -35,6 +36,8 @@ almacenes tienen autoridades y ciclos de vida distintos.
 | `affected_packages` | ecosistema, paquete, PURL y rangos/versiones sin expandirlos por versión |
 | `advisory_references` | referencias tipadas del registro de origen |
 | `source_record_fts` | índice FTS5 local de título y detalles |
+| `advisory_snapshots`, `snapshot_records`, `source_snapshot_imports` | fotos completas, presencia y bajas por ausencia comprobada |
+| `advisory_deltas`, `delta_records`, `source_delta_imports` | cadena incremental, replay y conteos por fuente |
 
 ## Reglas de canonicalización
 
@@ -43,9 +46,9 @@ almacenes tienen autoridades y ciclos de vida distintos.
 3. `upstream` y `related` se conservan, pero nunca fusionan entidades.
 4. Toda fusión conserva un redirect del ID canónico anterior.
 5. No se usa similitud textual ni IA para fusionar registros.
-6. Una corrección upstream que elimine un alias no divide automáticamente un
-   componente ya fusionado. Hasta implementar rebuild desde snapshot, debe
-   reconstruirse una base nueva para retirar ese enlace con evidencia.
+6. Una corrección upstream que elimine un alias requiere
+   `catalog-rebuild-canonicalization`; el rebuild desde records activos puede
+   dividir componentes y conserva redirects sólo cuando no son ambiguos.
 
 ## Ingestión
 
@@ -74,13 +77,19 @@ Límites actuales:
 En carga masiva, FTS queda marcado `dirty` mientras se normalizan los lotes. La
 búsqueda textual falla cerrada hasta completar `rebuild_search_index`; búsquedas
 exactas y por paquete no dependen de FTS. `catalog-rebuild-index` permite
-recuperar una importación interrumpida.
+recuperar una importación interrumpida. Los deltas mantienen FTS por fila en la
+misma transacción de cada lote y no reconstruyen el índice completo. Si un
+delta queda `preparing`, todas las consultas de advisories y procedencia fallan
+cerradas hasta reanudar el manifest exacto o restaurar un backup verificado;
+`catalog-stats` y `catalog-check` permanecen disponibles para diagnóstico.
 
 ## Consultas
 
 - `catalog-lookup`: identificador exacto;
 - `catalog-search`: frase literal sobre título/detalles mediante FTS5;
 - `catalog-package`: ecosistema y nombre exactos;
+- `correlate-package --version`: evaluación exacta/SEMVER conservadora con
+  estados affected/not-affected/unknown/not-evaluated;
 - `catalog-stats`: conteos lógicos y tamaño físico;
 - `catalog-check`: `quick_check`, claves foráneas y estado FTS.
 
@@ -91,9 +100,11 @@ contexto para priorizar o investigar.
 
 El parser consume los campos necesarios y tolera campos adicionales para
 mantener compatibilidad hacia adelante. Los rangos y versiones se conservan
-como JSON acotado; no se expande cada versión a una fila, porque esa expansión
-inflaría almacenamiento y coste sin aportar una consulta demostrada.
+como JSON acotado; no se expande cada versión a una fila. Correlación v2
+interpreta sólo listas exactas y rangos `SEMVER` válidos; `GIT`, `ECOSYSTEM` o
+datos ambiguos producen `unknown`.
 
-El formato v1 no descarga fuentes ni infiere su licencia. Cada adaptador de
-fuente real deberá verificar términos, snapshot, conteos, rechazos y cambios
-incrementales antes de considerarse completo.
+El formato no descarga fuentes ni infiere su licencia. Snapshots y deltas
+verifican términos, conteos, hashes y rechazos. La ausencia en
+`modified_id.csv` nunca borra; consulte
+[`secureflow-advisory-delta-v1`](./secureflow-advisory-delta-v1.md).

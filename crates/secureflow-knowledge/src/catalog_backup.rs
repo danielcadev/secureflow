@@ -58,6 +58,7 @@ pub fn create_backup(
 ) -> Result<CatalogBackupManifest, BackupError> {
     source.backup_to(output)?;
     let backup = Catalog::open_existing(output)?;
+    let stats = backup.stats()?;
     let database_bytes = regular_file_size(output)?;
     let database_sha256 = hash_file(output)?;
     let manifest = CatalogBackupManifest {
@@ -67,9 +68,9 @@ pub fn create_backup(
         database_sha256,
         database_bytes,
         application_id: CATALOG_APPLICATION_ID,
-        schema_version: crate::catalog::CATALOG_SCHEMA_VERSION,
+        schema_version: stats.schema_version,
         method: "sqlite-online-backup-api".into(),
-        stats: backup.stats()?,
+        stats,
         integrity: backup.check_integrity()?,
         provenance: backup.provenance()?,
     };
@@ -127,7 +128,7 @@ impl CatalogBackupManifest {
             || self.database_bytes == 0
             || self.database_bytes > MAX_BACKUP_BYTES
             || self.application_id != CATALOG_APPLICATION_ID
-            || self.schema_version != crate::catalog::CATALOG_SCHEMA_VERSION
+            || !(2..=crate::catalog::CATALOG_SCHEMA_VERSION).contains(&self.schema_version)
             || self.stats.schema_version != self.schema_version
             || self.method != "sqlite-online-backup-api"
             || OffsetDateTime::parse(&self.created_at, &Rfc3339).is_err()

@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://secureflow.local/schemas/secureflow-advisory-delta-v1.schema.json",
+  "title": "SecureFlow reproducible OSV incremental advisory delta v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "policy_version", "delta_id", "acquired_at", "expected_ecosystem", "base_snapshot_id", "cursor", "index", "sources", "records", "quarantined", "accounting", "semantics", "validation_authority"],
+  "properties": {
+    "contract_version": { "const": "secureflow-advisory-delta-v1" },
+    "policy_version": { "const": "osv-per-ecosystem-modified-index-v1" },
+    "delta_id": { "type": "string", "pattern": "^sf_delta_[0-9a-f]{64}$" },
+    "acquired_at": { "type": "string", "format": "date-time" },
+    "expected_ecosystem": { "$ref": "#/$defs/text100" },
+    "base_snapshot_id": { "type": "string", "pattern": "^sf_snapshot_[0-9a-f]{64}$" },
+    "previous_delta_id": { "type": "string", "pattern": "^sf_delta_[0-9a-f]{64}$" },
+    "cursor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["after_modified_exclusive", "through_modified_inclusive"],
+      "properties": {
+        "after_modified_exclusive": { "type": "string", "format": "date-time" },
+        "through_modified_inclusive": { "type": "string", "format": "date-time" }
+      }
+    },
+    "index": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stored_path", "format", "scope", "locator", "revision", "sha256", "bytes"],
+      "properties": {
+        "stored_path": { "const": "index/modified_id.csv" },
+        "format": { "const": "osv-per-ecosystem-modified-id-csv" },
+        "scope": { "const": "per-ecosystem" },
+        "locator": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "revision": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "bytes": { "type": "integer", "minimum": 1, "maximum": 268435456 }
+      }
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/source" }
+    },
+    "records": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1100000,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/record" }
+    },
+    "quarantined": {
+      "type": "array",
+      "maxItems": 1100000,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/quarantine" }
+    },
+    "accounting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["index_entries", "selected_entries", "accepted_records", "quarantined_records", "withdrawn_records", "accepted_bytes", "quarantined_bytes"],
+      "properties": {
+        "index_entries": { "$ref": "#/$defs/nonnegative" },
+        "selected_entries": { "$ref": "#/$defs/nonnegative" },
+        "accepted_records": { "$ref": "#/$defs/nonnegative" },
+        "quarantined_records": { "$ref": "#/$defs/nonnegative" },
+        "withdrawn_records": { "$ref": "#/$defs/nonnegative" },
+        "accepted_bytes": { "$ref": "#/$defs/nonnegative" },
+        "quarantined_bytes": { "$ref": "#/$defs/nonnegative" }
+      }
+    },
+    "semantics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["absence_deactivates_record", "explicit_withdrawn_is_retained", "cursor_advances_only_without_quarantine", "full_snapshot_required_for_absence"],
+      "properties": {
+        "absence_deactivates_record": { "const": false },
+        "explicit_withdrawn_is_retained": { "const": true },
+        "cursor_advances_only_without_quarantine": { "const": true },
+        "full_snapshot_required_for_absence": { "const": true }
+      }
+    },
+    "validation_authority": { "const": "human-only" }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "nonnegative": { "type": "integer", "minimum": 0 },
+    "text100": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "id": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[A-Za-z0-9._:+-]+$" },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "kind", "scope", "locator", "license_expression", "license_evidence_path", "license_evidence_sha256", "record_count", "withdrawn_records"],
+      "properties": {
+        "name": { "$ref": "#/$defs/text100" },
+        "kind": { "$ref": "#/$defs/text100" },
+        "scope": { "$ref": "#/$defs/text100" },
+        "locator": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "license_expression": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "license_evidence_path": { "type": "string", "pattern": "^licenses/[A-Za-z0-9._-]+$" },
+        "license_evidence_sha256": { "$ref": "#/$defs/sha256" },
+        "record_count": { "$ref": "#/$defs/nonnegative" },
+        "withdrawn_records": { "$ref": "#/$defs/nonnegative" }
+      }
+    },
+    "record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["index_line", "index_modified", "stored_path", "source_name", "id", "modified", "withdrawn", "ecosystems", "sha256", "bytes"],
+      "properties": {
+        "index_line": { "type": "integer", "minimum": 1 },
+        "index_modified": { "type": "string", "format": "date-time" },
+        "stored_path": { "type": "string", "pattern": "^records/[A-Za-z0-9._-]+/[A-Za-z0-9._:+-]+\\.json$" },
+        "source_name": { "$ref": "#/$defs/text100" },
+        "id": { "$ref": "#/$defs/id" },
+        "modified": { "type": "string", "format": "date-time" },
+        "withdrawn": { "type": "boolean" },
+        "ecosystems": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/text100" } },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "bytes": { "type": "integer", "minimum": 1, "maximum": 4194304 }
+      }
+    },
+    "quarantine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["index_line", "index_modified", "id", "stored_path", "reason", "sha256", "bytes"],
+      "properties": {
+        "index_line": { "type": "integer", "minimum": 1 },
+        "index_modified": { "type": "string", "format": "date-time" },
+        "id": { "$ref": "#/$defs/id" },
+        "stored_path": { "type": "string", "pattern": "^quarantine/[A-Za-z0-9._:+-]+\\.json$" },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "bytes": { "type": "integer", "minimum": 1, "maximum": 4194305 }
+      }
+    }
+  }
+}

@@ -18,8 +18,9 @@
 | Deduplica IDs externos conservadoramente | unión exacta CVE/GHSA/OSV/RUSTSEC por `aliases`; `upstream`/`related` no fusionan | quitar un alias upstream exige reconstruir desde snapshot; no hay dedup semántico |
 | Conserva licencia y repeticiones exactas | knowledge v2 con estado de licencia declarado, hash de evidencia y `duplicate_of_record_id` | no valida legalmente SPDX ni deduplica semánticamente entre engines |
 | Procesa snapshots reales con cuarentena | 229.644 registros fuente activos de crates.io, GitHub Actions y npm; hashes, revisiones, licencias y 347 rechazos retenidos | son advisories/reportes de seguridad —incluidos 219.658 reportes de paquetes maliciosos—, no vulnerabilidades validadas |
-| Correlaciona sin elevar señales | lookup exacto de paquete conserva hashes de run/catálogo y declara que no evaluó versión ni causalidad | el contexto de paquete es declarado por el operador y requiere revisión humana |
-| Sella un protocolo prospectivo | contrato con holdout, etiquetas ocultas, cohorte humana, dos adjudicadores, tiempo/coste y resultados negativos | el fixture es sintético; todavía no existe ejecución prospectiva ni base para comparar con humanos |
+| Actualiza el catálogo sin inferir bajas | delta per-ecosystem encadenado, payloads exactos, replay/recovery y `withdrawn`; piloto solapado oficial de 7 RUSTSEC sobre la copia real | no hubo cambios posteriores al snapshot; el piloto prueba idempotencia, no siete advisories nuevos |
+| Correlaciona sin elevar señales | lookup exacto evalúa listas/rangos SEMVER y conserva unknown, hashes de run/catálogo y causalidad=false | el contexto de paquete es declarado por el operador y requiere revisión humana; affected no prueba exploitabilidad |
+| Sella un protocolo prospectivo | contrato con holdout, etiquetas ocultas, cohorte humana, dos adjudicadores, tiempo/coste, resultados negativos y preflight de hashes reales | el fixture es sintético; todavía no existe holdout/cohorte/ejecución ni base para comparar con humanos |
 | Genera evidencia de release | CI por commits, SBOM CycloneDX determinista y bundle local hasheado desde un commit limpio | falta firma, tag, ejecución CI remota y verificación binaria entre hosts |
 
 ## Formulación sugerida para CV

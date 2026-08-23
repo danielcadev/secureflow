@@ -113,16 +113,16 @@ pub struct SnapshotAccounting {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct SourceClass {
-    name: String,
-    kind: &'static str,
-    locator: &'static str,
-    license_expression: &'static str,
-    evidence_kind: EvidenceKind,
+pub(crate) struct SourceClass {
+    pub(crate) name: String,
+    pub(crate) kind: &'static str,
+    pub(crate) locator: &'static str,
+    pub(crate) license_expression: &'static str,
+    pub(crate) evidence_kind: EvidenceKind,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum EvidenceKind {
+pub(crate) enum EvidenceKind {
     Github,
     Rustsec,
     OpenssfMaliciousPackages,
@@ -686,7 +686,7 @@ fn collect_snapshot_files(
     Ok(())
 }
 
-fn classify_record(
+pub(crate) fn classify_record(
     bytes: &[u8],
     entry_name: &str,
     expected_ecosystem: &str,
@@ -1009,7 +1009,7 @@ fn hex_digest(bytes: &[u8]) -> String {
     value
 }
 
-fn source_slug(value: &str) -> String {
+pub(crate) fn source_slug(value: &str) -> String {
     let mut slug = String::with_capacity(value.len());
     let mut previous_dash = false;
     for character in value.chars() {

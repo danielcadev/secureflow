@@ -80,3 +80,9 @@ leakage, tiempo/coste, abstenciones y publicación de resultados negativos.
 `tests/fixtures/prospective-protocol-draft.json` prueba únicamente el contrato
 con hashes sintéticos. No es un preregistro, no contiene un corpus real y no
 autoriza todavía ningún claim de superar a humanos.
+
+`benchmark-protocol-preflight` añade el paso para un estudio real: vuelve a
+calcular los hashes del manifest público del corpus, provenance, licencias y
+entorno antes de sellar. No recibe el ground truth. La cohorte, randomización,
+captura de tiempos, apertura de labels y adjudicación siguen pendientes. Véase
+[`prospective-study-runbook.md`](./prospective-study-runbook.md).

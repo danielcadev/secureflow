@@ -35,6 +35,8 @@ foto completa y finalmente marca el snapshot `complete`. Un artefacto anterior
 queda bloqueado. Reprocesar el mismo hash/revisión/timestamp con otra política
 sí está permitido; un artefacto distinto con timestamp igual no.
 
-La actualización incremental mediante `modified_id.csv` de OSV aún no está
-implementada. Hasta probar altas, cambios, eliminaciones, retry e interrupción,
-los ZIP completos son la autoridad.
+La actualización mediante `modified_id.csv` usa ahora el contrato separado
+`secureflow-advisory-delta-v1`, con cadena al snapshot base, replay, recovery y
+`withdrawn` explícito. La ausencia en el índice nunca desactiva. Los ZIP
+completos siguen siendo la autoridad para presencia/ausencia y reconciliación
+periódica.

@@ -8,6 +8,7 @@
 use rusqlite::{
     Connection, OpenFlags, OptionalExtension, Params, Transaction, TransactionBehavior, params,
 };
+use semver::Version;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeSet, HashMap};
@@ -16,7 +17,7 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
-pub const CATALOG_SCHEMA_VERSION: u32 = 2;
+pub const CATALOG_SCHEMA_VERSION: u32 = 3;
 pub const CATALOG_APPLICATION_ID: u32 = 0x5346_4b42;
 pub const MAX_OSV_RECORD_BYTES: u64 = 4 * 1024 * 1024;
 pub const MAX_IMPORT_RECORDS: usize = 1_100_000;
@@ -71,6 +72,10 @@ pub struct CatalogStats {
     pub inactive_source_records: u64,
     pub source_record_revisions: u64,
     pub snapshots: u64,
+    #[serde(default)]
+    pub deltas: u64,
+    #[serde(default)]
+    pub complete_deltas: u64,
     pub identifiers: u64,
     pub relationships: u64,
     pub affected_packages: u64,
@@ -89,6 +94,52 @@ pub struct CatalogHit {
     pub modified_at: String,
     pub withdrawn: bool,
     pub score: Option<f64>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum VersionEvaluationStatus {
+    NotEvaluated,
+    Affected,
+    NotAffected,
+    Unknown,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum VersionEvaluationBasis {
+    NotRequested,
+    ExactEnumeratedVersion,
+    OsvSemverRange,
+    SupportedDataExcludesVersion,
+    UnsupportedOrInvalidData,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum VersionEvaluationIssue {
+    InvalidQuerySemver,
+    InvalidStoredJson,
+    InvalidSemverEvents,
+    MissingVersionData,
+    UnsupportedRangeType,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct VersionAssessment {
+    pub status: VersionEvaluationStatus,
+    pub basis: VersionEvaluationBasis,
+    pub evaluated_version: Option<String>,
+    pub matched_value: Option<String>,
+    pub affected_data_sha256: Vec<String>,
+    pub issues: Vec<VersionEvaluationIssue>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct CatalogVersionHit {
+    pub advisory: CatalogHit,
+    pub version_assessment: VersionAssessment,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -114,6 +165,8 @@ pub struct CanonicalRebuildResult {
 pub struct CatalogProvenance {
     pub schema_version: u32,
     pub complete_snapshot_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub complete_delta_ids: Vec<String>,
     pub canonicalization: String,
     pub last_canonical_rebuild_id: Option<String>,
 }
@@ -128,6 +181,23 @@ pub struct CatalogSnapshot {
     pub acquired_at: String,
     pub accepted_records: u64,
     pub quarantined_records: u64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CatalogDelta {
+    pub delta_id: String,
+    pub manifest_sha256: String,
+    pub index_sha256: String,
+    pub index_revision: String,
+    pub expected_ecosystem: String,
+    pub acquired_at: String,
+    pub after_modified: String,
+    pub through_modified: String,
+    pub base_snapshot_id: String,
+    pub previous_delta_id: Option<String>,
+    pub accepted_records: u64,
+    pub quarantined_records: u64,
+    pub withdrawn_records: u64,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -222,6 +292,35 @@ pub enum CatalogError {
     },
     #[error("catalog snapshot is incomplete: {0}")]
     SnapshotIncomplete(String),
+    #[error("catalog delta metadata conflicts with an existing delta: {0}")]
+    DeltaConflict(String),
+    #[error("catalog delta is not registered: {0}")]
+    DeltaNotRegistered(String),
+    #[error(
+        "catalog delta chain would roll back or fork {ecosystem}: latest={latest}, attempted={attempted}"
+    )]
+    DeltaRollback {
+        ecosystem: String,
+        latest: String,
+        attempted: String,
+    },
+    #[error("catalog delta is incomplete: {0}")]
+    DeltaIncomplete(String),
+    #[error(
+        "catalog has {0} delta(s) still preparing; resume the exact manifest or restore a verified backup before reading or starting unrelated work"
+    )]
+    DeltaPreparing(u64),
+    #[error("catalog delta contains {0} quarantined records and cannot advance the cursor")]
+    DeltaHasQuarantine(u64),
+    #[error(
+        "catalog delta record would roll back {source_name}/{record_id}: current={current}, attempted={attempted}"
+    )]
+    DeltaRecordRollback {
+        source_name: String,
+        record_id: String,
+        current: String,
+        attempted: String,
+    },
     #[error("canonical rebuild exceeds {kind} limit of {maximum}")]
     CanonicalRebuildTooLarge { kind: &'static str, maximum: usize },
 }
@@ -275,6 +374,7 @@ impl Catalog {
     /// link and is never overwritten. A failed or interrupted backup leaves no
     /// destination that can be mistaken for complete.
     pub fn backup_to(&self, output: &Path) -> Result<(), CatalogError> {
+        ensure_no_preparing_delta(&self.connection)?;
         if prepare_catalog_path(output, true)? {
             return Err(CatalogError::InvalidPath(
                 "backup destination already exists",
@@ -343,6 +443,7 @@ impl Catalog {
                 source,
             })?;
             let verification = Catalog::open_existing(&temporary)?;
+            ensure_no_preparing_delta(&verification.connection)?;
             let integrity = verification.check_integrity()?;
             if integrity.quick_check != "ok" || integrity.foreign_key_violations != 0 {
                 return Err(CatalogError::InvalidPath(
@@ -374,14 +475,7 @@ impl Catalog {
             verify_application_id(&connection)?;
             let version = schema_version(&connection)?;
             configure_connection(&connection, false)?;
-            if version == 1 {
-                migrate_v1_to_v2(&connection)?;
-            } else if version != i64::from(CATALOG_SCHEMA_VERSION) {
-                return Err(CatalogError::SchemaMismatch {
-                    expected: CATALOG_SCHEMA_VERSION,
-                    observed: version,
-                });
-            }
+            migrate_catalog(&connection, version)?;
         } else {
             configure_connection(&connection, false)?;
             initialize_schema(&connection)?;
@@ -401,7 +495,7 @@ impl Catalog {
             OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
         )?;
         configure_connection(&connection, true)?;
-        verify_schema(&connection)?;
+        verify_read_schema(&connection)?;
         Ok(Self {
             connection,
             path: path.to_owned(),
@@ -418,14 +512,7 @@ impl Catalog {
         verify_application_id(&connection)?;
         let version = schema_version(&connection)?;
         configure_connection(&connection, false)?;
-        if version == 1 {
-            migrate_v1_to_v2(&connection)?;
-        } else if version != i64::from(CATALOG_SCHEMA_VERSION) {
-            return Err(CatalogError::SchemaMismatch {
-                expected: CATALOG_SCHEMA_VERSION,
-                observed: version,
-            });
-        }
+        migrate_catalog(&connection, version)?;
         verify_schema(&connection)?;
         secure_file_permissions(path)?;
         Ok(Self {
@@ -451,7 +538,7 @@ impl Catalog {
         I: IntoIterator<Item = B>,
         B: AsRef<[u8]>,
     {
-        self.import_osv_batch_internal(source, None, records, true)
+        self.import_osv_batch_internal(source, None, None, records, true)
     }
 
     /// Imports records without maintaining FTS row by row. The caller must
@@ -465,10 +552,11 @@ impl Catalog {
         I: IntoIterator<Item = B>,
         B: AsRef<[u8]>,
     {
-        self.import_osv_batch_internal(source, None, records, false)
+        self.import_osv_batch_internal(source, None, None, records, false)
     }
 
     pub fn register_snapshot(&mut self, snapshot: &CatalogSnapshot) -> Result<(), CatalogError> {
+        ensure_no_preparing_delta(&self.connection)?;
         validate_snapshot_descriptor(snapshot)?;
         let imported_at = OffsetDateTime::now_utc()
             .format(&Rfc3339)
@@ -535,6 +623,97 @@ impl Catalog {
         Ok(())
     }
 
+    pub fn register_delta(&mut self, delta: &CatalogDelta) -> Result<(), CatalogError> {
+        validate_delta_descriptor(delta)?;
+        if delta.quarantined_records != 0 {
+            return Err(CatalogError::DeltaHasQuarantine(delta.quarantined_records));
+        }
+        let imported_at = OffsetDateTime::now_utc()
+            .format(&Rfc3339)
+            .map_err(|_| CatalogError::InvalidRecord("delta.imported_at"))?;
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let existing = query_row_optional_cached(
+            &transaction,
+            "SELECT manifest_sha256, index_sha256, index_revision,
+                    expected_ecosystem, acquired_at, after_modified,
+                    through_modified, base_snapshot_id, previous_delta_id,
+                    accepted_records, quarantined_records, withdrawn_records
+             FROM advisory_deltas WHERE delta_id = ?1",
+            [&delta.delta_id],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                    row.get::<_, String>(6)?,
+                    row.get::<_, String>(7)?,
+                    row.get::<_, Option<String>>(8)?,
+                    row.get::<_, i64>(9)?,
+                    row.get::<_, i64>(10)?,
+                    row.get::<_, i64>(11)?,
+                ))
+            },
+        )?;
+        if let Some(existing) = existing {
+            let expected = (
+                delta.manifest_sha256.clone(),
+                delta.index_sha256.clone(),
+                delta.index_revision.clone(),
+                delta.expected_ecosystem.clone(),
+                delta.acquired_at.clone(),
+                delta.after_modified.clone(),
+                delta.through_modified.clone(),
+                delta.base_snapshot_id.clone(),
+                delta.previous_delta_id.clone(),
+                i64::try_from(delta.accepted_records)
+                    .map_err(|_| CatalogError::InvalidRecord("delta.accepted_records"))?,
+                i64::try_from(delta.quarantined_records)
+                    .map_err(|_| CatalogError::InvalidRecord("delta.quarantined_records"))?,
+                i64::try_from(delta.withdrawn_records)
+                    .map_err(|_| CatalogError::InvalidRecord("delta.withdrawn_records"))?,
+            );
+            if existing != expected {
+                return Err(CatalogError::DeltaConflict(delta.delta_id.clone()));
+            }
+        } else {
+            execute_cached(
+                &transaction,
+                "INSERT INTO advisory_deltas(
+                     delta_id, manifest_sha256, index_sha256, index_revision,
+                     expected_ecosystem, acquired_at, after_modified,
+                     through_modified, base_snapshot_id, previous_delta_id,
+                     accepted_records, quarantined_records, withdrawn_records,
+                     status, imported_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11,
+                           ?12, ?13, 'preparing', ?14)",
+                params![
+                    delta.delta_id,
+                    delta.manifest_sha256,
+                    delta.index_sha256,
+                    delta.index_revision,
+                    delta.expected_ecosystem,
+                    delta.acquired_at,
+                    delta.after_modified,
+                    delta.through_modified,
+                    delta.base_snapshot_id,
+                    delta.previous_delta_id,
+                    delta.accepted_records as i64,
+                    delta.quarantined_records as i64,
+                    delta.withdrawn_records as i64,
+                    imported_at,
+                ],
+            )?;
+        }
+        ensure_delta_order(&transaction, &delta.delta_id)?;
+        transaction.commit()?;
+        Ok(())
+    }
+
     pub fn import_osv_snapshot_batch_deferred_search<I, B>(
         &mut self,
         source: &CatalogSource,
@@ -545,13 +724,43 @@ impl Catalog {
         I: IntoIterator<Item = B>,
         B: AsRef<[u8]>,
     {
-        self.import_osv_batch_internal(source, Some(snapshot_id), records, false)
+        self.import_osv_batch_internal(source, Some(snapshot_id), None, records, false)
+    }
+
+    pub fn import_osv_delta_batch_deferred_search<I, B>(
+        &mut self,
+        source: &CatalogSource,
+        delta_id: &str,
+        records: I,
+    ) -> Result<CatalogImportResult, CatalogError>
+    where
+        I: IntoIterator<Item = B>,
+        B: AsRef<[u8]>,
+    {
+        self.import_osv_batch_internal(source, None, Some(delta_id), records, false)
+    }
+
+    /// Applies a bounded incremental delta while keeping FTS consistent in the
+    /// same transaction. This avoids rebuilding the complete search index for
+    /// a small modified set.
+    pub fn import_osv_delta_batch<I, B>(
+        &mut self,
+        source: &CatalogSource,
+        delta_id: &str,
+        records: I,
+    ) -> Result<CatalogImportResult, CatalogError>
+    where
+        I: IntoIterator<Item = B>,
+        B: AsRef<[u8]>,
+    {
+        self.import_osv_batch_internal(source, None, Some(delta_id), records, true)
     }
 
     fn import_osv_batch_internal<I, B>(
         &mut self,
         source: &CatalogSource,
         snapshot_id: Option<&str>,
+        delta_id: Option<&str>,
         records: I,
         update_search_index: bool,
     ) -> Result<CatalogImportResult, CatalogError>
@@ -560,9 +769,17 @@ impl Catalog {
         B: AsRef<[u8]>,
     {
         validate_source(source)?;
+        if snapshot_id.is_some() && delta_id.is_some() {
+            return Err(CatalogError::InvalidRecord("import provenance"));
+        }
+        if delta_id.is_none() {
+            ensure_no_preparing_delta(&self.connection)?;
+        }
         if !update_search_index {
             self.connection
                 .pragma_update(None, "wal_autocheckpoint", 0_i64)?;
+        } else {
+            ensure_search_index_ready(&self.connection)?;
         }
         let imported_at = OffsetDateTime::now_utc()
             .format(&Rfc3339)
@@ -570,7 +787,34 @@ impl Catalog {
         let transaction = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let source_id = register_source(&transaction, source, &imported_at)?;
+        let delta_state = if let Some(delta_id) = delta_id {
+            Some(
+                query_row_optional_cached(
+                    &transaction,
+                    "SELECT status, after_modified, through_modified
+                     FROM advisory_deltas WHERE delta_id = ?1",
+                    [delta_id],
+                    |row| {
+                        Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, String>(1)?,
+                            row.get::<_, String>(2)?,
+                        ))
+                    },
+                )?
+                .ok_or_else(|| CatalogError::DeltaNotRegistered(delta_id.to_owned()))?,
+            )
+        } else {
+            None
+        };
+        let completed_replay = delta_state
+            .as_ref()
+            .is_some_and(|(status, _, _)| status == "complete");
+        let source_id = if completed_replay {
+            registered_source_id(&transaction, source)?
+        } else {
+            register_source(&transaction, source, &imported_at)?
+        };
         if let Some(snapshot_id) = snapshot_id {
             let registered = query_row_optional_cached(
                 &transaction,
@@ -591,7 +835,19 @@ impl Catalog {
                 params![snapshot_id, source_id],
             )?;
         }
-        if !update_search_index {
+        if let (Some(delta_id), Some(descriptor)) = (delta_id, delta_state.as_ref())
+            && descriptor.0 == "preparing"
+        {
+            ensure_delta_order(&transaction, delta_id)?;
+            execute_cached(
+                &transaction,
+                "INSERT OR IGNORE INTO source_delta_imports(
+                     delta_id, source_id, record_count, withdrawn_records
+                 ) VALUES (?1, ?2, 0, 0)",
+                params![delta_id, source_id],
+            )?;
+        }
+        if !update_search_index && !completed_replay {
             execute_cached(
                 &transaction,
                 "INSERT INTO catalog_metadata(key, value) VALUES ('search_index_status', 'dirty')
@@ -609,6 +865,30 @@ impl Catalog {
             let record: OsvRecord = serde_json::from_slice(bytes)?;
             validate_osv_record_public(&record)?;
             result.records_seen += 1;
+            if let (Some(delta_id), Some((status, after_modified, through_modified))) =
+                (delta_id, delta_state.as_ref())
+            {
+                if status == "complete" {
+                    verify_completed_delta_record(
+                        &transaction,
+                        source_id,
+                        delta_id,
+                        &record,
+                        bytes,
+                    )?;
+                    result.records_unchanged += 1;
+                    continue;
+                }
+                validate_delta_record_order(
+                    &transaction,
+                    source,
+                    source_id,
+                    &record,
+                    bytes,
+                    after_modified,
+                    through_modified,
+                )?;
+            }
             import_osv_record_tx(
                 &transaction,
                 source,
@@ -631,6 +911,30 @@ impl Catalog {
                     params![snapshot_id, source_id, record.id, raw_sha256],
                 )?;
             }
+            if let Some(delta_id) = delta_id {
+                let raw_sha256 = sha256(bytes);
+                let withdrawn = i64::from(record.withdrawn.is_some());
+                let existing = query_row_optional_cached(
+                    &transaction,
+                    "SELECT raw_sha256, withdrawn FROM delta_records
+                     WHERE delta_id = ?1 AND source_id = ?2 AND source_record_id = ?3",
+                    params![delta_id, source_id, record.id],
+                    |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)),
+                )?;
+                if let Some(existing) = existing {
+                    if existing != (raw_sha256, withdrawn) {
+                        return Err(CatalogError::DeltaConflict(delta_id.to_owned()));
+                    }
+                } else {
+                    execute_cached(
+                        &transaction,
+                        "INSERT INTO delta_records(
+                             delta_id, source_id, source_record_id, raw_sha256, withdrawn
+                         ) VALUES (?1, ?2, ?3, ?4, ?5)",
+                        params![delta_id, source_id, record.id, raw_sha256, withdrawn],
+                    )?;
+                }
+            }
         }
         if let Some(snapshot_id) = snapshot_id {
             execute_cached(
@@ -640,6 +944,26 @@ impl Catalog {
                      WHERE snapshot_id = ?1 AND source_id = ?2
                  ) WHERE snapshot_id = ?1 AND source_id = ?2",
                 params![snapshot_id, source_id],
+            )?;
+        }
+        if let Some(delta_id) = delta_id
+            && delta_state
+                .as_ref()
+                .is_some_and(|(status, _, _)| status == "preparing")
+        {
+            execute_cached(
+                &transaction,
+                "UPDATE source_delta_imports SET
+                     record_count = (
+                         SELECT COUNT(*) FROM delta_records
+                         WHERE delta_id = ?1 AND source_id = ?2
+                     ),
+                     withdrawn_records = (
+                         SELECT COUNT(*) FROM delta_records
+                         WHERE delta_id = ?1 AND source_id = ?2 AND withdrawn = 1
+                     )
+                 WHERE delta_id = ?1 AND source_id = ?2",
+                params![delta_id, source_id],
             )?;
         }
         transaction.commit()?;
@@ -774,7 +1098,129 @@ impl Catalog {
         Ok(())
     }
 
+    pub fn complete_delta_source(
+        &mut self,
+        source: &CatalogSource,
+        delta_id: &str,
+        expected_records: u64,
+        expected_withdrawn: u64,
+    ) -> Result<(), CatalogError> {
+        validate_source(source)?;
+        let completed_at = OffsetDateTime::now_utc()
+            .format(&Rfc3339)
+            .map_err(|_| CatalogError::InvalidRecord("delta.completed_at"))?;
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let status = query_row_optional_cached(
+            &transaction,
+            "SELECT status FROM advisory_deltas WHERE delta_id = ?1",
+            [delta_id],
+            |row| row.get::<_, String>(0),
+        )?
+        .ok_or_else(|| CatalogError::DeltaNotRegistered(delta_id.to_owned()))?;
+        if status == "preparing" {
+            ensure_delta_order(&transaction, delta_id)?;
+        }
+        let source_id = query_row_optional_cached(
+            &transaction,
+            "SELECT source_id FROM sources WHERE name = ?1",
+            [&source.name],
+            |row| row.get::<_, i64>(0),
+        )?
+        .ok_or_else(|| CatalogError::DeltaIncomplete(source.name.clone()))?;
+        let observed = query_row_cached(
+            &transaction,
+            "SELECT COUNT(*), COALESCE(SUM(withdrawn), 0) FROM delta_records
+             WHERE delta_id = ?1 AND source_id = ?2",
+            params![delta_id, source_id],
+            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
+        )?;
+        let expected = (
+            i64::try_from(expected_records)
+                .map_err(|_| CatalogError::InvalidRecord("delta.source.record_count"))?,
+            i64::try_from(expected_withdrawn)
+                .map_err(|_| CatalogError::InvalidRecord("delta.source.withdrawn_records"))?,
+        );
+        if observed != expected {
+            return Err(CatalogError::DeltaIncomplete(format!(
+                "{} expected {:?}, observed {:?}",
+                source.name, expected, observed
+            )));
+        }
+        if status == "complete" {
+            return Ok(());
+        }
+        execute_cached(
+            &transaction,
+            "UPDATE source_delta_imports
+             SET record_count = ?1, withdrawn_records = ?2, completed_at = ?3
+             WHERE delta_id = ?4 AND source_id = ?5",
+            params![expected.0, expected.1, completed_at, delta_id, source_id],
+        )?;
+        transaction.commit()?;
+        Ok(())
+    }
+
+    pub fn complete_delta(&mut self, delta_id: &str) -> Result<(), CatalogError> {
+        let completed_at = OffsetDateTime::now_utc()
+            .format(&Rfc3339)
+            .map_err(|_| CatalogError::InvalidRecord("delta.completed_at"))?;
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let descriptor = query_row_optional_cached(
+            &transaction,
+            "SELECT accepted_records, withdrawn_records, status
+             FROM advisory_deltas WHERE delta_id = ?1",
+            [delta_id],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            },
+        )?
+        .ok_or_else(|| CatalogError::DeltaNotRegistered(delta_id.to_owned()))?;
+        if descriptor.2 == "preparing" {
+            ensure_delta_order(&transaction, delta_id)?;
+        }
+        let observed = query_row_cached(
+            &transaction,
+            "SELECT COUNT(*), COALESCE(SUM(withdrawn), 0)
+             FROM delta_records WHERE delta_id = ?1",
+            [delta_id],
+            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
+        )?;
+        let incomplete_sources = query_row_cached(
+            &transaction,
+            "SELECT COUNT(*) FROM source_delta_imports
+             WHERE delta_id = ?1 AND completed_at IS NULL",
+            [delta_id],
+            |row| row.get::<_, i64>(0),
+        )?;
+        if observed != (descriptor.0, descriptor.1) || incomplete_sources != 0 {
+            return Err(CatalogError::DeltaIncomplete(format!(
+                "{delta_id}: expected=({}, {}) observed={observed:?} incomplete_sources={incomplete_sources}",
+                descriptor.0, descriptor.1
+            )));
+        }
+        if descriptor.2 == "complete" {
+            return Ok(());
+        }
+        execute_cached(
+            &transaction,
+            "UPDATE advisory_deltas
+             SET status = 'complete', completed_at = ?1 WHERE delta_id = ?2",
+            params![completed_at, delta_id],
+        )?;
+        transaction.commit()?;
+        Ok(())
+    }
+
     pub fn rebuild_canonicalization(&mut self) -> Result<CanonicalRebuildResult, CatalogError> {
+        ensure_no_preparing_delta(&self.connection)?;
         #[derive(Debug)]
         struct RecordState {
             rowid: i64,
@@ -1014,6 +1460,7 @@ impl Catalog {
     }
 
     pub fn rebuild_search_index(&mut self) -> Result<(), CatalogError> {
+        ensure_no_preparing_delta(&self.connection)?;
         let transaction = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -1056,6 +1503,7 @@ impl Catalog {
         identifier: &str,
         limit: usize,
     ) -> Result<Vec<CatalogHit>, CatalogError> {
+        ensure_no_preparing_delta(&self.connection)?;
         validate_query(identifier, limit)?;
         let mut statement = self.connection.prepare(
             "SELECT sr.canonical_id, s.name, sr.source_record_id, sr.title,
@@ -1072,6 +1520,7 @@ impl Catalog {
     }
 
     pub fn search_text(&self, query: &str, limit: usize) -> Result<Vec<CatalogHit>, CatalogError> {
+        ensure_no_preparing_delta(&self.connection)?;
         validate_query(query, limit)?;
         ensure_search_index_ready(&self.connection)?;
         let escaped = format!("\"{}\"", query.replace('"', "\"\""));
@@ -1107,6 +1556,7 @@ impl Catalog {
         name: &str,
         limit: usize,
     ) -> Result<Vec<CatalogHit>, CatalogError> {
+        ensure_no_preparing_delta(&self.connection)?;
         validate_query(ecosystem, limit)?;
         validate_query(name, limit)?;
         let mut statement = self.connection.prepare(
@@ -1123,10 +1573,62 @@ impl Catalog {
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
 
+    pub fn search_package_version(
+        &self,
+        ecosystem: &str,
+        name: &str,
+        version: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<CatalogVersionHit>, CatalogError> {
+        validate_query(ecosystem, limit)?;
+        validate_query(name, limit)?;
+        if let Some(version) = version {
+            validate_query(version, limit)?;
+        }
+        let hits = self.search_package(ecosystem, name, limit)?;
+        let mut output = Vec::with_capacity(hits.len());
+        let mut statement = self.connection.prepare(
+            "SELECT ap.ranges_json, ap.versions_json
+             FROM affected_packages ap
+             JOIN source_records sr ON sr.record_rowid = ap.source_record_rowid
+             JOIN sources s ON s.source_id = sr.source_id
+             WHERE s.name = ?1 AND sr.source_record_id = ?2
+               AND ap.ecosystem = ?3 AND ap.package_name = ?4
+             ORDER BY ap.affected_id",
+        )?;
+        for hit in hits {
+            let rows = statement
+                .query_map(
+                    params![hit.source_name, hit.source_record_id, ecosystem, name],
+                    |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+                )?
+                .collect::<Result<Vec<_>, _>>()?;
+            output.push(CatalogVersionHit {
+                advisory: hit,
+                version_assessment: evaluate_package_version(version, &rows),
+            });
+        }
+        Ok(output)
+    }
+
     pub fn stats(&self) -> Result<CatalogStats, CatalogError> {
         let database_bytes = database_size(&self.path)?;
+        let observed_schema = schema_version(&self.connection)?;
+        let (deltas, complete_deltas) = if observed_schema >= 3 {
+            (
+                count(&self.connection, "advisory_deltas")?,
+                nonnegative_count(self.connection.query_row(
+                    "SELECT COUNT(*) FROM advisory_deltas WHERE status = 'complete'",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )?)?,
+            )
+        } else {
+            (0, 0)
+        };
         Ok(CatalogStats {
-            schema_version: CATALOG_SCHEMA_VERSION,
+            schema_version: u32::try_from(observed_schema)
+                .map_err(|_| CatalogError::InvalidPath("negative catalog schema version"))?,
             sources: count(&self.connection, "sources")?,
             canonical_vulnerabilities: count(&self.connection, "canonical_vulnerabilities")?,
             active_canonical_vulnerabilities: nonnegative_count(self.connection.query_row(
@@ -1147,6 +1649,8 @@ impl Catalog {
             )?)?,
             source_record_revisions: count(&self.connection, "source_record_revisions")?,
             snapshots: count(&self.connection, "advisory_snapshots")?,
+            deltas,
+            complete_deltas,
             identifiers: count(&self.connection, "identifiers")?,
             relationships: count(&self.connection, "identifier_relationships")?,
             affected_packages: count(&self.connection, "affected_packages")?,
@@ -1179,6 +1683,8 @@ impl Catalog {
     }
 
     pub fn provenance(&self) -> Result<CatalogProvenance, CatalogError> {
+        ensure_no_preparing_delta(&self.connection)?;
+        let observed_schema = schema_version(&self.connection)?;
         let complete_snapshot_ids = {
             let mut statement = self.connection.prepare(
                 "SELECT snapshot_id FROM advisory_snapshots
@@ -1186,6 +1692,16 @@ impl Catalog {
             )?;
             let rows = statement.query_map([], |row| row.get::<_, String>(0))?;
             rows.collect::<Result<Vec<_>, _>>()?
+        };
+        let complete_delta_ids = if observed_schema >= 3 {
+            let mut statement = self.connection.prepare(
+                "SELECT delta_id FROM advisory_deltas
+                 WHERE status = 'complete' ORDER BY delta_id",
+            )?;
+            let rows = statement.query_map([], |row| row.get::<_, String>(0))?;
+            rows.collect::<Result<Vec<_>, _>>()?
+        } else {
+            Vec::new()
         };
         let canonicalization = self.connection.query_row(
             "SELECT value FROM catalog_metadata WHERE key = 'canonicalization'",
@@ -1201,8 +1717,10 @@ impl Catalog {
             )
             .optional()?;
         Ok(CatalogProvenance {
-            schema_version: CATALOG_SCHEMA_VERSION,
+            schema_version: u32::try_from(observed_schema)
+                .map_err(|_| CatalogError::InvalidPath("negative catalog schema version"))?,
             complete_snapshot_ids,
+            complete_delta_ids,
             canonicalization,
             last_canonical_rebuild_id,
         })
@@ -1311,6 +1829,43 @@ fn initialize_schema(connection: &Connection) -> Result<(), CatalogError> {
              PRIMARY KEY(snapshot_id, source_id)
          ) STRICT;
 
+         CREATE TABLE IF NOT EXISTS advisory_deltas (
+             delta_id TEXT PRIMARY KEY,
+             manifest_sha256 TEXT NOT NULL UNIQUE,
+             index_sha256 TEXT NOT NULL,
+             index_revision TEXT NOT NULL,
+             expected_ecosystem TEXT NOT NULL,
+             acquired_at TEXT NOT NULL,
+             after_modified TEXT NOT NULL,
+             through_modified TEXT NOT NULL,
+             base_snapshot_id TEXT NOT NULL REFERENCES advisory_snapshots(snapshot_id),
+             previous_delta_id TEXT REFERENCES advisory_deltas(delta_id),
+             accepted_records INTEGER NOT NULL CHECK(accepted_records >= 0),
+             quarantined_records INTEGER NOT NULL CHECK(quarantined_records >= 0),
+             withdrawn_records INTEGER NOT NULL CHECK(withdrawn_records >= 0),
+             status TEXT NOT NULL CHECK(status IN ('preparing', 'complete')),
+             imported_at TEXT NOT NULL,
+             completed_at TEXT
+         ) STRICT;
+
+         CREATE TABLE IF NOT EXISTS delta_records (
+             delta_id TEXT NOT NULL REFERENCES advisory_deltas(delta_id),
+             source_id INTEGER NOT NULL REFERENCES sources(source_id),
+             source_record_id TEXT NOT NULL,
+             raw_sha256 TEXT NOT NULL,
+             withdrawn INTEGER NOT NULL CHECK(withdrawn IN (0, 1)),
+             PRIMARY KEY(delta_id, source_id, source_record_id)
+         ) STRICT;
+
+         CREATE TABLE IF NOT EXISTS source_delta_imports (
+             delta_id TEXT NOT NULL REFERENCES advisory_deltas(delta_id),
+             source_id INTEGER NOT NULL REFERENCES sources(source_id),
+             record_count INTEGER NOT NULL CHECK(record_count >= 0),
+             withdrawn_records INTEGER NOT NULL DEFAULT 0 CHECK(withdrawn_records >= 0),
+             completed_at TEXT,
+             PRIMARY KEY(delta_id, source_id)
+         ) STRICT;
+
          CREATE TABLE IF NOT EXISTS identifiers (
              identifier TEXT PRIMARY KEY,
              canonical_id TEXT NOT NULL REFERENCES canonical_vulnerabilities(canonical_id)
@@ -1347,6 +1902,10 @@ fn initialize_schema(connection: &Connection) -> Result<(), CatalogError> {
              ON source_records(source_id, active, source_record_id);
          CREATE INDEX IF NOT EXISTS source_snapshot_imports_source_idx
              ON source_snapshot_imports(source_id, completed_at);
+         CREATE INDEX IF NOT EXISTS advisory_deltas_ecosystem_idx
+             ON advisory_deltas(expected_ecosystem, acquired_at, status);
+         CREATE INDEX IF NOT EXISTS source_delta_imports_source_idx
+             ON source_delta_imports(source_id, completed_at);
          CREATE INDEX IF NOT EXISTS identifiers_canonical_idx
              ON identifiers(canonical_id);
          CREATE INDEX IF NOT EXISTS canonical_redirects_target_idx
@@ -1375,7 +1934,7 @@ fn initialize_schema(connection: &Connection) -> Result<(), CatalogError> {
 }
 
 fn migrate_v1_to_v2(connection: &Connection) -> Result<(), CatalogError> {
-    let result = connection.execute_batch(&format!(
+    let result = connection.execute_batch(
         "BEGIN IMMEDIATE;
          CREATE TABLE advisory_snapshots (
              snapshot_id TEXT PRIMARY KEY,
@@ -1411,14 +1970,80 @@ fn migrate_v1_to_v2(connection: &Connection) -> Result<(), CatalogError> {
              ON source_records(source_id, active, source_record_id);
          CREATE INDEX source_snapshot_imports_source_idx
              ON source_snapshot_imports(source_id, completed_at);
-         PRAGMA user_version = {CATALOG_SCHEMA_VERSION};
-         COMMIT;"
-    ));
+         PRAGMA user_version = 2;
+         COMMIT;",
+    );
     if let Err(error) = result {
         let _ = connection.execute_batch("ROLLBACK;");
         return Err(error.into());
     }
     Ok(())
+}
+
+fn migrate_v2_to_v3(connection: &Connection) -> Result<(), CatalogError> {
+    let result = connection.execute_batch(
+        "BEGIN IMMEDIATE;
+         CREATE TABLE advisory_deltas (
+             delta_id TEXT PRIMARY KEY,
+             manifest_sha256 TEXT NOT NULL UNIQUE,
+             index_sha256 TEXT NOT NULL,
+             index_revision TEXT NOT NULL,
+             expected_ecosystem TEXT NOT NULL,
+             acquired_at TEXT NOT NULL,
+             after_modified TEXT NOT NULL,
+             through_modified TEXT NOT NULL,
+             base_snapshot_id TEXT NOT NULL REFERENCES advisory_snapshots(snapshot_id),
+             previous_delta_id TEXT REFERENCES advisory_deltas(delta_id),
+             accepted_records INTEGER NOT NULL CHECK(accepted_records >= 0),
+             quarantined_records INTEGER NOT NULL CHECK(quarantined_records >= 0),
+             withdrawn_records INTEGER NOT NULL CHECK(withdrawn_records >= 0),
+             status TEXT NOT NULL CHECK(status IN ('preparing', 'complete')),
+             imported_at TEXT NOT NULL,
+             completed_at TEXT
+         ) STRICT;
+         CREATE TABLE delta_records (
+             delta_id TEXT NOT NULL REFERENCES advisory_deltas(delta_id),
+             source_id INTEGER NOT NULL REFERENCES sources(source_id),
+             source_record_id TEXT NOT NULL,
+             raw_sha256 TEXT NOT NULL,
+             withdrawn INTEGER NOT NULL CHECK(withdrawn IN (0, 1)),
+             PRIMARY KEY(delta_id, source_id, source_record_id)
+         ) STRICT;
+         CREATE TABLE source_delta_imports (
+             delta_id TEXT NOT NULL REFERENCES advisory_deltas(delta_id),
+             source_id INTEGER NOT NULL REFERENCES sources(source_id),
+             record_count INTEGER NOT NULL CHECK(record_count >= 0),
+             withdrawn_records INTEGER NOT NULL DEFAULT 0 CHECK(withdrawn_records >= 0),
+             completed_at TEXT,
+             PRIMARY KEY(delta_id, source_id)
+         ) STRICT;
+         CREATE INDEX advisory_deltas_ecosystem_idx
+             ON advisory_deltas(expected_ecosystem, acquired_at, status);
+         CREATE INDEX source_delta_imports_source_idx
+             ON source_delta_imports(source_id, completed_at);
+         PRAGMA user_version = 3;
+         COMMIT;",
+    );
+    if let Err(error) = result {
+        let _ = connection.execute_batch("ROLLBACK;");
+        return Err(error.into());
+    }
+    Ok(())
+}
+
+fn migrate_catalog(connection: &Connection, observed: i64) -> Result<(), CatalogError> {
+    match observed {
+        1 => {
+            migrate_v1_to_v2(connection)?;
+            migrate_v2_to_v3(connection)
+        }
+        2 => migrate_v2_to_v3(connection),
+        version if version == i64::from(CATALOG_SCHEMA_VERSION) => Ok(()),
+        version => Err(CatalogError::SchemaMismatch {
+            expected: CATALOG_SCHEMA_VERSION,
+            observed: version,
+        }),
+    }
 }
 
 fn verify_application_id(connection: &Connection) -> Result<(), CatalogError> {
@@ -1439,6 +2064,18 @@ fn verify_schema(connection: &Connection) -> Result<(), CatalogError> {
     verify_application_id(connection)?;
     let version = schema_version(connection)?;
     if version != i64::from(CATALOG_SCHEMA_VERSION) {
+        return Err(CatalogError::SchemaMismatch {
+            expected: CATALOG_SCHEMA_VERSION,
+            observed: version,
+        });
+    }
+    Ok(())
+}
+
+fn verify_read_schema(connection: &Connection) -> Result<(), CatalogError> {
+    verify_application_id(connection)?;
+    let version = schema_version(connection)?;
+    if !(2..=i64::from(CATALOG_SCHEMA_VERSION)).contains(&version) {
         return Err(CatalogError::SchemaMismatch {
             expected: CATALOG_SCHEMA_VERSION,
             observed: version,
@@ -1497,6 +2134,34 @@ fn register_source(
     Ok(transaction.last_insert_rowid())
 }
 
+fn registered_source_id(
+    connection: &Connection,
+    source: &CatalogSource,
+) -> Result<i64, CatalogError> {
+    let existing = query_row_optional_cached(
+        connection,
+        "SELECT source_id, license_expression, license_evidence_sha256, locator
+         FROM sources WHERE name = ?1",
+        [&source.name],
+        |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+            ))
+        },
+    )?
+    .ok_or_else(|| CatalogError::DeltaIncomplete(source.name.clone()))?;
+    if existing.1 != source.license_expression
+        || existing.2 != source.license_evidence_sha256
+        || existing.3 != source.locator
+    {
+        return Err(CatalogError::SourceConflict(source.name.clone()));
+    }
+    Ok(existing.0)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn import_osv_record_tx(
     transaction: &Transaction<'_>,
@@ -1511,7 +2176,7 @@ fn import_osv_record_tx(
     let raw_sha256 = sha256(raw);
     let existing = query_row_optional_cached(
         transaction,
-        "SELECT record_rowid, raw_sha256, canonical_id
+        "SELECT record_rowid, raw_sha256, canonical_id, active
              FROM source_records WHERE source_id = ?1 AND source_record_id = ?2",
         params![source_id, record.id],
         |row| {
@@ -1519,13 +2184,33 @@ fn import_osv_record_tx(
                 row.get::<_, i64>(0)?,
                 row.get::<_, String>(1)?,
                 row.get::<_, String>(2)?,
+                row.get::<_, i64>(3)?,
             ))
         },
     )?;
     if existing
         .as_ref()
-        .is_some_and(|(_, existing_hash, _)| existing_hash == &raw_sha256)
+        .is_some_and(|(_, existing_hash, _, _)| existing_hash == &raw_sha256)
     {
+        execute_cached(
+            transaction,
+            "UPDATE source_records SET active = 1
+             WHERE source_id = ?1 AND source_record_id = ?2",
+            params![source_id, record.id],
+        )?;
+        if update_search_index
+            && existing
+                .as_ref()
+                .is_some_and(|(_, _, _, active)| *active == 0)
+        {
+            execute_cached(
+                transaction,
+                "INSERT INTO source_record_fts(rowid, title, details)
+                 SELECT record_rowid, title, details FROM source_records
+                 WHERE source_id = ?1 AND source_record_id = ?2",
+                params![source_id, record.id],
+            )?;
+        }
         result.records_unchanged += 1;
         return Ok(());
     }
@@ -1542,7 +2227,7 @@ fn import_osv_record_tx(
         params![candidate_id, imported_at],
     )?;
     let mut canonical_ids = BTreeSet::from([candidate_id.clone()]);
-    if let Some((_, _, existing_canonical)) = &existing {
+    if let Some((_, _, existing_canonical, _)) = &existing {
         canonical_ids.insert(existing_canonical.clone());
     }
     for identifier in &exact_identifiers {
@@ -1602,7 +2287,7 @@ fn import_osv_record_tx(
             .unwrap_or(&record.id),
     );
     let details = normalize_catalog_text(record.details.as_deref().unwrap_or(""));
-    let record_rowid = if let Some((record_rowid, _, _)) = existing {
+    let record_rowid = if let Some((record_rowid, _, _, _)) = existing {
         execute_cached(
             transaction,
             "UPDATE source_records SET
@@ -1832,7 +2517,230 @@ fn ensure_snapshot_order(
             });
         }
     }
+    let latest_delta = query_row_optional_cached(
+        connection,
+        "SELECT d.delta_id, d.acquired_at
+         FROM source_delta_imports di
+         JOIN advisory_deltas d ON d.delta_id = di.delta_id
+         WHERE di.source_id = ?1 AND di.completed_at IS NOT NULL
+           AND d.status = 'complete'
+         ORDER BY d.acquired_at DESC, d.delta_id DESC LIMIT 1",
+        [source_id],
+        |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+    )?;
+    if let Some((delta_id, delta_acquired_at)) = latest_delta {
+        let attempted_time = OffsetDateTime::parse(&attempted.0, &Rfc3339)
+            .map_err(|_| CatalogError::InvalidRecord("snapshot.acquired_at"))?;
+        let latest_time = OffsetDateTime::parse(&delta_acquired_at, &Rfc3339)
+            .map_err(|_| CatalogError::InvalidRecord("delta.acquired_at"))?;
+        if attempted_time <= latest_time {
+            return Err(CatalogError::SnapshotRollback {
+                source_name: source_name.to_owned(),
+                latest: format!("{delta_acquired_at} ({delta_id})"),
+                attempted: attempted.0,
+            });
+        }
+    }
     Ok(attempted.0)
+}
+
+fn ensure_delta_order(connection: &Connection, delta_id: &str) -> Result<(), CatalogError> {
+    let attempted = query_row_optional_cached(
+        connection,
+        "SELECT expected_ecosystem, acquired_at, after_modified,
+                through_modified, base_snapshot_id, previous_delta_id, status
+         FROM advisory_deltas WHERE delta_id = ?1",
+        [delta_id],
+        |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, Option<String>>(5)?,
+                row.get::<_, String>(6)?,
+            ))
+        },
+    )?
+    .ok_or_else(|| CatalogError::DeltaNotRegistered(delta_id.to_owned()))?;
+    if attempted.6 == "complete" {
+        return Ok(());
+    }
+
+    let base = query_row_optional_cached(
+        connection,
+        "SELECT acquired_at, artifact_sha256, artifact_revision
+         FROM advisory_snapshots
+         WHERE snapshot_id = ?1 AND expected_ecosystem = ?2 AND status = 'complete'",
+        params![attempted.4, attempted.0],
+        |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        },
+    )?
+    .ok_or_else(|| CatalogError::DeltaIncomplete("base snapshot is not complete".into()))?;
+    let latest_snapshot = query_row_cached(
+        connection,
+        "SELECT snapshot_id, acquired_at, artifact_sha256, artifact_revision
+         FROM advisory_snapshots
+         WHERE expected_ecosystem = ?1 AND status = 'complete'
+         ORDER BY acquired_at DESC, completed_at DESC, snapshot_id DESC LIMIT 1",
+        [&attempted.0],
+        |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+            ))
+        },
+    )?;
+    if latest_snapshot.1 != base.0 || latest_snapshot.2 != base.1 || latest_snapshot.3 != base.2 {
+        return Err(CatalogError::DeltaRollback {
+            ecosystem: attempted.0,
+            latest: latest_snapshot.0,
+            attempted: delta_id.to_owned(),
+        });
+    }
+
+    if let Some(other) = query_row_optional_cached(
+        connection,
+        "SELECT delta_id FROM advisory_deltas
+         WHERE expected_ecosystem = ?1 AND status = 'preparing' AND delta_id <> ?2
+         ORDER BY imported_at DESC LIMIT 1",
+        params![attempted.0, delta_id],
+        |row| row.get::<_, String>(0),
+    )? {
+        return Err(CatalogError::DeltaRollback {
+            ecosystem: attempted.0,
+            latest: other,
+            attempted: delta_id.to_owned(),
+        });
+    }
+
+    let latest_delta = query_row_optional_cached(
+        connection,
+        "SELECT delta_id, acquired_at, through_modified, base_snapshot_id
+         FROM advisory_deltas
+         WHERE expected_ecosystem = ?1 AND status = 'complete' AND delta_id <> ?2
+         ORDER BY acquired_at DESC, completed_at DESC, delta_id DESC LIMIT 1",
+        params![attempted.0, delta_id],
+        |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+            ))
+        },
+    )?;
+    let acquired = OffsetDateTime::parse(&attempted.1, &Rfc3339)
+        .map_err(|_| CatalogError::InvalidRecord("delta.acquired_at"))?;
+    if let Some(latest) = latest_delta {
+        let latest_acquired = OffsetDateTime::parse(&latest.1, &Rfc3339)
+            .map_err(|_| CatalogError::InvalidRecord("delta.latest_acquired_at"))?;
+        if latest.3 == attempted.4 {
+            if attempted.5.as_deref() != Some(latest.0.as_str())
+                || attempted.2 != latest.2
+                || acquired <= latest_acquired
+            {
+                return Err(CatalogError::DeltaRollback {
+                    ecosystem: attempted.0,
+                    latest: latest.0,
+                    attempted: delta_id.to_owned(),
+                });
+            }
+        } else {
+            let base_acquired = OffsetDateTime::parse(&base.0, &Rfc3339)
+                .map_err(|_| CatalogError::InvalidRecord("snapshot.acquired_at"))?;
+            if attempted.5.is_some() || base_acquired <= latest_acquired {
+                return Err(CatalogError::DeltaRollback {
+                    ecosystem: attempted.0,
+                    latest: latest.0,
+                    attempted: delta_id.to_owned(),
+                });
+            }
+        }
+    } else {
+        let base_acquired = OffsetDateTime::parse(&base.0, &Rfc3339)
+            .map_err(|_| CatalogError::InvalidRecord("snapshot.acquired_at"))?;
+        let after = OffsetDateTime::parse(&attempted.2, &Rfc3339)
+            .map_err(|_| CatalogError::InvalidRecord("delta.after_modified"))?;
+        if attempted.5.is_some() || after > base_acquired || acquired < base_acquired {
+            return Err(CatalogError::DeltaRollback {
+                ecosystem: attempted.0,
+                latest: attempted.4,
+                attempted: delta_id.to_owned(),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn validate_delta_record_order(
+    connection: &Connection,
+    source: &CatalogSource,
+    source_id: i64,
+    record: &OsvRecord,
+    raw: &[u8],
+    after_modified: &str,
+    through_modified: &str,
+) -> Result<(), CatalogError> {
+    let modified = OffsetDateTime::parse(&record.modified, &Rfc3339)
+        .map_err(|_| CatalogError::InvalidRecord("modified"))?;
+    let after = OffsetDateTime::parse(after_modified, &Rfc3339)
+        .map_err(|_| CatalogError::InvalidRecord("delta.after_modified"))?;
+    let through = OffsetDateTime::parse(through_modified, &Rfc3339)
+        .map_err(|_| CatalogError::InvalidRecord("delta.through_modified"))?;
+    if modified <= after || modified > through {
+        return Err(CatalogError::InvalidRecord("delta.record.modified"));
+    }
+    if let Some((current_modified, current_hash)) = query_row_optional_cached(
+        connection,
+        "SELECT modified_at, raw_sha256 FROM source_records
+         WHERE source_id = ?1 AND source_record_id = ?2",
+        params![source_id, record.id],
+        |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+    )? {
+        let current = OffsetDateTime::parse(&current_modified, &Rfc3339)
+            .map_err(|_| CatalogError::InvalidRecord("source_record.modified_at"))?;
+        let attempted_hash = sha256(raw);
+        if modified < current || (modified == current && attempted_hash != current_hash) {
+            return Err(CatalogError::DeltaRecordRollback {
+                source_name: source.name.clone(),
+                record_id: record.id.clone(),
+                current: current_modified,
+                attempted: record.modified.clone(),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn verify_completed_delta_record(
+    connection: &Connection,
+    source_id: i64,
+    delta_id: &str,
+    record: &OsvRecord,
+    raw: &[u8],
+) -> Result<(), CatalogError> {
+    let expected = query_row_optional_cached(
+        connection,
+        "SELECT raw_sha256, withdrawn FROM delta_records
+         WHERE delta_id = ?1 AND source_id = ?2 AND source_record_id = ?3",
+        params![delta_id, source_id, record.id],
+        |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)),
+    )?
+    .ok_or_else(|| CatalogError::DeltaIncomplete(record.id.clone()))?;
+    let observed = (sha256(raw), i64::from(record.withdrawn.is_some()));
+    if observed != expected {
+        return Err(CatalogError::DeltaConflict(delta_id.to_owned()));
+    }
+    Ok(())
 }
 
 fn validate_source(source: &CatalogSource) -> Result<(), CatalogError> {
@@ -1877,6 +2785,48 @@ fn validate_snapshot_descriptor(snapshot: &CatalogSnapshot) -> Result<(), Catalo
         return Err(CatalogError::InvalidRecord("snapshot.record_counts"));
     }
     Ok(())
+}
+
+fn validate_delta_descriptor(delta: &CatalogDelta) -> Result<(), CatalogError> {
+    if !valid_prefixed_sha256(&delta.delta_id, "sf_delta_")
+        || !super::valid_sha256(&delta.manifest_sha256)
+        || !super::valid_sha256(&delta.index_sha256)
+        || !valid_prefixed_sha256(&delta.base_snapshot_id, "sf_snapshot_")
+        || delta
+            .previous_delta_id
+            .as_ref()
+            .is_some_and(|value| !valid_prefixed_sha256(value, "sf_delta_"))
+    {
+        return Err(CatalogError::InvalidRecord("delta.identity"));
+    }
+    validate_text(&delta.index_revision, 500, "delta.index_revision")?;
+    validate_text(&delta.expected_ecosystem, 100, "delta.expected_ecosystem")?;
+    validate_timestamp(&delta.acquired_at, "delta.acquired_at")?;
+    validate_timestamp(&delta.after_modified, "delta.after_modified")?;
+    validate_timestamp(&delta.through_modified, "delta.through_modified")?;
+    let acquired = OffsetDateTime::parse(&delta.acquired_at, &Rfc3339)
+        .map_err(|_| CatalogError::InvalidRecord("delta.acquired_at"))?;
+    let after = OffsetDateTime::parse(&delta.after_modified, &Rfc3339)
+        .map_err(|_| CatalogError::InvalidRecord("delta.after_modified"))?;
+    let through = OffsetDateTime::parse(&delta.through_modified, &Rfc3339)
+        .map_err(|_| CatalogError::InvalidRecord("delta.through_modified"))?;
+    if delta.accepted_records == 0
+        || delta.accepted_records > MAX_IMPORT_RECORDS as u64
+        || delta
+            .accepted_records
+            .saturating_add(delta.quarantined_records)
+            > MAX_IMPORT_RECORDS as u64
+        || delta.withdrawn_records > delta.accepted_records
+        || after >= through
+        || through > acquired
+    {
+        return Err(CatalogError::InvalidRecord("delta.accounting"));
+    }
+    Ok(())
+}
+
+fn valid_prefixed_sha256(value: &str, prefix: &str) -> bool {
+    value.strip_prefix(prefix).is_some_and(super::valid_sha256)
 }
 
 pub fn validate_osv_record_public(record: &OsvRecord) -> Result<(), CatalogError> {
@@ -2084,6 +3034,7 @@ fn count(connection: &Connection, table: &str) -> Result<u64, CatalogError> {
         "affected_packages",
         "advisory_references",
         "advisory_snapshots",
+        "advisory_deltas",
     ];
     if !allowed.contains(&table) {
         return Err(CatalogError::InvalidQuery("unknown statistics table"));
@@ -2142,6 +3093,21 @@ fn search_index_status(connection: &Connection) -> Result<String, CatalogError> 
         .map_err(Into::into)
 }
 
+fn ensure_no_preparing_delta(connection: &Connection) -> Result<(), CatalogError> {
+    if schema_version(connection)? < 3 {
+        return Ok(());
+    }
+    let preparing = nonnegative_count(connection.query_row(
+        "SELECT COUNT(*) FROM advisory_deltas WHERE status = 'preparing'",
+        [],
+        |row| row.get::<_, i64>(0),
+    )?)?;
+    if preparing != 0 {
+        return Err(CatalogError::DeltaPreparing(preparing));
+    }
+    Ok(())
+}
+
 fn ensure_search_index_ready(connection: &Connection) -> Result<(), CatalogError> {
     if search_index_status(connection)? != "ready" {
         return Err(CatalogError::InvalidQuery(
@@ -2149,6 +3115,272 @@ fn ensure_search_index_ready(connection: &Connection) -> Result<(), CatalogError
         ));
     }
     Ok(())
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct OsvVersionRange {
+    #[serde(rename = "type")]
+    kind: String,
+    #[serde(default)]
+    events: Vec<OsvVersionEvent>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OsvVersionEvent {
+    #[serde(default)]
+    introduced: Option<String>,
+    #[serde(default)]
+    fixed: Option<String>,
+    #[serde(default)]
+    last_affected: Option<String>,
+    #[serde(default)]
+    limit: Option<String>,
+}
+
+fn evaluate_package_version(
+    requested_version: Option<&str>,
+    rows: &[(String, String)],
+) -> VersionAssessment {
+    let mut affected_data_sha256 = rows
+        .iter()
+        .map(|(ranges, versions)| {
+            let mut hasher = Sha256::new();
+            hash_field(&mut hasher, "secureflow-affected-data-v1");
+            hash_field(&mut hasher, ranges);
+            hash_field(&mut hasher, versions);
+            hex_digest(hasher.finalize().as_slice())
+        })
+        .collect::<Vec<_>>();
+    affected_data_sha256.sort();
+    affected_data_sha256.dedup();
+
+    let Some(requested_version) = requested_version else {
+        return VersionAssessment {
+            status: VersionEvaluationStatus::NotEvaluated,
+            basis: VersionEvaluationBasis::NotRequested,
+            evaluated_version: None,
+            matched_value: None,
+            affected_data_sha256,
+            issues: Vec::new(),
+        };
+    };
+
+    let query_semver = Version::parse(requested_version);
+    let mut issues = BTreeSet::new();
+    let mut supported_data_observed = false;
+
+    for (ranges_json, versions_json) in rows {
+        let versions = match serde_json::from_str::<Vec<String>>(versions_json) {
+            Ok(versions) => versions,
+            Err(_) => {
+                issues.insert(VersionEvaluationIssue::InvalidStoredJson);
+                Vec::new()
+            }
+        };
+        if !versions.is_empty() {
+            supported_data_observed = true;
+        }
+        if versions.iter().any(|version| version == requested_version) {
+            return VersionAssessment {
+                status: VersionEvaluationStatus::Affected,
+                basis: VersionEvaluationBasis::ExactEnumeratedVersion,
+                evaluated_version: Some(requested_version.to_owned()),
+                matched_value: Some(requested_version.to_owned()),
+                affected_data_sha256,
+                issues: Vec::new(),
+            };
+        }
+
+        let ranges = match serde_json::from_str::<Vec<serde_json::Value>>(ranges_json) {
+            Ok(ranges) => ranges,
+            Err(_) => {
+                issues.insert(VersionEvaluationIssue::InvalidStoredJson);
+                continue;
+            }
+        };
+        if versions.is_empty() && ranges.is_empty() {
+            issues.insert(VersionEvaluationIssue::MissingVersionData);
+        }
+        for range_value in ranges {
+            let range = match serde_json::from_value::<OsvVersionRange>(range_value.clone()) {
+                Ok(range) => range,
+                Err(_) => {
+                    issues.insert(VersionEvaluationIssue::InvalidStoredJson);
+                    continue;
+                }
+            };
+            if range.kind != "SEMVER" {
+                issues.insert(VersionEvaluationIssue::UnsupportedRangeType);
+                continue;
+            }
+            supported_data_observed = true;
+            let query = match &query_semver {
+                Ok(query) => query,
+                Err(_) => {
+                    issues.insert(VersionEvaluationIssue::InvalidQuerySemver);
+                    continue;
+                }
+            };
+            match evaluate_semver_range(query, &range) {
+                Ok(true) => {
+                    let bytes = serde_json::to_vec(&range_value)
+                        .expect("a parsed JSON value must serialize");
+                    return VersionAssessment {
+                        status: VersionEvaluationStatus::Affected,
+                        basis: VersionEvaluationBasis::OsvSemverRange,
+                        evaluated_version: Some(requested_version.to_owned()),
+                        matched_value: Some(sha256(&bytes)),
+                        affected_data_sha256,
+                        issues: Vec::new(),
+                    };
+                }
+                Ok(false) => {}
+                Err(issue) => {
+                    issues.insert(issue);
+                }
+            }
+        }
+    }
+
+    let issues = issues.into_iter().collect::<Vec<_>>();
+    if supported_data_observed && issues.is_empty() {
+        VersionAssessment {
+            status: VersionEvaluationStatus::NotAffected,
+            basis: VersionEvaluationBasis::SupportedDataExcludesVersion,
+            evaluated_version: Some(requested_version.to_owned()),
+            matched_value: None,
+            affected_data_sha256,
+            issues,
+        }
+    } else {
+        let issues = if issues.is_empty() {
+            vec![VersionEvaluationIssue::MissingVersionData]
+        } else {
+            issues
+        };
+        VersionAssessment {
+            status: VersionEvaluationStatus::Unknown,
+            basis: VersionEvaluationBasis::UnsupportedOrInvalidData,
+            evaluated_version: Some(requested_version.to_owned()),
+            matched_value: None,
+            affected_data_sha256,
+            issues,
+        }
+    }
+}
+
+fn evaluate_semver_range(
+    query: &Version,
+    range: &OsvVersionRange,
+) -> Result<bool, VersionEvaluationIssue> {
+    if range.events.is_empty() {
+        return Err(VersionEvaluationIssue::InvalidSemverEvents);
+    }
+    let mut introduced_observed = false;
+    let mut interval_open = false;
+    let mut query_affected = false;
+    let mut last_boundary = None::<Version>;
+    let mut limit_observed = false;
+    let mut fixed_observed = false;
+    let mut last_affected_observed = false;
+    for (index, event) in range.events.iter().enumerate() {
+        let field_count = [
+            event.introduced.is_some(),
+            event.fixed.is_some(),
+            event.last_affected.is_some(),
+            event.limit.is_some(),
+        ]
+        .into_iter()
+        .filter(|present| *present)
+        .count();
+        if field_count != 1 {
+            return Err(VersionEvaluationIssue::InvalidSemverEvents);
+        }
+        if let Some(value) = &event.limit {
+            if limit_observed || index + 1 != range.events.len() {
+                return Err(VersionEvaluationIssue::InvalidSemverEvents);
+            }
+            limit_observed = true;
+            if value != "*" {
+                let limit = Version::parse(value)
+                    .map_err(|_| VersionEvaluationIssue::InvalidSemverEvents)?;
+                if last_boundary
+                    .as_ref()
+                    .is_some_and(|last| !last.cmp_precedence(&limit).is_lt())
+                {
+                    return Err(VersionEvaluationIssue::InvalidSemverEvents);
+                }
+                if !query.cmp_precedence(&limit).is_lt() {
+                    query_affected = false;
+                }
+            }
+            continue;
+        }
+        let (value, kind) = if let Some(value) = &event.introduced {
+            introduced_observed = true;
+            (value, 0_u8)
+        } else if let Some(value) = &event.fixed {
+            fixed_observed = true;
+            if last_affected_observed {
+                return Err(VersionEvaluationIssue::InvalidSemverEvents);
+            }
+            (value, 1_u8)
+        } else if let Some(value) = &event.last_affected {
+            last_affected_observed = true;
+            if fixed_observed {
+                return Err(VersionEvaluationIssue::InvalidSemverEvents);
+            }
+            (value, 2_u8)
+        } else {
+            return Err(VersionEvaluationIssue::InvalidSemverEvents);
+        };
+        let version = if kind == 0 && value == "0" {
+            if index != 0 {
+                return Err(VersionEvaluationIssue::InvalidSemverEvents);
+            }
+            None
+        } else {
+            Some(Version::parse(value).map_err(|_| VersionEvaluationIssue::InvalidSemverEvents)?)
+        };
+        if let Some(version) = &version {
+            if last_boundary
+                .as_ref()
+                .is_some_and(|last| !last.cmp_precedence(version).is_lt())
+            {
+                return Err(VersionEvaluationIssue::InvalidSemverEvents);
+            }
+            last_boundary = Some(version.clone());
+        }
+        let comparison = version
+            .as_ref()
+            .map(|version| query.cmp_precedence(version));
+        match kind {
+            0 if !interval_open => {
+                interval_open = true;
+                if comparison.is_none_or(|ordering| !ordering.is_lt()) {
+                    query_affected = true;
+                }
+            }
+            1 if interval_open => {
+                interval_open = false;
+                if comparison.is_some_and(|ordering| !ordering.is_lt()) {
+                    query_affected = false;
+                }
+            }
+            2 if interval_open => {
+                interval_open = false;
+                if comparison.is_some_and(std::cmp::Ordering::is_gt) {
+                    query_affected = false;
+                }
+            }
+            _ => return Err(VersionEvaluationIssue::InvalidSemverEvents),
+        }
+    }
+    if !introduced_observed {
+        return Err(VersionEvaluationIssue::InvalidSemverEvents);
+    }
+    Ok(query_affected)
 }
 
 fn nonnegative_count(value: i64) -> Result<u64, CatalogError> {
@@ -2279,6 +3511,51 @@ mod tests {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
+    fn delta(
+        fill: char,
+        base_snapshot_id: &str,
+        previous_delta_id: Option<String>,
+        acquired_at: &str,
+        after_modified: &str,
+        through_modified: &str,
+        accepted_records: u64,
+        withdrawn_records: u64,
+    ) -> CatalogDelta {
+        CatalogDelta {
+            delta_id: format!("sf_delta_{}", fill.to_string().repeat(64)),
+            manifest_sha256: fill.to_string().repeat(64),
+            index_sha256: fill.to_string().repeat(64),
+            index_revision: format!("etag-{fill}"),
+            expected_ecosystem: "crates.io".into(),
+            acquired_at: acquired_at.into(),
+            after_modified: after_modified.into(),
+            through_modified: through_modified.into(),
+            base_snapshot_id: base_snapshot_id.into(),
+            previous_delta_id,
+            accepted_records,
+            quarantined_records: 0,
+            withdrawn_records,
+        }
+    }
+
+    fn record_at(id: &str, modified: &str, title: &str, withdrawn: bool) -> Vec<u8> {
+        let mut value = serde_json::json!({
+            "schema_version": "1.7.0",
+            "id": id,
+            "modified": modified,
+            "summary": title,
+            "affected": [{
+                "package": {"ecosystem": "crates.io", "name": "fixture"},
+                "ranges": [{"type": "SEMVER", "events": [{"introduced": "0"}]}]
+            }]
+        });
+        if withdrawn {
+            value["withdrawn"] = serde_json::Value::String(modified.into());
+        }
+        serde_json::to_vec(&value).expect("fixture JSON")
+    }
+
     fn record(id: &str, aliases: &[&str], title: &str) -> Vec<u8> {
         serde_json::to_vec(&serde_json::json!({
             "schema_version": "1.7.0",
@@ -2346,6 +3623,179 @@ mod tests {
             2
         );
         cleanup(&path);
+    }
+
+    #[test]
+    fn package_version_evaluation_is_conservative_and_reproducible() {
+        let path = temporary_catalog("version-evaluation");
+        let mut catalog = Catalog::open_or_create(&path).expect("catalog");
+        let ranged = serde_json::to_vec(&serde_json::json!({
+            "id": "GHSA-aaaa-bbbb-cccc",
+            "modified": "2026-08-23T00:00:00Z",
+            "summary": "semver fixture",
+            "affected": [{
+                "package": {"ecosystem": "crates.io", "name": "fixture"},
+                "ranges": [{"type": "SEMVER", "events": [
+                    {"introduced": "1.0.0"}, {"fixed": "2.0.0"}
+                ]}]
+            }]
+        }))
+        .expect("range fixture");
+        let enumerated = serde_json::to_vec(&serde_json::json!({
+            "id": "GHSA-dddd-eeee-ffff",
+            "modified": "2026-08-23T00:00:00Z",
+            "summary": "enumerated fixture",
+            "affected": [{
+                "package": {"ecosystem": "crates.io", "name": "fixture"},
+                "versions": ["3.0.0"]
+            }]
+        }))
+        .expect("enumerated fixture");
+        let unsupported = serde_json::to_vec(&serde_json::json!({
+            "id": "GHSA-gggg-hhhh-jjjj",
+            "modified": "2026-08-23T00:00:00Z",
+            "summary": "ecosystem fixture",
+            "affected": [{
+                "package": {"ecosystem": "crates.io", "name": "fixture"},
+                "ranges": [{"type": "ECOSYSTEM", "events": [
+                    {"introduced": "1"}, {"fixed": "9"}
+                ]}],
+                "versions": ["7"]
+            }]
+        }))
+        .expect("unsupported fixture");
+        catalog
+            .import_osv_batch(&source(), [&ranged, &enumerated, &unsupported])
+            .expect("import");
+
+        let affected = catalog
+            .search_package_version("crates.io", "fixture", Some("1.5.0"), 10)
+            .expect("affected query");
+        assert_eq!(affected.len(), 3);
+        let ranged = affected
+            .iter()
+            .find(|hit| hit.advisory.source_record_id == "GHSA-aaaa-bbbb-cccc")
+            .expect("ranged advisory");
+        assert_eq!(
+            ranged.version_assessment.status,
+            VersionEvaluationStatus::Affected
+        );
+        assert_eq!(
+            ranged.version_assessment.basis,
+            VersionEvaluationBasis::OsvSemverRange
+        );
+        assert_eq!(ranged.version_assessment.affected_data_sha256.len(), 1);
+
+        let excluded = catalog
+            .search_package_version("crates.io", "fixture", Some("2.0.0"), 10)
+            .expect("excluded query");
+        let ranged = excluded
+            .iter()
+            .find(|hit| hit.advisory.source_record_id == "GHSA-aaaa-bbbb-cccc")
+            .expect("ranged advisory");
+        assert_eq!(
+            ranged.version_assessment.status,
+            VersionEvaluationStatus::NotAffected
+        );
+
+        let exact = catalog
+            .search_package_version("crates.io", "fixture", Some("7"), 10)
+            .expect("exact query");
+        let unsupported = exact
+            .iter()
+            .find(|hit| hit.advisory.source_record_id == "GHSA-gggg-hhhh-jjjj")
+            .expect("ecosystem advisory");
+        assert_eq!(
+            unsupported.version_assessment.status,
+            VersionEvaluationStatus::Affected
+        );
+        assert_eq!(
+            unsupported.version_assessment.basis,
+            VersionEvaluationBasis::ExactEnumeratedVersion
+        );
+
+        let unknown = catalog
+            .search_package_version("crates.io", "fixture", Some("8"), 10)
+            .expect("unknown query");
+        let unsupported = unknown
+            .iter()
+            .find(|hit| hit.advisory.source_record_id == "GHSA-gggg-hhhh-jjjj")
+            .expect("ecosystem advisory");
+        assert_eq!(
+            unsupported.version_assessment.status,
+            VersionEvaluationStatus::Unknown
+        );
+        assert_eq!(
+            unsupported.version_assessment.issues,
+            [VersionEvaluationIssue::UnsupportedRangeType]
+        );
+        cleanup(&path);
+    }
+
+    #[test]
+    fn semver_evaluator_preserves_osv_boundaries_and_rejects_reordered_events() {
+        let fixed_range: OsvVersionRange = serde_json::from_value(serde_json::json!({
+            "type": "SEMVER",
+            "events": [
+                {"introduced": "0"},
+                {"fixed": "1.0.0"}
+            ]
+        }))
+        .expect("fixed range");
+        let last_affected_range: OsvVersionRange = serde_json::from_value(serde_json::json!({
+            "type": "SEMVER",
+            "events": [
+                {"introduced": "2.0.0-alpha.1"},
+                {"last_affected": "2.0.0"},
+                {"limit": "3.0.0"}
+            ]
+        }))
+        .expect("last-affected range");
+        assert!(evaluate_semver_range(&Version::parse("0.9.9").unwrap(), &fixed_range).unwrap());
+        assert!(!evaluate_semver_range(&Version::parse("1.0.0").unwrap(), &fixed_range).unwrap());
+        assert!(
+            evaluate_semver_range(
+                &Version::parse("2.0.0-alpha.1+build.7").unwrap(),
+                &last_affected_range
+            )
+            .unwrap()
+        );
+        assert!(
+            evaluate_semver_range(&Version::parse("2.0.0").unwrap(), &last_affected_range).unwrap()
+        );
+        assert!(
+            !evaluate_semver_range(&Version::parse("2.0.1").unwrap(), &last_affected_range)
+                .unwrap()
+        );
+        assert!(
+            !evaluate_semver_range(&Version::parse("3.0.0").unwrap(), &last_affected_range)
+                .unwrap()
+        );
+
+        let mixed_boundaries: OsvVersionRange = serde_json::from_value(serde_json::json!({
+            "type": "SEMVER",
+            "events": [
+                {"introduced": "1.0.0"},
+                {"fixed": "2.0.0"},
+                {"introduced": "3.0.0"},
+                {"last_affected": "4.0.0"}
+            ]
+        }))
+        .expect("mixed range");
+        assert_eq!(
+            evaluate_semver_range(&Version::parse("3.5.0").unwrap(), &mixed_boundaries),
+            Err(VersionEvaluationIssue::InvalidSemverEvents)
+        );
+
+        let reordered: OsvVersionRange = serde_json::from_value(serde_json::json!({
+            "type": "SEMVER",
+            "events": [{"fixed": "2.0.0"}, {"introduced": "1.0.0"}]
+        }))
+        .expect("reordered range");
+        assert_eq!(
+            evaluate_semver_range(&Version::parse("1.5.0").unwrap(), &reordered),
+            Err(VersionEvaluationIssue::InvalidSemverEvents)
+        );
     }
 
     #[test]
@@ -2424,6 +3874,38 @@ mod tests {
         assert_eq!(
             catalog.search_text("second title", 10).expect("search")[0].title,
             "second title"
+        );
+        cleanup(&path);
+    }
+
+    #[test]
+    fn unchanged_reactivation_keeps_the_ready_search_index_complete() {
+        let path = temporary_catalog("unchanged-reactivation");
+        let mut catalog = Catalog::open_or_create(&path).expect("catalog");
+        let bytes = record("GHSA-aaaa-bbbb-cccc", &[], "reactivated title");
+        catalog
+            .import_osv_record(&source(), &bytes)
+            .expect("initial import");
+        catalog
+            .connection
+            .execute("UPDATE source_records SET active = 0", [])
+            .expect("fixture deactivation");
+        catalog.rebuild_search_index().expect("inactive rebuild");
+        assert!(
+            catalog
+                .search_text("reactivated title", 10)
+                .unwrap()
+                .is_empty()
+        );
+
+        let result = catalog
+            .import_osv_record(&source(), &bytes)
+            .expect("unchanged reactivation");
+        assert_eq!(result.records_unchanged, 1);
+        assert_eq!(catalog.stats().unwrap().search_index_status, "ready");
+        assert_eq!(
+            catalog.search_text("reactivated title", 10).unwrap().len(),
+            1
         );
         cleanup(&path);
     }
@@ -2531,6 +4013,215 @@ mod tests {
     }
 
     #[test]
+    fn incremental_deltas_replay_recover_and_retain_explicit_withdrawals() {
+        let path = temporary_catalog("delta-lifecycle");
+        let mut catalog = Catalog::open_or_create(&path).expect("catalog");
+        let initial_record = record_at(
+            "GHSA-aaaa-bbbb-cccc",
+            "2026-08-23T00:00:00Z",
+            "initial",
+            false,
+        );
+        let base = snapshot('a', "2026-08-23T01:00:00Z", 1);
+        catalog.register_snapshot(&base).expect("register base");
+        catalog
+            .import_osv_snapshot_batch_deferred_search(
+                &source(),
+                &base.snapshot_id,
+                [&initial_record],
+            )
+            .expect("import base");
+        catalog
+            .complete_snapshot_source(&source(), &base.snapshot_id, 1)
+            .expect("complete base source");
+        catalog
+            .complete_snapshot(&base.snapshot_id)
+            .expect("complete base");
+        catalog
+            .rebuild_search_index()
+            .expect("baseline search index");
+
+        let first = delta(
+            'b',
+            &base.snapshot_id,
+            None,
+            "2026-08-23T03:00:00Z",
+            "2026-08-23T01:00:00Z",
+            "2026-08-23T02:00:00Z",
+            1,
+            1,
+        );
+        let withdrawn = record_at(
+            "GHSA-aaaa-bbbb-cccc",
+            "2026-08-23T02:00:00Z",
+            "withdrawn",
+            true,
+        );
+        catalog
+            .register_delta(&first)
+            .expect("register first delta");
+        catalog
+            .import_osv_delta_batch(&source(), &first.delta_id, [&withdrawn])
+            .expect("import first delta");
+        catalog
+            .complete_delta_source(&source(), &first.delta_id, 1, 1)
+            .expect("complete first source");
+        catalog
+            .complete_delta(&first.delta_id)
+            .expect("complete first delta");
+        let revisions_before_replay = catalog.stats().expect("stats").source_record_revisions;
+        assert!(
+            catalog
+                .lookup_identifier("GHSA-aaaa-bbbb-cccc", 10)
+                .expect("lookup")[0]
+                .withdrawn
+        );
+
+        catalog.register_delta(&first).expect("idempotent register");
+        let replay = catalog
+            .import_osv_delta_batch(&source(), &first.delta_id, [&withdrawn])
+            .expect("verified replay");
+        assert_eq!(replay.records_seen, 1);
+        assert_eq!(replay.records_unchanged, 1);
+        assert_eq!(
+            catalog.stats().expect("stats").source_record_revisions,
+            revisions_before_replay
+        );
+
+        let fork = delta(
+            'c',
+            &base.snapshot_id,
+            None,
+            "2026-08-23T05:00:00Z",
+            "2026-08-23T02:00:00Z",
+            "2026-08-23T04:00:00Z",
+            1,
+            0,
+        );
+        assert!(matches!(
+            catalog.register_delta(&fork),
+            Err(CatalogError::DeltaRollback { .. })
+        ));
+
+        let second = delta(
+            'd',
+            &base.snapshot_id,
+            Some(first.delta_id.clone()),
+            "2026-08-23T05:00:00Z",
+            "2026-08-23T02:00:00Z",
+            "2026-08-23T04:00:00Z",
+            2,
+            0,
+        );
+        let updated = record_at(
+            "GHSA-aaaa-bbbb-cccc",
+            "2026-08-23T04:00:00Z",
+            "restored",
+            false,
+        );
+        let inserted = record_at("GHSA-dddd-eeee-ffff", "2026-08-23T03:00:00Z", "new", false);
+        catalog.register_delta(&second).expect("register second");
+        catalog
+            .import_osv_delta_batch(&source(), &second.delta_id, [&updated])
+            .expect("first recovery batch");
+        drop(catalog);
+
+        let catalog = Catalog::open_existing(&path).expect("diagnostic reader");
+        let interrupted_stats = catalog.stats().expect("interrupted stats");
+        assert_eq!(interrupted_stats.deltas, 2);
+        assert_eq!(interrupted_stats.complete_deltas, 1);
+        assert!(matches!(
+            catalog.lookup_identifier("GHSA-aaaa-bbbb-cccc", 10),
+            Err(CatalogError::DeltaPreparing(1))
+        ));
+        assert!(matches!(
+            catalog.provenance(),
+            Err(CatalogError::DeltaPreparing(1))
+        ));
+        drop(catalog);
+
+        let mut catalog =
+            Catalog::open_existing_writable(&path).expect("reopen after interruption");
+        let unrelated_snapshot = snapshot('f', "2026-08-23T06:00:00Z", 1);
+        assert!(matches!(
+            catalog.register_snapshot(&unrelated_snapshot),
+            Err(CatalogError::DeltaPreparing(1))
+        ));
+        catalog
+            .import_osv_delta_batch(&source(), &second.delta_id, [&inserted])
+            .expect("second recovery batch");
+        catalog
+            .complete_delta_source(&source(), &second.delta_id, 2, 0)
+            .expect("complete recovered source");
+        catalog
+            .complete_delta(&second.delta_id)
+            .expect("complete recovered delta");
+        let stats = catalog.stats().expect("stats");
+        assert_eq!(stats.deltas, 2);
+        assert_eq!(stats.complete_deltas, 2);
+        assert_eq!(stats.active_source_records, 2);
+        assert_eq!(stats.search_index_status, "ready");
+        assert_eq!(
+            catalog.provenance().expect("provenance").complete_delta_ids,
+            vec![first.delta_id.clone(), second.delta_id.clone()]
+        );
+
+        let older_full = snapshot('e', "2026-08-23T04:30:00Z", 1);
+        catalog
+            .register_snapshot(&older_full)
+            .expect("retain attempted rollback evidence");
+        assert!(matches!(
+            catalog.import_osv_snapshot_batch_deferred_search(
+                &source(),
+                &older_full.snapshot_id,
+                [&initial_record]
+            ),
+            Err(CatalogError::SnapshotRollback { .. })
+        ));
+        cleanup(&path);
+    }
+
+    #[test]
+    fn delta_with_quarantine_cannot_advance_the_catalog_cursor() {
+        let path = temporary_catalog("delta-quarantine");
+        let mut catalog = Catalog::open_or_create(&path).expect("catalog");
+        let base = snapshot('a', "2026-08-23T01:00:00Z", 1);
+        let initial = record_at(
+            "GHSA-aaaa-bbbb-cccc",
+            "2026-08-23T00:00:00Z",
+            "initial",
+            false,
+        );
+        catalog.register_snapshot(&base).expect("register base");
+        catalog
+            .import_osv_snapshot_batch_deferred_search(&source(), &base.snapshot_id, [&initial])
+            .expect("import base");
+        catalog
+            .complete_snapshot_source(&source(), &base.snapshot_id, 1)
+            .expect("complete source");
+        catalog
+            .complete_snapshot(&base.snapshot_id)
+            .expect("complete");
+        let mut blocked = delta(
+            'b',
+            &base.snapshot_id,
+            None,
+            "2026-08-23T03:00:00Z",
+            "2026-08-23T01:00:00Z",
+            "2026-08-23T02:00:00Z",
+            1,
+            0,
+        );
+        blocked.quarantined_records = 1;
+        assert!(matches!(
+            catalog.register_delta(&blocked),
+            Err(CatalogError::DeltaHasQuarantine(1))
+        ));
+        assert_eq!(catalog.stats().expect("stats").deltas, 0);
+        cleanup(&path);
+    }
+
+    #[test]
     fn writable_open_migrates_a_v1_catalog_without_reinitializing_it() {
         let path = temporary_catalog("migration-v1");
         let connection = Connection::open(&path).expect("v1 database");
@@ -2580,7 +4271,10 @@ mod tests {
             .expect("v1 schema");
         drop(connection);
         let catalog = Catalog::open_or_create(&path).expect("migrated catalog");
-        assert_eq!(schema_version(&catalog.connection).expect("version"), 2);
+        assert_eq!(
+            schema_version(&catalog.connection).expect("version"),
+            i64::from(CATALOG_SCHEMA_VERSION)
+        );
         let active_columns = catalog
             .connection
             .query_row(

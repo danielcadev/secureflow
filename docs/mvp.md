@@ -80,8 +80,8 @@ El MVP debe responder una sola pregunta:
 - [x] importar OSV local, conservar revisiones y consultar alias/FTS/paquetes;
 - [x] medir capacidad sintética en 100k, 500k y 1M registros;
 - [x] validar adapters, licencias y rechazos con snapshots reales;
-- [ ] implementar `modified_id.csv` con replay, bajas y recovery antes de llamar
-  incremental al pipeline;
+- [x] implementar `modified_id.csv` per-ecosystem con cadena, replay,
+  `withdrawn` explícito y recovery; la ausencia nunca se interpreta como baja;
 - [ ] medir 5–20 millones de relaciones y concurrencia antes de prometerlos;
 - [ ] reconciliar claims/reglas entre engines sólo después de construir un corpus
   etiquetado para medir merges incorrectos.
@@ -116,3 +116,8 @@ El MVP debe responder una sola pregunta:
 - descarga o ingestión indiscriminada de CVE/NVD/OSV;
 - benchmark competitivo o leaderboard;
 - soporte universal de lenguajes.
+
+El módulo propuesto Recon/API Exposure permanece fuera del MVP ejecutable. Su
+diagnóstico, scope gate y MVP offline/loopback están en
+[`diagnosis-recon-api-exposure.md`](./diagnosis-recon-api-exposure.md); no se ha
+creado un scanner de red.

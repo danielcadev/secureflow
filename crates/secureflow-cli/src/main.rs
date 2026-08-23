@@ -6,7 +6,7 @@ use secureflow_engine_adapter::{
     sha256_target,
 };
 use secureflow_knowledge::catalog::{
-    Catalog, CatalogImportResult, CatalogSnapshot, CatalogSource, MAX_IMPORT_RECORDS,
+    Catalog, CatalogDelta, CatalogImportResult, CatalogSnapshot, CatalogSource, MAX_IMPORT_RECORDS,
     MAX_OSV_RECORD_BYTES,
 };
 use secureflow_knowledge::catalog_backup::{
@@ -14,8 +14,10 @@ use secureflow_knowledge::catalog_backup::{
     restore_backup, verify_backup,
 };
 use secureflow_knowledge::correlation::{
-    MAX_CORRELATION_BYTES, MAX_CORRELATION_MATCHES, build_correlation, parse_correlation,
+    MAX_CORRELATION_BYTES, MAX_CORRELATION_MATCHES, build_correlation_v2,
+    parse_correlation_document,
 };
+use secureflow_knowledge::delta::{DeltaPrepareConfig, load_and_validate_delta, prepare_osv_delta};
 use secureflow_knowledge::snapshot::{
     SnapshotPrepareConfig, load_and_validate_snapshot, prepare_osv_zip, validate_snapshot_archive,
 };
@@ -57,15 +59,20 @@ const AI_REQUEST_SCHEMA: &str =
     include_str!("../../../schemas/secureflow-ai-request-v1.schema.json");
 const AI_RESPONSE_SCHEMA: &str =
     include_str!("../../../schemas/secureflow-ai-response-v1.schema.json");
-const CORRELATION_SCHEMA: &str =
+const CORRELATION_SCHEMA_V1: &str =
     include_str!("../../../schemas/secureflow-correlation-v1.schema.json");
+const CORRELATION_SCHEMA_V2: &str =
+    include_str!("../../../schemas/secureflow-correlation-v2.schema.json");
 const ORCHESTRATION_SCHEMA: &str =
     include_str!("../../../schemas/secureflow-orchestration-v1.schema.json");
 const PROSPECTIVE_PROTOCOL_SCHEMA: &str =
     include_str!("../../../schemas/secureflow-prospective-protocol-v1.schema.json");
+const ADVISORY_DELTA_SCHEMA: &str =
+    include_str!("../../../schemas/secureflow-advisory-delta-v1.schema.json");
 
 const MAX_MANIFEST_BYTES: u64 = 32 * 1024 * 1024;
 const MAX_LICENSE_EVIDENCE_BYTES: u64 = 1024 * 1024;
+const MAX_PROSPECTIVE_ARTIFACT_BYTES: u64 = 64 * 1024 * 1024;
 const CATALOG_BATCH_BYTES: usize = 64 * 1024 * 1024;
 const CATALOG_BATCH_RECORDS: usize = 50_000;
 const MAX_CATALOG_INPUT_DEPTH: usize = 64;
@@ -100,8 +107,12 @@ enum Command {
     AiRequestSchema,
     /// Print the normative structured AI response schema.
     AiResponseSchema,
-    /// Print the normative finding-to-advisory correlation schema.
-    CorrelationSchema,
+    /// Print a normative finding-to-advisory correlation schema.
+    CorrelationSchema {
+        /// Contract version to print; v2 evaluates exact versions and SEMVER ranges.
+        #[arg(long, value_enum, default_value_t = CorrelationSchemaVersion::V2)]
+        version: CorrelationSchemaVersion,
+    },
     /// Print the normative deterministic orchestration-plan schema.
     OrchestrationSchema,
     /// Print the normative sealed prospective benchmark protocol schema.
@@ -208,6 +219,55 @@ enum Command {
         #[arg(long)]
         archive: Option<PathBuf>,
     },
+    /// Print the normative reproducible OSV incremental-delta schema.
+    AdvisoryDeltaSchema,
+    /// Prepare a local delta from an acquired per-ecosystem OSV modified index and payloads.
+    DeltaPrepareOsv {
+        /// Acquired per-ecosystem `modified_id.csv`.
+        #[arg(long)]
+        modified_index: PathBuf,
+        /// Flat directory containing exactly one `<ID>.json` payload per selected index row.
+        #[arg(long)]
+        records: PathBuf,
+        /// New immutable delta directory. Existing paths are never overwritten.
+        #[arg(long)]
+        output: PathBuf,
+        /// Public locator for the exact per-ecosystem modified index.
+        #[arg(long)]
+        index_locator: String,
+        /// Immutable ETag, generation or acquisition revision for the index.
+        #[arg(long)]
+        index_revision: String,
+        /// Exact OSV ecosystem expected in every accepted payload.
+        #[arg(long)]
+        expected_ecosystem: String,
+        /// RFC3339 time at which the index and payload set were acquired.
+        #[arg(long)]
+        acquired_at: String,
+        /// Exclusive RFC3339 modified cursor already fully processed.
+        #[arg(long)]
+        after_modified: String,
+        /// Complete catalog snapshot on which this delta chain is based.
+        #[arg(long)]
+        base_snapshot_id: String,
+        /// Previous complete delta in this exact chain; omitted only for the first delta after a snapshot.
+        #[arg(long)]
+        previous_delta_id: Option<String>,
+        /// Local GitHub Advisory Database license evidence.
+        #[arg(long)]
+        github_license_evidence: Option<PathBuf>,
+        /// Local RustSec license policy evidence.
+        #[arg(long)]
+        rustsec_license_evidence: Option<PathBuf>,
+        /// Local OpenSSF Malicious Packages Apache-2.0 license evidence.
+        #[arg(long)]
+        openssf_malicious_packages_license_evidence: Option<PathBuf>,
+    },
+    /// Validate an extracted advisory delta and every retained hash.
+    DeltaValidate {
+        /// Delta manifest path.
+        manifest: PathBuf,
+    },
     /// Create or verify the indexed local advisory catalog.
     CatalogInit {
         /// SQLite catalog path.
@@ -245,6 +305,15 @@ enum Command {
         /// Original ZIP to verify again before importing.
         #[arg(long)]
         archive: Option<PathBuf>,
+    },
+    /// Import a validated OSV incremental delta without inferring deletion from absence.
+    CatalogImportDelta {
+        /// Existing SQLite catalog containing the complete base snapshot.
+        #[arg(long)]
+        database: PathBuf,
+        /// Validated advisory delta manifest.
+        #[arg(long)]
+        manifest: PathBuf,
     },
     /// Report physical and logical catalog counts as JSON.
     CatalogStats {
@@ -354,7 +423,7 @@ enum Command {
         /// Exact package name declared by the operator.
         #[arg(long)]
         package: String,
-        /// Optional installed version retained as context only; ranges are not evaluated in v1.
+        /// Optional installed version evaluated against exact lists and strict OSV SEMVER ranges.
         #[arg(long)]
         version: Option<String>,
         /// New correlation envelope. Inputs are never modified.
@@ -451,6 +520,27 @@ enum Command {
         #[arg(long)]
         draft: PathBuf,
         /// New immutable-by-convention sealed protocol.
+        #[arg(long)]
+        output: PathBuf,
+    },
+    /// Verify real public holdout commitments and seal the protocol without opening labels.
+    BenchmarkProtocolPreflight {
+        /// Protocol draft JSON whose commitment hashes must match the supplied artifacts.
+        #[arg(long)]
+        draft: PathBuf,
+        /// Public opaque-case corpus manifest; must not contain ground-truth labels.
+        #[arg(long)]
+        corpus_manifest: PathBuf,
+        /// Corpus provenance manifest.
+        #[arg(long)]
+        provenance_manifest: PathBuf,
+        /// Corpus license manifest.
+        #[arg(long)]
+        license_manifest: PathBuf,
+        /// Frozen execution environment/configuration manifest.
+        #[arg(long)]
+        environment_manifest: PathBuf,
+        /// New sealed protocol written only after all four hashes match.
         #[arg(long)]
         output: PathBuf,
     },
@@ -606,6 +696,12 @@ enum OutputFormat {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
 enum KnowledgeSchemaVersion {
+    V1,
+    V2,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+enum CorrelationSchemaVersion {
     V1,
     V2,
 }
@@ -773,6 +869,8 @@ enum CliError {
     Catalog(#[from] secureflow_knowledge::catalog::CatalogError),
     #[error("advisory snapshot failed: {0}")]
     Snapshot(#[from] secureflow_knowledge::snapshot::SnapshotError),
+    #[error("advisory delta failed: {0}")]
+    Delta(#[from] secureflow_knowledge::delta::DeltaError),
     #[error("catalog backup failed: {0}")]
     CatalogBackup(#[from] secureflow_knowledge::catalog_backup::BackupError),
     #[error("Secure Skill adapter failed: {0}")]
@@ -781,6 +879,8 @@ enum CliError {
     Benchmark(#[from] bench_adapter::BenchAdapterError),
     #[error("prospective benchmark protocol failed: {0}")]
     BenchmarkProtocol(#[from] bench_adapter::prospective::ProtocolError),
+    #[error("prospective protocol artifact hash does not match draft field: {0}")]
+    ProspectiveArtifactHashMismatch(&'static str),
     #[error("AI contract failed: {0}")]
     Ai(#[from] ai::AiError),
     #[error("correlation contract failed: {0}")]
@@ -860,8 +960,14 @@ fn execute(cli: Cli) -> Result<(), CliError> {
             print!("{AI_RESPONSE_SCHEMA}");
             Ok(())
         }
-        Command::CorrelationSchema => {
-            print!("{CORRELATION_SCHEMA}");
+        Command::CorrelationSchema { version } => {
+            print!(
+                "{}",
+                match version {
+                    CorrelationSchemaVersion::V1 => CORRELATION_SCHEMA_V1,
+                    CorrelationSchemaVersion::V2 => CORRELATION_SCHEMA_V2,
+                }
+            );
             Ok(())
         }
         Command::OrchestrationSchema => {
@@ -870,6 +976,10 @@ fn execute(cli: Cli) -> Result<(), CliError> {
         }
         Command::ProspectiveProtocolSchema => {
             print!("{PROSPECTIVE_PROTOCOL_SCHEMA}");
+            Ok(())
+        }
+        Command::AdvisoryDeltaSchema => {
+            print!("{ADVISORY_DELTA_SCHEMA}");
             Ok(())
         }
         Command::ValidateRun { path } => {
@@ -1049,6 +1159,66 @@ fn execute(cli: Cli) -> Result<(), CliError> {
             );
             Ok(())
         }
+        Command::DeltaPrepareOsv {
+            modified_index,
+            records,
+            output,
+            index_locator,
+            index_revision,
+            expected_ecosystem,
+            acquired_at,
+            after_modified,
+            base_snapshot_id,
+            previous_delta_id,
+            github_license_evidence,
+            rustsec_license_evidence,
+            openssf_malicious_packages_license_evidence,
+        } => {
+            ensure_output_distinct(&output, &[&modified_index])?;
+            ensure_output_outside_tree(&output, &records)?;
+            let manifest = prepare_osv_delta(&DeltaPrepareConfig {
+                modified_index,
+                records,
+                output: output.clone(),
+                index_locator,
+                index_revision,
+                expected_ecosystem,
+                acquired_at,
+                after_modified,
+                base_snapshot_id,
+                previous_delta_id,
+                github_license_evidence,
+                rustsec_license_evidence,
+                openssf_malicious_packages_license_evidence,
+            })?;
+            println!(
+                "advisory delta prepared: directory={} delta_id={} selected={} accepted={} quarantined={} withdrawn={} through={} absence_deactivates_record=false validation_authority=human-only",
+                output.display(),
+                manifest.delta_id,
+                manifest.accounting.selected_entries,
+                manifest.accounting.accepted_records,
+                manifest.accounting.quarantined_records,
+                manifest.accounting.withdrawn_records,
+                manifest.cursor.through_modified_inclusive,
+            );
+            Ok(())
+        }
+        Command::DeltaValidate { manifest } => {
+            let (delta, manifest_sha256) = load_and_validate_delta(&manifest)?;
+            println!(
+                "valid {}: manifest={} delta_id={} manifest_sha256={} base_snapshot_id={} accepted={} quarantined={} withdrawn={} through={} absence_deactivates_record=false validation_authority=human-only",
+                delta.contract_version,
+                manifest.display(),
+                delta.delta_id,
+                manifest_sha256,
+                delta.base_snapshot_id,
+                delta.accounting.accepted_records,
+                delta.accounting.quarantined_records,
+                delta.accounting.withdrawn_records,
+                delta.cursor.through_modified_inclusive,
+            );
+            Ok(())
+        }
         Command::CatalogInit { database } => {
             let catalog = Catalog::open_or_create(&database)?;
             let stats = catalog.stats()?;
@@ -1198,6 +1368,91 @@ fn execute(cli: Cli) -> Result<(), CliError> {
             );
             Ok(())
         }
+        Command::CatalogImportDelta { database, manifest } => {
+            let delta_root = manifest
+                .parent()
+                .ok_or(CliError::NotAFile(manifest.clone()))?;
+            ensure_output_outside_tree(&database, delta_root)?;
+            let (delta, manifest_sha256) = load_and_validate_delta(&manifest)?;
+            let mut catalog = Catalog::open_existing_writable(&database)?;
+            catalog.register_delta(&CatalogDelta {
+                delta_id: delta.delta_id.clone(),
+                manifest_sha256: manifest_sha256.clone(),
+                index_sha256: delta.index.sha256.clone(),
+                index_revision: delta.index.revision.clone(),
+                expected_ecosystem: delta.expected_ecosystem.clone(),
+                acquired_at: delta.acquired_at.clone(),
+                after_modified: delta.cursor.after_modified_exclusive.clone(),
+                through_modified: delta.cursor.through_modified_inclusive.clone(),
+                base_snapshot_id: delta.base_snapshot_id.clone(),
+                previous_delta_id: delta.previous_delta_id.clone(),
+                accepted_records: delta.accounting.accepted_records,
+                quarantined_records: delta.accounting.quarantined_records,
+                withdrawn_records: delta.accounting.withdrawn_records,
+            })?;
+            let mut total = CatalogImportResult::default();
+            for source_metadata in &delta.sources {
+                let source = CatalogSource {
+                    name: source_metadata.name.clone(),
+                    license_expression: source_metadata.license_expression.clone(),
+                    license_evidence_sha256: source_metadata.license_evidence_sha256.clone(),
+                    locator: source_metadata.locator.clone(),
+                };
+                let mut batch = Vec::new();
+                let mut batch_bytes = 0_usize;
+                for record in delta
+                    .records
+                    .iter()
+                    .filter(|record| record.source_name == source_metadata.name)
+                {
+                    let bytes = read_bounded_file(
+                        &delta_root.join(&record.stored_path),
+                        MAX_OSV_RECORD_BYTES,
+                    )?;
+                    batch_bytes = batch_bytes.saturating_add(bytes.len());
+                    batch.push(bytes);
+                    if batch.len() >= CATALOG_BATCH_RECORDS || batch_bytes >= CATALOG_BATCH_BYTES {
+                        total.merge(catalog.import_osv_delta_batch(
+                            &source,
+                            &delta.delta_id,
+                            batch.drain(..),
+                        )?);
+                        batch_bytes = 0;
+                    }
+                }
+                if !batch.is_empty() {
+                    total.merge(catalog.import_osv_delta_batch(
+                        &source,
+                        &delta.delta_id,
+                        batch.drain(..),
+                    )?);
+                }
+                catalog.complete_delta_source(
+                    &source,
+                    &delta.delta_id,
+                    source_metadata.record_count,
+                    source_metadata.withdrawn_records,
+                )?;
+            }
+            catalog.complete_delta(&delta.delta_id)?;
+            let stats = catalog.stats()?;
+            println!(
+                "advisory delta imported: database={} delta_id={} manifest_sha256={} seen={} inserted={} updated={} unchanged={} withdrawn={} quarantined_not_imported={} complete_deltas={} active_source_records={} through={} absence_deactivates_record=false validation_authority=human-only",
+                database.display(),
+                delta.delta_id,
+                manifest_sha256,
+                total.records_seen,
+                total.records_inserted,
+                total.records_updated,
+                total.records_unchanged,
+                delta.accounting.withdrawn_records,
+                delta.accounting.quarantined_records,
+                stats.complete_deltas,
+                stats.active_source_records,
+                delta.cursor.through_modified_inclusive,
+            );
+            Ok(())
+        }
         Command::CatalogStats { database } => {
             let catalog = Catalog::open_existing(&database)?;
             println!("{}", serde_json::to_string_pretty(&catalog.stats()?)?);
@@ -1328,8 +1583,13 @@ fn execute(cli: Cli) -> Result<(), CliError> {
             let (manifest_bytes, run_manifest) = load_manifest(&manifest)?;
             let catalog = Catalog::open_existing(&database)?;
             let provenance = catalog.provenance()?;
-            let hits = catalog.search_package(&ecosystem, &package, MAX_CORRELATION_MATCHES)?;
-            let envelope = build_correlation(
+            let hits = catalog.search_package_version(
+                &ecosystem,
+                &package,
+                version.as_deref(),
+                MAX_CORRELATION_MATCHES,
+            )?;
+            let envelope = build_correlation_v2(
                 &run_manifest,
                 sha256_bytes(&manifest_bytes),
                 &finding_id,
@@ -1340,25 +1600,33 @@ fn execute(cli: Cli) -> Result<(), CliError> {
                 hits,
             )?;
             let advisory_count = envelope.advisories.len();
+            let version_summary = envelope.version_summary.clone();
             let human_decision = envelope.linked_run.human_decision;
             let correlation_id = envelope.correlation_id.clone();
             write_atomic(&output, &serde_json::to_vec_pretty(&envelope)?)?;
             println!(
-                "package context correlated: envelope={} correlation_id={} advisories={} affected_version_evaluated=false causal_relationship_asserted=false human_decision={:?} validation_authority=human-only",
+                "package context correlated: envelope={} correlation_id={} contract=secureflow-correlation-v2 advisories={} affected={} not_affected={} unknown={} not_evaluated={} affected_version_evaluated={} causal_relationship_asserted=false human_decision={:?} validation_authority=human-only",
                 output.display(),
                 correlation_id,
                 advisory_count,
+                version_summary.affected,
+                version_summary.not_affected,
+                version_summary.unknown,
+                version_summary.not_evaluated,
+                envelope.semantics.affected_version_evaluated,
                 human_decision,
             );
             Ok(())
         }
         Command::CorrelationValidate { path } => {
             let bytes = read_bounded_file(&path, MAX_CORRELATION_BYTES)?;
-            let envelope = parse_correlation(&bytes)?;
+            let envelope = parse_correlation_document(&bytes)?;
             println!(
-                "valid secureflow-correlation-v1: {} advisories={} affected_version_evaluated=false validation_authority=human-only",
+                "valid {}: {} advisories={} affected_version_evaluated={} validation_authority=human-only",
+                envelope.contract_version(),
                 path.display(),
-                envelope.advisories.len(),
+                envelope.advisories_len(),
+                envelope.affected_version_evaluated(),
             );
             Ok(())
         }
@@ -1391,13 +1659,14 @@ fn execute(cli: Cli) -> Result<(), CliError> {
             for path in &correlation {
                 ensure_output_distinct(&output, &[path])?;
                 let bytes = read_bounded_file(path, MAX_CORRELATION_BYTES)?;
-                let envelope = parse_correlation(&bytes)?;
-                if envelope.linked_run.run_id != run_manifest.run_id
-                    || envelope.linked_run.manifest_sha256 != manifest_sha256
+                let envelope = parse_correlation_document(&bytes)?;
+                let linked_run = envelope.linked_run();
+                if linked_run.run_id != run_manifest.run_id
+                    || linked_run.manifest_sha256 != manifest_sha256
                     || !run_manifest
                         .findings
                         .iter()
-                        .any(|finding| finding.finding_id == envelope.linked_run.finding_id)
+                        .any(|finding| finding.finding_id == linked_run.finding_id)
                 {
                     return Err(CliError::ArtifactLinkMismatch("advisory correlation"));
                 }
@@ -1567,6 +1836,66 @@ fn execute(cli: Cli) -> Result<(), CliError> {
             write_atomic(&output, &serde_json::to_vec_pretty(&protocol)?)?;
             println!(
                 "prospective protocol sealed: output={} protocol_id={} holdout=true human_comparator_required=true negative_results_required=true claims=task-bounded-only",
+                output.display(),
+                protocol_id,
+            );
+            Ok(())
+        }
+        Command::BenchmarkProtocolPreflight {
+            draft,
+            corpus_manifest,
+            provenance_manifest,
+            license_manifest,
+            environment_manifest,
+            output,
+        } => {
+            ensure_output_distinct(
+                &output,
+                &[
+                    &draft,
+                    &corpus_manifest,
+                    &provenance_manifest,
+                    &license_manifest,
+                    &environment_manifest,
+                ],
+            )?;
+            let draft_bytes =
+                read_bounded_file(&draft, bench_adapter::prospective::MAX_PROTOCOL_BYTES)?;
+            let draft_value: bench_adapter::prospective::ProtocolDraft =
+                serde_json::from_slice(&draft_bytes)?;
+            let commitments = [
+                (
+                    "corpus.manifest_sha256",
+                    &draft_value.corpus.manifest_sha256,
+                    &corpus_manifest,
+                ),
+                (
+                    "corpus.provenance_sha256",
+                    &draft_value.corpus.provenance_sha256,
+                    &provenance_manifest,
+                ),
+                (
+                    "corpus.license_manifest_sha256",
+                    &draft_value.corpus.license_manifest_sha256,
+                    &license_manifest,
+                ),
+                (
+                    "execution.environment_sha256",
+                    &draft_value.execution.environment_sha256,
+                    &environment_manifest,
+                ),
+            ];
+            for (field, expected, path) in commitments {
+                let bytes = read_bounded_file(path, MAX_PROSPECTIVE_ARTIFACT_BYTES)?;
+                if sha256_bytes(&bytes) != *expected {
+                    return Err(CliError::ProspectiveArtifactHashMismatch(field));
+                }
+            }
+            let protocol = bench_adapter::prospective::seal_draft(&draft_bytes, None)?;
+            let protocol_id = protocol.protocol_id.clone();
+            write_atomic(&output, &serde_json::to_vec_pretty(&protocol)?)?;
+            println!(
+                "prospective protocol preflight complete: output={} protocol_id={} artifact_hashes_verified=true labels_opened=false human_comparator_required=true negative_results_required=true claims=task-bounded-only",
                 output.display(),
                 protocol_id,
             );

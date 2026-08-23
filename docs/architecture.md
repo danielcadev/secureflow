@@ -44,12 +44,12 @@ secureflow-secure-adapter
 secureflow-knowledge
     ├── ledger JSONL v2 compatible con v1
     ├── decisiones humanas y observaciones exactas repetidas
-    ├── catálogo SQLite v2 separado para registros de seguridad externos
-    ├── snapshots OSV reproducibles, licencia y cuarentena
+    ├── catálogo SQLite v3 separado para registros de seguridad externos
+    ├── snapshots OSV y deltas encadenados, licencia y cuarentena
     ├── revisiones raw, fuentes, licencias y provenance hasheada
     ├── unión conservadora por aliases exactos; no por texto/IA
     ├── paquetes/rangos compactos e índices de consulta
-    ├── correlación conservadora finding-paquete-advisory
+    ├── correlación conservadora finding-paquete-versión-advisory
     └── FTS5, canonicalización y backups reconstruibles
 
 secureflow-ai
@@ -65,6 +65,13 @@ secureflow-bench-adapter
     ├── TP/FN por expectativas y FP/TN por controles
     ├── protocolo prospectivo sellado con cohorte humana y blinding
     └── sin ranking, superioridad global ni claims de producción
+
+secureflow-recon (propuesto; no implementado)
+    ├── scope/allowlist verificable antes de cualquier red
+    ├── inventario offline de Next.js, OpenAPI, tRPC, GraphQL y artefactos
+    ├── matriz declared/documented/observed/expected-control
+    ├── checks sólo loopback en su primer MVP
+    └── candidatos contextuales; humano conserva autoridad
 ```
 
 ## Estructura futura del repositorio
@@ -122,3 +129,8 @@ exista una frontera de responsabilidad y una prueba que justifique cada uno.
   una decisión humana puede validar un hallazgo;
 - cada retry debe ser idempotente y conservar el intento anterior;
 - un fallo operativo nunca equivale a un resultado limpio.
+
+El diagnóstico y los límites de `secureflow-recon` están en
+[`diagnosis-recon-api-exposure.md`](./diagnosis-recon-api-exposure.md). No se
+creará el crate ni tráfico remoto hasta aprobar su contrato de autorización,
+fixtures y benchmark.

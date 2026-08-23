@@ -505,7 +505,7 @@ fn prints_new_phase_two_schemas_and_seals_a_prospective_protocol() {
     for (command, schema_name) in [
         (
             "correlation-schema",
-            "secureflow-correlation-v1.schema.json",
+            "secureflow-correlation-v2.schema.json",
         ),
         (
             "orchestration-schema",
@@ -514,6 +514,10 @@ fn prints_new_phase_two_schemas_and_seals_a_prospective_protocol() {
         (
             "prospective-protocol-schema",
             "secureflow-prospective-protocol-v1.schema.json",
+        ),
+        (
+            "advisory-delta-schema",
+            "secureflow-advisory-delta-v1.schema.json",
         ),
     ] {
         let output = Command::new(binary())
@@ -530,6 +534,20 @@ fn prints_new_phase_two_schemas_and_seals_a_prospective_protocol() {
                 .is_some_and(|value| value.ends_with(schema_name))
         );
     }
+
+    let legacy_correlation_schema = Command::new(binary())
+        .arg("correlation-schema")
+        .args(["--version", "v1"])
+        .output()
+        .expect("legacy correlation schema command should start");
+    assert!(legacy_correlation_schema.status.success());
+    let legacy_correlation_schema: serde_json::Value =
+        serde_json::from_slice(&legacy_correlation_schema.stdout).expect("legacy schema JSON");
+    assert!(
+        legacy_correlation_schema["$id"]
+            .as_str()
+            .is_some_and(|value| value.ends_with("secureflow-correlation-v1.schema.json"))
+    );
 
     let output_path = std::env::temp_dir().join(format!(
         "secureflow-prospective-protocol-{}.json",
@@ -560,6 +578,189 @@ fn prints_new_phase_two_schemas_and_seals_a_prospective_protocol() {
         .expect("protocol validation should start");
     assert!(validated.status.success());
     std::fs::remove_file(output_path).expect("protocol cleanup");
+}
+
+#[test]
+fn prepares_and_validates_a_fail_closed_advisory_delta() {
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("clock")
+        .as_nanos();
+    let root = std::env::temp_dir().join(format!(
+        "secureflow-cli-delta-{}-{nonce}",
+        std::process::id()
+    ));
+    let payloads = root.join("payloads");
+    let output = root.join("prepared");
+    std::fs::create_dir_all(&payloads).expect("payload directory");
+    std::fs::write(
+        root.join("modified_id.csv"),
+        b"2026-08-23T12:00:00Z,GHSA-aaaa-bbbb-cccc\n",
+    )
+    .expect("index");
+    std::fs::write(root.join("license.txt"), b"CC-BY-4.0 evidence").expect("license");
+    std::fs::write(
+        payloads.join("GHSA-aaaa-bbbb-cccc.json"),
+        serde_json::to_vec(&serde_json::json!({
+            "id": "GHSA-aaaa-bbbb-cccc",
+            "modified": "2026-08-23T12:00:00Z",
+            "withdrawn": "2026-08-23T12:00:00Z",
+            "summary": "CLI delta fixture",
+            "affected": [{
+                "package": {"ecosystem": "crates.io", "name": "fixture"},
+                "ranges": [{"type": "SEMVER", "events": [{"introduced": "0"}]}]
+            }]
+        }))
+        .expect("payload JSON"),
+    )
+    .expect("payload");
+
+    let prepared = Command::new(binary())
+        .arg("delta-prepare-osv")
+        .args(["--modified-index"])
+        .arg(root.join("modified_id.csv"))
+        .args(["--records"])
+        .arg(&payloads)
+        .args(["--output"])
+        .arg(&output)
+        .args([
+            "--index-locator",
+            "https://storage.googleapis.com/osv-vulnerabilities/crates.io/modified_id.csv",
+            "--index-revision",
+            "etag-fixture",
+            "--expected-ecosystem",
+            "crates.io",
+            "--acquired-at",
+            "2026-08-23T13:00:00Z",
+            "--after-modified",
+            "2026-08-23T00:00:00Z",
+            "--base-snapshot-id",
+            &format!("sf_snapshot_{}", "1".repeat(64)),
+            "--github-license-evidence",
+        ])
+        .arg(root.join("license.txt"))
+        .output()
+        .expect("delta preparation should start");
+    assert!(
+        prepared.status.success(),
+        "{}",
+        String::from_utf8_lossy(&prepared.stderr)
+    );
+    let manifest_path = output.join("manifest.json");
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&manifest_path).expect("prepared manifest"))
+            .expect("manifest JSON");
+    validate_with_schema("secureflow-advisory-delta-v1.schema.json", &manifest);
+    assert_eq!(manifest["semantics"]["absence_deactivates_record"], false);
+    assert_eq!(manifest["accounting"]["withdrawn_records"], 1);
+
+    let validated = Command::new(binary())
+        .arg("delta-validate")
+        .arg(&manifest_path)
+        .output()
+        .expect("delta validation should start");
+    assert!(
+        validated.status.success(),
+        "{}",
+        String::from_utf8_lossy(&validated.stderr)
+    );
+    let missing_catalog = root.join("missing-catalog.sqlite3");
+    let rejected_import = Command::new(binary())
+        .arg("catalog-import-delta")
+        .args(["--database"])
+        .arg(&missing_catalog)
+        .args(["--manifest"])
+        .arg(&manifest_path)
+        .output()
+        .expect("delta import should start");
+    assert!(!rejected_import.status.success());
+    assert!(!missing_catalog.exists());
+    std::fs::remove_dir_all(root).expect("delta cleanup");
+}
+
+#[test]
+fn prospective_preflight_binds_real_artifacts_without_opening_labels() {
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("clock")
+        .as_nanos();
+    let root = std::env::temp_dir().join(format!(
+        "secureflow-cli-prospective-{}-{nonce}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&root).expect("study directory");
+    let known_hash = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+    let artifacts = [
+        root.join("corpus.json"),
+        root.join("provenance.json"),
+        root.join("licenses.json"),
+        root.join("environment.json"),
+    ];
+    for artifact in &artifacts {
+        std::fs::write(artifact, b"abc").expect("commitment artifact");
+    }
+    let mut draft: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(prospective_protocol_fixture()).expect("protocol fixture"),
+    )
+    .expect("protocol JSON");
+    draft["corpus"]["manifest_sha256"] = known_hash.into();
+    draft["corpus"]["provenance_sha256"] = known_hash.into();
+    draft["corpus"]["license_manifest_sha256"] = known_hash.into();
+    draft["execution"]["environment_sha256"] = known_hash.into();
+    let draft_path = root.join("draft.json");
+    std::fs::write(
+        &draft_path,
+        serde_json::to_vec_pretty(&draft).expect("draft bytes"),
+    )
+    .expect("draft");
+    let output = root.join("sealed.json");
+    let preflight = Command::new(binary())
+        .arg("benchmark-protocol-preflight")
+        .args(["--draft"])
+        .arg(&draft_path)
+        .args(["--corpus-manifest"])
+        .arg(&artifacts[0])
+        .args(["--provenance-manifest"])
+        .arg(&artifacts[1])
+        .args(["--license-manifest"])
+        .arg(&artifacts[2])
+        .args(["--environment-manifest"])
+        .arg(&artifacts[3])
+        .args(["--output"])
+        .arg(&output)
+        .output()
+        .expect("preflight should start");
+    assert!(
+        preflight.status.success(),
+        "{}",
+        String::from_utf8_lossy(&preflight.stderr)
+    );
+    assert!(String::from_utf8_lossy(&preflight.stdout).contains("labels_opened=false"));
+    let protocol: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&output).expect("sealed protocol"))
+            .expect("sealed JSON");
+    validate_with_schema("secureflow-prospective-protocol-v1.schema.json", &protocol);
+
+    std::fs::write(&artifacts[3], b"tampered").expect("tamper environment");
+    let rejected = Command::new(binary())
+        .arg("benchmark-protocol-preflight")
+        .args(["--draft"])
+        .arg(&draft_path)
+        .args(["--corpus-manifest"])
+        .arg(&artifacts[0])
+        .args(["--provenance-manifest"])
+        .arg(&artifacts[1])
+        .args(["--license-manifest"])
+        .arg(&artifacts[2])
+        .args(["--environment-manifest"])
+        .arg(&artifacts[3])
+        .args(["--output"])
+        .arg(root.join("must-not-exist.json"))
+        .output()
+        .expect("tampered preflight should start");
+    assert!(!rejected.status.success());
+    assert!(!root.join("must-not-exist.json").exists());
+    std::fs::remove_dir_all(root).expect("study cleanup");
 }
 
 #[test]

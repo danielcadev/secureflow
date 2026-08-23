@@ -45,6 +45,7 @@ require_local_license_evidence = true
 record_predicate = "primary ID starts MAL- and every affected.database_specific.source points to github.com/ossf/malicious-packages/blob/.../osv/malicious/..."
 
 [incremental_updates]
-status = "not-implemented"
-planned_index = "OSV modified_id.csv"
-rule = "full immutable snapshots remain authoritative until incremental replay, deletion and rollback tests exist"
+status = "implemented-per-ecosystem-v1"
+index = "OSV per-ecosystem modified_id.csv"
+contract = "secureflow-advisory-delta-v1"
+rule = "absence never deletes; explicit withdrawn is retained; complete snapshots remain authoritative for presence/absence"

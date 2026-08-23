@@ -93,8 +93,11 @@ El CSV exacto está en
   sintético, con aproximadamente 2,07 GB y 104,7 s de carga inicial.
 - La carga masiva sigue siendo determinista y local; ningún registro pasa por
   un modelo.
-- Actualizaciones incrementales deberían procesar sólo registros nuevos o
-  modificados. Todavía deben medirse con snapshots reales.
+- El pipeline incremental per-ecosystem ya procesa sólo la ventana posterior
+  al cursor y mantiene FTS por fila. Sobre una copia del catálogo real, una
+  ventana oficial solapada de 7 RUSTSEC tardó 3,99 s al registrarse y 0,99 s al
+  replay; fueron 7 unchanged porque el índice no tenía cambios posteriores al
+  snapshot. Aún falta medir una ventana real con inserts/updates.
 - JSONL y SQLite se mantienen separados porque resuelven autoridades y
   workloads diferentes.
 

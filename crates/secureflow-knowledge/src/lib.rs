@@ -7,6 +7,7 @@
 pub mod catalog;
 pub mod catalog_backup;
 pub mod correlation;
+pub mod delta;
 pub mod snapshot;
 
 use secureflow_model::{

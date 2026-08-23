@@ -18,11 +18,13 @@ las vulnerabilidades ni de que supere a un investigador humano.
 | Priorización y deduplicación | Orden determinista y deduplicación exacta por fingerprint, regla y ubicaciones | Cumplido para una ejecución/un engine; no hay reconciliación semántica entre engines |
 | Flujo humano | `list-findings`, `show-finding`, `review-run`, decisión `abstained` e informe Markdown | Cumplido; sólo la decisión humana puede marcar `validated` |
 | Inmutabilidad de entradas | Los comandos derivados rechazan salida igual a una entrada, incluidos hardlinks en Unix; `scan` rechaza outputs dentro del target; nuevos artefactos usan `0600` y directorios del ledger `0700` | Cumplido con pruebas; sigue existiendo una ventana TOCTOU local entre comprobación y escritura |
-| Knowledge base local | JSONL v2 para decisiones humanas y catálogo SQLite v2 separado para advisories, revisiones, alias, paquetes y FTS5 | Cumplido como infraestructura local; el piloto trazable aceptó 229.644 registros reales y puso 347 en cuarentena entre los tres snapshots, sin convertirlos en validaciones humanas |
+| Knowledge base local | JSONL v2 para decisiones humanas y catálogo SQLite v3 separado para advisories, revisiones, alias, paquetes, snapshots/deltas y FTS5 | Cumplido como infraestructura local; el piloto trazable aceptó 229.644 registros reales y puso 347 en cuarentena, sin convertirlos en validaciones humanas |
 | Decisión JSONL/SQLite basada en números | JSONL medido hasta 10k; SQLite medido en NVMe/Btrfs con 100k, 500k y 1M registros sintéticos | JSONL queda para el ledger pequeño; SQLite demostró 1M source records/900k entidades en 104,736 s y 2,07 GB, sin extrapolar a records reales |
 | Secure Skill | Import estricto de `review-contract` 1.1, commit/hashes/licencia y envelope separado; si existe `.git`, el commit debe coincidir con `HEAD` | Cumplido como adapter; un snapshot sin `.git` conserva hashes pero su revisión es declarada por el operador; no convierte `verified` upstream en validación SecureFlow |
-| Secure Bench | Import de `result-v2`, fingerprints de suite/run, verificación opcional de `HEAD`, TP/FN y FP/TN separados, claims bloqueados y protocolo prospectivo sellable | Cumplido como infraestructura evaluativa; el corpus Phase 1 es sintético y conocido y el fixture prospectivo sólo prueba el contrato, no constituye un estudio |
-| Correlación conservadora | Enlace exacto finding-paquete-advisory con hashes de run, catálogo, snapshots y canonicalización | Cumplido sin evaluar rangos de versión ni afirmar causalidad; el contexto del paquete lo declara el operador |
+| Secure Bench | Import de `result-v2`, fingerprints de suite/run, verificación opcional de `HEAD`, TP/FN y FP/TN separados, claims bloqueados, protocolo prospectivo y preflight de artefactos | Cumplido como infraestructura evaluativa; el corpus Phase 1 es sintético y conocido y todavía no existe holdout/cohorte/estudio real |
+| Correlación conservadora | Enlace exacto finding-paquete-versión-advisory con hashes de run, catálogo, snapshots/deltas y canonicalización | V2 evalúa listas exactas y SEMVER, preserva unknown y no afirma causalidad; el contexto de paquete lo declara el operador |
+| Actualización incremental | `modified_id.csv` per-ecosystem, índice/payloads/licencias hasheados, cadena lineal, replay, recovery y `withdrawn` explícito | Cumplido con fixtures y replay real solapado de 7 RUSTSEC; la ausencia nunca borra y no hubo cambios nuevos posteriores al snapshot |
+| Recon/API Exposure | Diagnóstico modular de inventario Next.js/API, matriz de cobertura, scope allowlist y checks loopback | Diseñado, no implementado; no existe scanner remoto ni autorización de red automatizada |
 | Orquestación fail-closed | State machine de siete fases, artefactos retenidos por hash, abstención y siguiente acción derivada | Cumplido como plan local; no ejecuta red, IA ni revisión humana automáticamente |
 | Backups operativos | SQLite Online Backup API, manifiesto hasheado, `quick_check`, claves foráneas, creación sin overwrite y restore a destino nuevo | Cumplido con round-trip y concurrencia en pruebas; falta una política externa de retención, cifrado y recuperación ante desastre |
 | IA local-first | Preparación redacted desactivada por defecto, consentimiento, presupuesto, Luna por defecto, modelo/prompt/tokens y respuesta advisory | Cumplido como contrato offline; no hay cliente de red ni medición de calidad/coste real de un proveedor |
@@ -35,19 +37,19 @@ las vulnerabilidades ni de que supere a un investigador humano.
 - `cargo +1.92.0 fmt --all -- --check`: aprobado.
 - `cargo +1.92.0 clippy --workspace --all-targets --locked --offline -- -D
   warnings`: aprobado.
-- `cargo +1.92.0 test --workspace --locked --offline`: 105 pruebas aprobadas,
+- `cargo +1.92.0 test --workspace --locked --offline`: 117 pruebas aprobadas,
   0 fallos.
-- `cargo +1.92.0 audit`: 165 dependencias revisadas contra 1.225 advisories,
+- `cargo +1.92.0 audit`: lockfile revisado contra 1.225 advisories,
   sin vulnerabilidades reportadas.
 - `scripts/demo-local.sh`: 6 candidatos deterministas, todos `pending`; request
   Luna de 899 bytes de payload, `transmitted=false`; importaciones de Secure
   Skill y del benchmark histórico válidas. El catálogo sintético importó 2
   registros de origen como 1 entidad canónica,
   pasó `quick_check` y no tuvo violaciones de claves foráneas. Artefactos de
-  esta ejecución: `/tmp/secureflow-demo.erV96m`.
+  esta ejecución: `/tmp/secureflow-demo.tEoYF3`.
 - `scripts/eval-local.sh`: 14 casos sintéticos, 0 TP, 7 FN, 2 FP, 5 TN, 0
   fallos operativos y 70 ms agregados. Artefactos de esta ejecución:
-  `/tmp/secureflow-eval.blwfZ9`.
+  `/tmp/secureflow-eval.FcND1S`.
 - El SHA-256 del reporte raw de la demo coincide con el hash registrado en el
   manifiesto; los timestamps de creación y finalización delimitan la ejecución.
 - Dos demos consecutivos conservaron exactamente el target hash, el orden y el
@@ -74,10 +76,17 @@ las vulnerabilidades ni de que supere a un investigador humano.
 - El backup online del catálogo real de 1,20 GB terminó en 45,96 s, fue creado
   con modo `0600` y revalidó hash, `quick_check` y claves foráneas. El restore
   completo a esa escala no se ejecutó; el round-trip está cubierto por fixture.
+- Una copia del catálogo real migró v2→v3 en 1,10 s, conservó todos los conteos
+  y pasó integridad. El backup v2 original siguió verificando read-only. Un
+  backup v3 de 1,20 GB tardó 49,96 s y su verificación 31,12 s.
+- El índice oficial crates.io no contenía cambios posteriores al snapshot. Una
+  ventana solapada de 7 RUSTSEC se preparó sin cuarentena y se aplicó a la copia
+  real como 7 unchanged/0 inserted/0 updated; primera aplicación 3,99 s y
+  replay 0,99 s, con FTS ready e integridad aprobada.
 
-Los paths bajo `/tmp` son evidencia local retenida de la sesión, no artefactos
-publicables permanentes. Una release debe producir un bundle versionado y
-hasheado desde un commit limpio.
+Los paths bajo `/tmp` y los pilotos ignorados bajo `target/` son evidencia local
+retenida de la sesión, no artefactos publicables permanentes. Una release debe
+producir un bundle versionado y hasheado desde un commit limpio.
 
 ## Qué falta antes de llamar al proyecto publicable
 
@@ -98,6 +107,8 @@ hasheado desde un commit limpio.
 - presentar capacidad sintética como una base global de vulnerabilidades reales;
 - embeddings para todos los advisories o deduplicación IA sin labels;
 - explotación, active scanning o parches autónomos;
+- recon remoto, crawling o checks HTTP fuera de fixtures loopback antes de
+  aprobar el contrato de autorización/allowlist;
 - dashboard web o sistema distribuido;
 - deduplicación semántica sin corpus etiquetado;
 - ranking comercial o claims de superioridad;

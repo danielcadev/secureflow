@@ -136,6 +136,31 @@ cargo run -p secureflow -- catalog-import-snapshot \
   --archive /ruta/npm-all.zip
 ```
 
+Después de una foto completa, los cambios de un `modified_id.csv` por
+ecosistema se preparan fuera de red y se encadenan al snapshot/delta anterior:
+
+```bash
+cargo run -p secureflow -- delta-prepare-osv \
+  --modified-index /ruta/modified_id.csv \
+  --records /ruta/payloads-json \
+  --output .secureflow/crates-delta \
+  --index-locator https://storage.googleapis.com/osv-vulnerabilities/crates.io/modified_id.csv \
+  --index-revision gcs-generation:<id> \
+  --expected-ecosystem crates.io \
+  --acquired-at 2026-08-23T19:07:52Z \
+  --after-modified 2026-08-21T01:00:00Z \
+  --base-snapshot-id sf_snapshot_<hash> \
+  --rustsec-license-evidence /ruta/RUSTSEC-README.md
+
+cargo run -p secureflow -- catalog-import-delta \
+  --database .secureflow/advisories.sqlite3 \
+  --manifest .secureflow/crates-delta/manifest.json
+```
+
+Un payload faltante o en cuarentena bloquea el cursor. La ausencia nunca
+desactiva; `withdrawn` explícito se conserva como estado retirado y sólo un
+snapshot completo posterior puede marcar registros ausentes como inactivos.
+
 La importación manual de OSV JSON sigue disponible para fuentes explícitas:
 
 ```bash
@@ -160,10 +185,13 @@ cargo run -p secureflow -- catalog-stats .secureflow/advisories.sqlite3
 cargo run -p secureflow -- catalog-check .secureflow/advisories.sqlite3
 ```
 
-La base conserva revisiones raw, alias exactos y rangos compactos; `upstream` y
-`related` no fusionan vulnerabilidades. Durante importaciones masivas FTS se
-reconstruye al final y queda `dirty` si el proceso se interrumpe; se recupera
-con `catalog-rebuild-index`. Los componentes exactos de aliases se pueden
+La base v3 conserva revisiones raw, snapshots/deltas, alias exactos y rangos
+compactos; `upstream` y `related` no fusionan vulnerabilidades. Durante
+importaciones masivas FTS se reconstruye al final y queda `dirty` si el proceso
+se interrumpe; se recupera con `catalog-rebuild-index`. Los deltas pequeños
+mantienen FTS por fila dentro de cada transacción de lote y bloquean consultas
+de advisories mientras permanezcan `preparing`. Los componentes exactos de
+aliases se pueden
 reconstruir con `catalog-rebuild-canonicalization`, incluyendo splits cuando
 una revisión retira un alias. Toda consulta estructurada mantiene
 `validation_authority=human-only`.
@@ -175,8 +203,9 @@ registros de seguridad, no vulnerabilidades humanas validadas. 328 registros
 npm sin procedencia admitida quedaron en cuarentena. Evidencia exacta:
 [`docs/evidence/real-advisory-pilot-2026-08-23.json`](./docs/evidence/real-advisory-pilot-2026-08-23.json).
 
-Un finding se enlaza conservadoramente con advisories de un paquete sin evaluar
-todavía el rango de versión ni afirmar causalidad:
+Un finding se enlaza conservadoramente con advisories de un paquete. V2 evalúa
+listas exactas y rangos OSV `SEMVER`; datos inválidos o rangos `GIT`/`ECOSYSTEM`
+quedan `unknown`. Ni siquiera `affected` afirma causalidad o validación:
 
 ```bash
 cargo run -p secureflow -- correlate-package \
@@ -273,7 +302,11 @@ cargo run -p secureflow -- benchmark-protocol-seal \
   --output /ruta/protocol-sealed.json
 ```
 
-El fixture del repositorio sólo prueba el contrato; no es un preregistro real.
+Para un estudio real debe usarse `benchmark-protocol-preflight`, que comprueba
+los hashes del manifest público del holdout, provenance, licencias y entorno
+antes de sellar, sin recibir ni abrir labels. El fixture del repositorio sólo
+prueba el contrato; no es un preregistro real. Runbook:
+[`docs/prospective-study-runbook.md`](./docs/prospective-study-runbook.md).
 
 La IA opcional empieza con un contrato offline. El CLI prepara un solo finding
 redacted y presupuestado, pero no hace llamadas de red:
