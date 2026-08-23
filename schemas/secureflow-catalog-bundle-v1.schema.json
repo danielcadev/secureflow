@@ -1,0 +1,234 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://secureflow.dev/schemas/secureflow-catalog-bundle-v1.schema.json",
+  "title": "SecureFlow catalog bundle manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "bundle_id",
+    "created_at",
+    "profile",
+    "profile_policy_version",
+    "derivation",
+    "compression",
+    "compressed_sha256",
+    "compressed_bytes",
+    "payload",
+    "origin",
+    "validation_authority",
+    "authenticity"
+  ],
+  "properties": {
+    "contract_version": { "const": "secureflow-catalog-bundle-v1" },
+    "bundle_id": {
+      "type": "string",
+      "pattern": "^sf_catalog_bundle_[0-9a-f]{64}$"
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "profile": { "enum": ["core", "malicious", "full"] },
+    "profile_policy_version": {
+      "const": "secureflow-catalog-profile-policy-v1"
+    },
+    "derivation": {
+      "description": "byte-exact-online-backup means the payload is byte-exact to the frozen online-backup artifact, not necessarily to the live source main file",
+      "enum": ["byte-exact-online-backup", "current-record-projection-v1"]
+    },
+    "compression": { "$ref": "#/$defs/compression" },
+    "compressed_sha256": { "$ref": "#/$defs/sha256" },
+    "compressed_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 8589934592
+    },
+    "payload": { "$ref": "#/$defs/database" },
+    "origin": { "$ref": "#/$defs/database" },
+    "validation_authority": {
+      "const": "external-records-require-human-validation"
+    },
+    "authenticity": {
+      "const": "unsigned-manifest-requires-external-sha256"
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "compression": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "level", "checksum", "content_size", "single_frame"],
+      "properties": {
+        "algorithm": { "const": "zstd" },
+        "level": { "const": 3 },
+        "checksum": { "const": true },
+        "content_size": { "const": true },
+        "single_frame": { "const": true }
+      }
+    },
+    "database": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "database_sha256",
+        "database_bytes",
+        "application_id",
+        "schema_version",
+        "stats",
+        "integrity",
+        "provenance",
+        "composition"
+      ],
+      "properties": {
+        "database_sha256": { "$ref": "#/$defs/sha256" },
+        "database_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 17179869184
+        },
+        "application_id": { "const": 1397115714 },
+        "schema_version": { "type": "integer", "minimum": 2, "maximum": 3 },
+        "stats": { "$ref": "#/$defs/stats" },
+        "integrity": { "$ref": "#/$defs/integrity" },
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "composition": { "$ref": "#/$defs/composition" }
+      }
+    },
+    "stats": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "sources",
+        "canonical_vulnerabilities",
+        "active_canonical_vulnerabilities",
+        "source_records",
+        "active_source_records",
+        "inactive_source_records",
+        "source_record_revisions",
+        "snapshots",
+        "deltas",
+        "complete_deltas",
+        "identifiers",
+        "relationships",
+        "affected_packages",
+        "references",
+        "raw_revision_bytes",
+        "database_bytes",
+        "search_index_status"
+      ],
+      "properties": {
+        "schema_version": { "type": "integer", "minimum": 2, "maximum": 3 },
+        "sources": { "$ref": "#/$defs/count" },
+        "canonical_vulnerabilities": { "$ref": "#/$defs/count" },
+        "active_canonical_vulnerabilities": { "$ref": "#/$defs/count" },
+        "source_records": { "$ref": "#/$defs/count" },
+        "active_source_records": { "$ref": "#/$defs/count" },
+        "inactive_source_records": { "$ref": "#/$defs/count" },
+        "source_record_revisions": { "$ref": "#/$defs/count" },
+        "snapshots": { "$ref": "#/$defs/count" },
+        "deltas": { "$ref": "#/$defs/count" },
+        "complete_deltas": { "$ref": "#/$defs/count" },
+        "identifiers": { "$ref": "#/$defs/count" },
+        "relationships": { "$ref": "#/$defs/count" },
+        "affected_packages": { "$ref": "#/$defs/count" },
+        "references": { "$ref": "#/$defs/count" },
+        "raw_revision_bytes": { "$ref": "#/$defs/count" },
+        "database_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 17179869184
+        },
+        "search_index_status": { "const": "ready" }
+      }
+    },
+    "count": { "type": "integer", "minimum": 0 },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["quick_check", "foreign_key_violations", "search_index_status"],
+      "properties": {
+        "quick_check": { "const": "ok" },
+        "foreign_key_violations": { "const": 0 },
+        "search_index_status": { "const": "ready" }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "complete_snapshot_ids",
+        "canonicalization",
+        "last_canonical_rebuild_id"
+      ],
+      "properties": {
+        "schema_version": { "type": "integer", "minimum": 2, "maximum": 3 },
+        "complete_snapshot_ids": {
+          "type": "array",
+          "maxItems": 1100000,
+          "items": { "type": "string", "maxLength": 256 }
+        },
+        "complete_delta_ids": {
+          "type": "array",
+          "maxItems": 1100000,
+          "items": { "type": "string", "maxLength": 256 }
+        },
+        "canonicalization": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "last_canonical_rebuild_id": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "minLength": 1, "maxLength": 256 }
+          ]
+        }
+      }
+    },
+    "composition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy_version",
+        "active_advisory_records",
+        "active_malicious_package_records",
+        "active_unclassified_records",
+        "inactive_records",
+        "sources"
+      ],
+      "properties": {
+        "policy_version": { "const": "secureflow-catalog-profile-policy-v1" },
+        "active_advisory_records": { "$ref": "#/$defs/count" },
+        "active_malicious_package_records": { "$ref": "#/$defs/count" },
+        "active_unclassified_records": { "$ref": "#/$defs/count" },
+        "inactive_records": { "$ref": "#/$defs/count" },
+        "sources": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": { "$ref": "#/$defs/composition_source" }
+        }
+      }
+    },
+    "composition_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "license_expression",
+        "license_evidence_sha256",
+        "locator",
+        "active_advisory_records",
+        "active_malicious_package_records",
+        "active_unclassified_records"
+      ],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "license_expression": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "license_evidence_sha256": { "$ref": "#/$defs/sha256" },
+        "locator": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "active_advisory_records": { "$ref": "#/$defs/count" },
+        "active_malicious_package_records": { "$ref": "#/$defs/count" },
+        "active_unclassified_records": { "$ref": "#/$defs/count" }
+      }
+    }
+  }
+}

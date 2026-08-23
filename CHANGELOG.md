@@ -2,6 +2,16 @@
 
 All notable changes to SecureFlow are documented here.
 
+## Unreleased
+
+- add standalone `core`, `malicious` and `full` catalog distribution profiles;
+- add bounded single-frame Zstandard bundles with strict, hash-bound manifests;
+- add database-derived profile composition, fresh canonicalization for
+  projections, deep verification and atomic no-overwrite installation;
+- keep bundle integrity separate from publisher authenticity, require a
+  manifest SHA-256 pin for installation by default, and reject pre-existing
+  SQLite sidecars.
+
 ## 0.1.0 — 2026-08-23
 
 Initial public MVP:

@@ -310,6 +310,47 @@ cargo run -p secureflow -- catalog-backup-verify \
   --manifest /backups/advisories.backup.json
 ```
 
+Catalog data stays separate from the application release. A database can be
+distributed as a Zstandard bundle in three verified profiles: `core` contains
+current records classified from stored declarations as GitHub Advisory Database
+or RustSec, `malicious` contains records classified as OpenSSF malicious-package
+reports, and `full` is a logically complete SQLite online-backup snapshot.
+Projected profiles are rebuilt and canonicalized afresh; an unknown active
+source fails closed. Classification proves internal composition consistency,
+not that an upstream publisher supplied the stored declarations.
+
+```bash
+cargo run -p secureflow -- catalog-bundle-create \
+  --database .secureflow/advisories.sqlite3 \
+  --profile core \
+  --output /catalogs/secureflow-core.sqlite3.zst \
+  --manifest-output /catalogs/secureflow-core.manifest.json
+
+cargo run -p secureflow -- catalog-bundle-verify \
+  --bundle /catalogs/secureflow-core.sqlite3.zst \
+  --manifest /catalogs/secureflow-core.manifest.json \
+  --required-profile core \
+  --expected-manifest-sha256 <sha256>
+
+cargo run -p secureflow -- catalog-bundle-install \
+  --bundle /catalogs/secureflow-core.sqlite3.zst \
+  --manifest /catalogs/secureflow-core.manifest.json \
+  --required-profile core \
+  --expected-manifest-sha256 <sha256> \
+  --output .secureflow/advisories.core.sqlite3
+```
+
+Hashes inside an unsigned manifest prove internal consistency, not publisher
+identity. Pin the manifest SHA-256 from an authenticated release channel. The
+normal application bundle remains independent of all advisory data. Contract:
+[`secureflow-catalog-bundle-v1`](./docs/contracts/secureflow-catalog-bundle-v1.md).
+
+On the retained 229,644-record pilot, the measured artifacts were 20.24 MB for
+`core`, 138.09 MB for `malicious`, and 178.15 MB for `full`; the uncompressed
+origin was 1.20 GB. These are single local observations, not universal size or
+speed guarantees. Exact hashes, timing, memory and limitations:
+[`catalog-bundle-benchmark-2026-08-23.json`](./docs/evidence/catalog-bundle-benchmark-2026-08-23.json).
+
 The documented host was measured with 100k, 500k, and 1M synthetic records. At
 1M, it produced 900k canonical entities, occupied 2.07 GB, and took 104.7
 seconds on NVMe/Btrfs. This demonstrates storage capacity, not the existence of

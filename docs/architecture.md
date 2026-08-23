@@ -50,7 +50,8 @@ secureflow-knowledge
     ├── conservative exact-alias joins; never text/AI joins
     ├── compact package ranges and query indexes
     ├── conservative finding-package-version-advisory correlation
-    └── FTS5, canonicalization, and reconstructible backups
+    ├── FTS5, canonicalization, and reconstructible backups
+    └── verified Zstandard distribution profiles kept outside app releases
 
 secureflow-ai
     ├── local preparation with Luna as the logical family

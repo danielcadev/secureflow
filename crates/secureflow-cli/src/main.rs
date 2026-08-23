@@ -6,12 +6,16 @@ use secureflow_engine_adapter::{
     sha256_target,
 };
 use secureflow_knowledge::catalog::{
-    Catalog, CatalogDelta, CatalogImportResult, CatalogSnapshot, CatalogSource, MAX_IMPORT_RECORDS,
-    MAX_OSV_RECORD_BYTES,
+    Catalog, CatalogDelta, CatalogImportResult, CatalogProfile, CatalogSnapshot, CatalogSource,
+    MAX_IMPORT_RECORDS, MAX_OSV_RECORD_BYTES,
 };
 use secureflow_knowledge::catalog_backup::{
     MAX_BACKUP_MANIFEST_BYTES, create_backup, parse_manifest as parse_backup_manifest,
     restore_backup, verify_backup,
+};
+use secureflow_knowledge::catalog_bundle::{
+    CatalogBundleVerificationPolicy, MAX_BUNDLE_MANIFEST_BYTES, create_bundle, install_bundle,
+    parse_manifest as parse_bundle_manifest, verify_bundle,
 };
 use secureflow_knowledge::correlation::{
     MAX_CORRELATION_BYTES, MAX_CORRELATION_MATCHES, build_correlation_v2,
@@ -74,6 +78,8 @@ const PROSPECTIVE_PROTOCOL_SCHEMA: &str =
     include_str!("../../../schemas/secureflow-prospective-protocol-v1.schema.json");
 const ADVISORY_DELTA_SCHEMA: &str =
     include_str!("../../../schemas/secureflow-advisory-delta-v1.schema.json");
+const CATALOG_BUNDLE_SCHEMA: &str =
+    include_str!("../../../schemas/secureflow-catalog-bundle-v1.schema.json");
 const WEB_SCOPE_SCHEMA: &str = include_str!("../../../schemas/secureflow-web-scope-v1.schema.json");
 const WEB_INVENTORY_SCHEMA: &str =
     include_str!("../../../schemas/secureflow-web-inventory-v1.schema.json");
@@ -137,6 +143,8 @@ enum Command {
     OrchestrationSchema,
     /// Print the normative sealed prospective benchmark protocol schema.
     ProspectiveProtocolSchema,
+    /// Print the normative compressed catalog-bundle manifest schema.
+    CatalogBundleSchema,
     /// Print one normative SecureFlow Web schema.
     WebSchema {
         #[arg(value_enum)]
@@ -506,6 +514,53 @@ enum Command {
         output: PathBuf,
         #[arg(long)]
         manifest_output: PathBuf,
+    },
+    /// Create a Zstandard catalog bundle and publish its manifest separately.
+    CatalogBundleCreate {
+        /// Existing SQLite catalog path.
+        #[arg(long)]
+        database: PathBuf,
+        /// Distribution profile: core, malicious, or full.
+        #[arg(long)]
+        profile: CatalogProfile,
+        /// New `.sqlite3.zst` output; never overwritten.
+        #[arg(long)]
+        output: PathBuf,
+        /// New JSON manifest output; published last as the commit marker.
+        #[arg(long)]
+        manifest_output: PathBuf,
+    },
+    /// Deeply verify a catalog bundle, including decompression and SQLite checks.
+    CatalogBundleVerify {
+        #[arg(long)]
+        bundle: PathBuf,
+        #[arg(long)]
+        manifest: PathBuf,
+        /// Reject profile substitution when a specific profile is required.
+        #[arg(long)]
+        required_profile: Option<CatalogProfile>,
+        /// Verify against an exact SHA-256 obtained through a separately authenticated channel.
+        #[arg(long)]
+        expected_manifest_sha256: Option<String>,
+    },
+    /// Verify and install a catalog bundle to a new SQLite path.
+    CatalogBundleInstall {
+        #[arg(long)]
+        bundle: PathBuf,
+        #[arg(long)]
+        manifest: PathBuf,
+        /// New SQLite destination; never overwritten.
+        #[arg(long)]
+        output: PathBuf,
+        /// Reject profile substitution when a specific profile is required.
+        #[arg(long)]
+        required_profile: Option<CatalogProfile>,
+        /// Verify against an exact SHA-256 obtained through a separately authenticated channel.
+        #[arg(long)]
+        expected_manifest_sha256: Option<String>,
+        /// Permit installation without authenticating the manifest; intended for trusted local workflows.
+        #[arg(long, conflicts_with = "expected_manifest_sha256")]
+        allow_unverified_manifest: bool,
     },
     /// Resolve an exact CVE, GHSA, OSV, RUSTSEC or other identifier.
     CatalogLookup {
@@ -1045,6 +1100,8 @@ enum CliError {
     Delta(#[from] secureflow_knowledge::delta::DeltaError),
     #[error("catalog backup failed: {0}")]
     CatalogBackup(#[from] secureflow_knowledge::catalog_backup::BackupError),
+    #[error("catalog bundle failed: {0}")]
+    CatalogBundle(#[from] secureflow_knowledge::catalog_bundle::BundleError),
     #[error("Secure Skill adapter failed: {0}")]
     SecureReview(#[from] secureflow_secure_adapter::AdapterError),
     #[error("Secure Bench adapter failed: {0}")]
@@ -1160,6 +1217,10 @@ fn execute(cli: Cli) -> Result<(), CliError> {
         }
         Command::ProspectiveProtocolSchema => {
             print!("{PROSPECTIVE_PROTOCOL_SCHEMA}");
+            Ok(())
+        }
+        Command::CatalogBundleSchema => {
+            print!("{CATALOG_BUNDLE_SCHEMA}");
             Ok(())
         }
         Command::WebSchema { kind } => {
@@ -2064,6 +2125,82 @@ fn execute(cli: Cli) -> Result<(), CliError> {
                 manifest_output.display(),
                 restored.backup_id,
                 restored.database_bytes,
+            );
+            Ok(())
+        }
+        Command::CatalogBundleCreate {
+            database,
+            profile,
+            output,
+            manifest_output,
+        } => {
+            ensure_output_distinct(&output, &[&database, &manifest_output])?;
+            ensure_output_distinct(&manifest_output, &[&database])?;
+            ensure_output_absent(&output)?;
+            ensure_output_absent(&manifest_output)?;
+            let catalog = Catalog::open_existing(&database)?;
+            let manifest = create_bundle(&catalog, profile, &output)?;
+            let manifest_bytes = serde_json::to_vec_pretty(&manifest)?;
+            let manifest_sha256 = parse_bundle_manifest(&manifest_bytes)?.manifest_sha256;
+            write_atomic_new(&manifest_output, &manifest_bytes)?;
+            println!(
+                "catalog bundle created: bundle={} manifest={} bundle_id={} profile={} compressed_bytes={} database_bytes={} manifest_sha256={} authenticity=unsigned",
+                output.display(),
+                manifest_output.display(),
+                manifest.bundle_id,
+                manifest.profile,
+                manifest.compressed_bytes,
+                manifest.payload.database_bytes,
+                manifest_sha256,
+            );
+            Ok(())
+        }
+        Command::CatalogBundleVerify {
+            bundle,
+            manifest,
+            required_profile,
+            expected_manifest_sha256,
+        } => {
+            ensure_output_distinct(&bundle, &[&manifest])?;
+            let manifest_bytes = read_bounded_file(&manifest, MAX_BUNDLE_MANIFEST_BYTES)?;
+            let parsed = parse_bundle_manifest(&manifest_bytes)?;
+            let policy = CatalogBundleVerificationPolicy {
+                required_profile,
+                expected_manifest_sha256,
+                ..Default::default()
+            };
+            let verification = verify_bundle(&bundle, &parsed, &policy)?;
+            println!("{}", serde_json::to_string_pretty(&verification)?);
+            Ok(())
+        }
+        Command::CatalogBundleInstall {
+            bundle,
+            manifest,
+            output,
+            required_profile,
+            expected_manifest_sha256,
+            allow_unverified_manifest,
+        } => {
+            ensure_output_distinct(&output, &[&bundle, &manifest])?;
+            ensure_output_distinct(&bundle, &[&manifest])?;
+            ensure_output_absent(&output)?;
+            let manifest_bytes = read_bounded_file(&manifest, MAX_BUNDLE_MANIFEST_BYTES)?;
+            let parsed = parse_bundle_manifest(&manifest_bytes)?;
+            let policy = CatalogBundleVerificationPolicy {
+                required_profile,
+                expected_manifest_sha256,
+                allow_unverified_manifest,
+                ..Default::default()
+            };
+            let verification = install_bundle(&bundle, &parsed, &output, &policy)?;
+            println!(
+                "catalog bundle installed: database={} bundle_id={} profile={} database_bytes={} manifest_sha256={} integrity=verified authenticity={}",
+                output.display(),
+                verification.bundle_id,
+                verification.profile,
+                verification.database_bytes,
+                verification.manifest_sha256,
+                verification.authenticity,
             );
             Ok(())
         }
@@ -3655,6 +3792,23 @@ fn write_atomic(path: &PathBuf, bytes: &[u8]) -> Result<(), CliError> {
         });
     }
     Ok(())
+}
+
+fn ensure_output_absent(path: &Path) -> Result<(), CliError> {
+    match fs::symlink_metadata(path) {
+        Ok(_) => Err(CliError::Write {
+            path: path.to_owned(),
+            source: std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                "destination already exists",
+            ),
+        }),
+        Err(source) if source.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(source) => Err(CliError::Write {
+            path: path.to_owned(),
+            source,
+        }),
+    }
 }
 
 fn write_atomic_new(path: &Path, bytes: &[u8]) -> Result<(), CliError> {

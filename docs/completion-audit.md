@@ -27,6 +27,7 @@ outperforms a human researcher.
 | Recon/API Exposure | `secureflow-web`: expiring scope, Next.js inventory, local OpenAPI/manifest/GraphQL/tRPC inference, control matrix, JSON/SARIF, and a 24-case corpus | Complete for the offline vertical; no remote scanner, DNS/CT, crawling, or automated network authorization exists |
 | Fail-closed orchestration | Seven-phase state machine, artifacts retained by hash, abstention, and derived next action | Complete as a local plan; it does not automatically execute network activity, AI, or human review |
 | Operational backups | SQLite Online Backup API, hashed manifest, `quick_check`, foreign keys, no-overwrite creation, and restore to a new destination | Complete with round-trip and concurrency tests; external retention, encryption, and disaster-recovery policies are missing |
+| Modular catalog distribution | Database-derived `core`, `malicious`, and `full` profiles; bounded Zstandard; strict manifest; deep verify/install; manifest-hash pin required for installation by default | Implemented locally; stored source declarations do not authenticate publishers, projected profiles are standalone current-record catalogs, publisher signatures and incremental bundle updates are not implemented, and no advisory data ships in the app release |
 | Local-first AI | Redacted preparation disabled by default, consent, budget, Luna default, model/prompt/token accounting, and advisory response | Complete as an offline contract; no network client or real provider quality/cost measurement exists |
 | CV/paper evidence | Demo, separate evaluation, schemas, ADRs, and a matrix of allowed/prohibited claims | Complete for describing an engineering prototype; does not support superiority, production readiness, or general effectiveness |
 | Preservation of originals | Demo and evaluation write under `/tmp`; subsequent Git verification | Complete in this work: source repositories remained outside SecureFlow, and pre-existing changes in other worktrees were not modified |
@@ -34,11 +35,13 @@ outperforms a human researcher.
 
 ## Executed evidence
 
-- `cargo +1.92.0 fmt --all -- --check`: passed.
-- `cargo +1.92.0 clippy --workspace --all-targets --locked -- -D warnings`:
-  passed.
-- `cargo +1.92.0 test --workspace --locked`: 138 tests passed, 0 failed.
-- `cargo +1.92.0 audit`: lockfile checked against 1,225 advisories with no
+- `cargo fmt --all -- --check`: passed on local Rust 1.97.1; CI remains pinned
+  to Rust 1.92.0.
+- `cargo clippy --workspace --all-targets --locked -- -D warnings`: passed on
+  local Rust 1.97.1; CI remains pinned to Rust 1.92.0.
+- `cargo test --workspace --locked`: 150 tests passed, 0 failed on the local
+  Rust 1.97.1 environment; CI remains pinned to Rust 1.92.0.
+- `cargo audit`: 173 dependencies checked against 1,225 advisories with no
   reported vulnerabilities.
 - `scripts/demo-local.sh`: 6 deterministic candidates, all `pending`; a Luna
   request with an 899-byte payload and `transmitted=false`; valid Secure Skill
@@ -74,6 +77,12 @@ outperforms a human researcher.
 - The online backup of the real 1.20 GB catalog completed in 45.96 seconds,
   used mode `0600`, and revalidated its hash, `quick_check`, and foreign keys.
   A full restore at this scale was not executed; a fixture covers round-trip.
+- The same retained catalog produced locally deep-verified Zstandard bundles:
+  `core` 20,242,641 bytes, `malicious` 138,085,256 bytes, and frozen-snapshot
+  `full` 178,149,536 bytes. Creation peaked at 230,748 KiB or less after removing a
+  redundant compaction pass; deep verification took 0.44–6.15 seconds. These
+  are single warm-cache observations, retained with exact hashes in
+  `docs/evidence/catalog-bundle-benchmark-2026-08-23.json`.
 - A copy of the real catalog migrated from v2 to v3 in 1.10 seconds, retained
   every count, and passed integrity checks. The original v2 backup continued
   to verify read-only. A 1.20 GB v3 backup took 49.96 seconds, and its

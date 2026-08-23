@@ -22,6 +22,7 @@ pub const CATALOG_APPLICATION_ID: u32 = 0x5346_4b42;
 pub const MAX_OSV_RECORD_BYTES: u64 = 4 * 1024 * 1024;
 pub const MAX_IMPORT_RECORDS: usize = 1_100_000;
 pub const MAX_QUERY_RESULTS: usize = 1_000;
+pub const CATALOG_PROFILE_POLICY_VERSION: &str = "secureflow-catalog-profile-policy-v1";
 
 const MAX_IDENTIFIERS_PER_RECORD: usize = 1_024;
 const MAX_AFFECTED_PER_RECORD: usize = 4_096;
@@ -62,6 +63,7 @@ impl CatalogImportResult {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct CatalogStats {
     pub schema_version: u32,
     pub sources: u64,
@@ -143,6 +145,7 @@ pub struct CatalogVersionHit {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct CatalogIntegrity {
     pub quick_check: String,
     pub foreign_key_violations: u64,
@@ -162,6 +165,7 @@ pub struct CanonicalRebuildResult {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct CatalogProvenance {
     pub schema_version: u32,
     pub complete_snapshot_ids: Vec<String>,
@@ -169,6 +173,84 @@ pub struct CatalogProvenance {
     pub complete_delta_ids: Vec<String>,
     pub canonicalization: String,
     pub last_canonical_rebuild_id: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CatalogProfile {
+    Core,
+    Malicious,
+    Full,
+}
+
+impl std::fmt::Display for CatalogProfile {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Core => "core",
+            Self::Malicious => "malicious",
+            Self::Full => "full",
+        })
+    }
+}
+
+impl std::str::FromStr for CatalogProfile {
+    type Err = &'static str;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "core" => Ok(Self::Core),
+            "malicious" => Ok(Self::Malicious),
+            "full" => Ok(Self::Full),
+            _ => Err("expected one of: core, malicious, full"),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CatalogComposition {
+    pub policy_version: String,
+    pub active_advisory_records: u64,
+    pub active_malicious_package_records: u64,
+    pub active_unclassified_records: u64,
+    pub inactive_records: u64,
+    pub sources: Vec<CatalogCompositionSource>,
+}
+
+impl CatalogComposition {
+    pub fn active_records(&self) -> u64 {
+        self.active_advisory_records
+            .saturating_add(self.active_malicious_package_records)
+            .saturating_add(self.active_unclassified_records)
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CatalogCompositionSource {
+    pub name: String,
+    pub license_expression: String,
+    pub license_evidence_sha256: String,
+    pub locator: String,
+    pub active_advisory_records: u64,
+    pub active_malicious_package_records: u64,
+    pub active_unclassified_records: u64,
+}
+
+impl CatalogCompositionSource {
+    /// Classify the source from the declarations stored in the catalog.
+    ///
+    /// This is a composition check, not proof that the declarations came from
+    /// the named upstream publisher.
+    pub(crate) fn declared_profile(&self) -> Option<CatalogProfile> {
+        recognized_source_profile(&CatalogSource {
+            name: self.name.clone(),
+            license_expression: self.license_expression.clone(),
+            license_evidence_sha256: self.license_evidence_sha256.clone(),
+            locator: self.locator.clone(),
+        })
+        .map(RecognizedSourceKind::profile)
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -323,11 +405,42 @@ pub enum CatalogError {
     },
     #[error("canonical rebuild exceeds {kind} limit of {maximum}")]
     CanonicalRebuildTooLarge { kind: &'static str, maximum: usize },
+    #[error(
+        "catalog contains {0} active record(s) that the distribution profile policy cannot classify"
+    )]
+    UnclassifiedDistributionRecords(u64),
+    #[error("catalog has no active records for distribution profile {0}")]
+    EmptyDistributionProfile(CatalogProfile),
 }
 
 pub struct Catalog {
     connection: Connection,
     path: PathBuf,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RecognizedSourceKind {
+    GithubAdvisoryDatabase,
+    RustsecAdvisoryDatabase,
+    OpenssfMaliciousPackages,
+}
+
+impl RecognizedSourceKind {
+    fn profile(self) -> CatalogProfile {
+        match self {
+            Self::GithubAdvisoryDatabase | Self::RustsecAdvisoryDatabase => CatalogProfile::Core,
+            Self::OpenssfMaliciousPackages => CatalogProfile::Malicious,
+        }
+    }
+
+    fn identifier_matches(self, identifier: &str) -> bool {
+        let prefix = match self {
+            Self::GithubAdvisoryDatabase => "GHSA-",
+            Self::RustsecAdvisoryDatabase => "RUSTSEC-",
+            Self::OpenssfMaliciousPackages => "MAL-",
+        };
+        identifier.starts_with(prefix) && identifier.len() > prefix.len()
+    }
 }
 
 struct DisjointSet {
@@ -460,6 +573,221 @@ impl Catalog {
         })();
         let _ = fs::remove_file(&temporary);
         result
+    }
+
+    /// Derive a standalone, current-record-only profile catalog.
+    ///
+    /// Stored source declarations and primary identifier prefixes are checked
+    /// using the fixed profile policy. Unknown active records fail closed
+    /// instead of being silently assigned to a profile. `full` is handled as
+    /// one consistent SQLite online-backup snapshot by the distribution layer.
+    pub(crate) fn derive_current_profile_to(
+        &self,
+        profile: CatalogProfile,
+        output: &Path,
+    ) -> Result<CatalogComposition, CatalogError> {
+        ensure_no_preparing_delta(&self.connection)?;
+        if profile == CatalogProfile::Full {
+            return Err(CatalogError::InvalidPath(
+                "full distribution profile must use an online backup",
+            ));
+        }
+        let origin = self.profile_composition()?;
+        if origin.active_unclassified_records != 0 {
+            return Err(CatalogError::UnclassifiedDistributionRecords(
+                origin.active_unclassified_records,
+            ));
+        }
+        let expected_records = match profile {
+            CatalogProfile::Core => origin.active_advisory_records,
+            CatalogProfile::Malicious => origin.active_malicious_package_records,
+            CatalogProfile::Full => unreachable!("handled above"),
+        };
+        if expected_records == 0 {
+            return Err(CatalogError::EmptyDistributionProfile(profile));
+        }
+        match fs::symlink_metadata(output) {
+            Ok(_) => {
+                return Err(CatalogError::InvalidPath(
+                    "distribution catalog destination already exists",
+                ));
+            }
+            Err(source) if source.kind() == std::io::ErrorKind::NotFound => {}
+            Err(source) => {
+                return Err(CatalogError::Filesystem {
+                    path: output.to_owned(),
+                    source,
+                });
+            }
+        }
+
+        let result = (|| {
+            let mut target = Catalog::open_or_create(output)?;
+            let sources = self.distribution_sources()?;
+            let mut imported_records = 0_u64;
+            for (source_id, source, recognized) in sources {
+                if recognized.map(RecognizedSourceKind::profile) != Some(profile) {
+                    continue;
+                }
+                let mut statement = self.connection.prepare(
+                    "SELECT rr.raw_json
+                     FROM source_records sr
+                     JOIN source_record_revisions rr
+                       ON rr.revision_id = sr.current_revision_id
+                     WHERE sr.source_id = ?1 AND sr.active = 1
+                     ORDER BY sr.source_record_id",
+                )?;
+                let mut rows = statement.query([source_id])?;
+                let mut batch = Vec::<Vec<u8>>::with_capacity(1_024);
+                let mut batch_bytes = 0_usize;
+                while let Some(row) = rows.next()? {
+                    let raw = row.get::<_, Vec<u8>>(0)?;
+                    batch_bytes = batch_bytes.saturating_add(raw.len());
+                    batch.push(raw);
+                    if batch.len() == 1_024 || batch_bytes >= 32 * 1024 * 1024 {
+                        imported_records = imported_records.saturating_add(batch.len() as u64);
+                        target.import_osv_batch_deferred_search(&source, batch.drain(..))?;
+                        batch_bytes = 0;
+                    }
+                }
+                if !batch.is_empty() {
+                    imported_records = imported_records.saturating_add(batch.len() as u64);
+                    target.import_osv_batch_deferred_search(&source, batch.drain(..))?;
+                }
+            }
+            if imported_records != expected_records {
+                return Err(CatalogError::InvalidPath(
+                    "derived profile record accounting mismatch",
+                ));
+            }
+            // The destination starts empty, so normal exact-alias insertion
+            // computes canonical components only from the selected records;
+            // no component from the mixed origin can survive the projection.
+            target.rebuild_search_index()?;
+            target.connection.execute_batch("PRAGMA optimize;")?;
+            target
+                .connection
+                .execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")?;
+            drop(target);
+            remove_catalog_sidecars(output);
+
+            let derived = Catalog::open_existing(output)?;
+            let integrity = derived.check_integrity()?;
+            if integrity.quick_check != "ok"
+                || integrity.foreign_key_violations != 0
+                || integrity.search_index_status != "ready"
+            {
+                return Err(CatalogError::InvalidPath(
+                    "derived profile integrity verification failed",
+                ));
+            }
+            let composition = derived.profile_composition()?;
+            let valid = match profile {
+                CatalogProfile::Core => {
+                    composition.active_advisory_records == expected_records
+                        && composition.active_malicious_package_records == 0
+                        && composition.active_unclassified_records == 0
+                }
+                CatalogProfile::Malicious => {
+                    composition.active_advisory_records == 0
+                        && composition.active_malicious_package_records == expected_records
+                        && composition.active_unclassified_records == 0
+                }
+                CatalogProfile::Full => false,
+            };
+            if !valid || composition.inactive_records != 0 {
+                return Err(CatalogError::InvalidPath(
+                    "derived profile composition verification failed",
+                ));
+            }
+            Ok(composition)
+        })();
+        if result.is_err() {
+            remove_catalog_files(output);
+        }
+        result
+    }
+
+    /// Compute a database-derived, fail-closed profile inventory.
+    pub fn profile_composition(&self) -> Result<CatalogComposition, CatalogError> {
+        ensure_no_preparing_delta(&self.connection)?;
+        let inactive_records = nonnegative_count(self.connection.query_row(
+            "SELECT COUNT(*) FROM source_records WHERE active = 0",
+            [],
+            |row| row.get::<_, i64>(0),
+        )?)?;
+        let mut source_entries = self.distribution_sources()?;
+        source_entries.sort_by(|left, right| left.1.name.cmp(&right.1.name));
+        let mut composition = CatalogComposition {
+            policy_version: CATALOG_PROFILE_POLICY_VERSION.into(),
+            active_advisory_records: 0,
+            active_malicious_package_records: 0,
+            active_unclassified_records: 0,
+            inactive_records,
+            sources: Vec::new(),
+        };
+        for (source_id, source, recognized) in source_entries {
+            let mut counts = CatalogCompositionSource {
+                name: source.name,
+                license_expression: source.license_expression,
+                license_evidence_sha256: source.license_evidence_sha256,
+                locator: source.locator,
+                active_advisory_records: 0,
+                active_malicious_package_records: 0,
+                active_unclassified_records: 0,
+            };
+            let mut statement = self.connection.prepare(
+                "SELECT source_record_id FROM source_records
+                 WHERE source_id = ?1 AND active = 1 ORDER BY source_record_id",
+            )?;
+            let mut rows = statement.query([source_id])?;
+            while let Some(row) = rows.next()? {
+                let identifier = row.get::<_, String>(0)?;
+                match recognized.filter(|value| value.identifier_matches(&identifier)) {
+                    Some(RecognizedSourceKind::GithubAdvisoryDatabase)
+                    | Some(RecognizedSourceKind::RustsecAdvisoryDatabase) => {
+                        counts.active_advisory_records += 1;
+                        composition.active_advisory_records += 1;
+                    }
+                    Some(RecognizedSourceKind::OpenssfMaliciousPackages) => {
+                        counts.active_malicious_package_records += 1;
+                        composition.active_malicious_package_records += 1;
+                    }
+                    _ => {
+                        counts.active_unclassified_records += 1;
+                        composition.active_unclassified_records += 1;
+                    }
+                }
+            }
+            if counts.active_advisory_records != 0
+                || counts.active_malicious_package_records != 0
+                || counts.active_unclassified_records != 0
+            {
+                composition.sources.push(counts);
+            }
+        }
+        Ok(composition)
+    }
+
+    fn distribution_sources(
+        &self,
+    ) -> Result<Vec<(i64, CatalogSource, Option<RecognizedSourceKind>)>, CatalogError> {
+        let mut statement = self.connection.prepare(
+            "SELECT source_id, name, license_expression,
+                    license_evidence_sha256, locator
+             FROM sources ORDER BY name",
+        )?;
+        let rows = statement.query_map([], |row| {
+            let source = CatalogSource {
+                name: row.get(1)?,
+                license_expression: row.get(2)?,
+                license_evidence_sha256: row.get(3)?,
+                locator: row.get(4)?,
+            };
+            let recognized = recognized_source_profile(&source);
+            Ok((row.get(0)?, source, recognized))
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
 
     pub fn open_or_create(path: &Path) -> Result<Self, CatalogError> {
@@ -3385,6 +3713,47 @@ fn evaluate_semver_range(
 
 fn nonnegative_count(value: i64) -> Result<u64, CatalogError> {
     u64::try_from(value).map_err(|_| CatalogError::InvalidPath("negative SQLite count"))
+}
+
+fn recognized_source_profile(source: &CatalogSource) -> Option<RecognizedSourceKind> {
+    let github = source.name.starts_with("github-advisory-database@")
+        && source.name.len() > "github-advisory-database@".len()
+        && source.license_expression == "CC-BY-4.0"
+        && source.locator == "https://github.com/github/advisory-database";
+    let rustsec_cc0 = source.name.starts_with("rustsec-advisory-db-cc0@")
+        && source.name.len() > "rustsec-advisory-db-cc0@".len()
+        && source.license_expression == "CC0-1.0"
+        && source.locator == "https://github.com/RustSec/advisory-db";
+    let rustsec_cc_by = source.name.starts_with("rustsec-advisory-db-cc-by@")
+        && source.name.len() > "rustsec-advisory-db-cc-by@".len()
+        && source.license_expression == "CC-BY-4.0"
+        && source.locator == "https://github.com/RustSec/advisory-db";
+    let malicious = source.name.starts_with("openssf-malicious-packages@")
+        && source.name.len() > "openssf-malicious-packages@".len()
+        && source.license_expression == "Apache-2.0"
+        && source.locator == "https://github.com/ossf/malicious-packages";
+    if github || rustsec_cc0 || rustsec_cc_by {
+        if github {
+            Some(RecognizedSourceKind::GithubAdvisoryDatabase)
+        } else {
+            Some(RecognizedSourceKind::RustsecAdvisoryDatabase)
+        }
+    } else if malicious {
+        Some(RecognizedSourceKind::OpenssfMaliciousPackages)
+    } else {
+        None
+    }
+}
+
+fn remove_catalog_files(path: &Path) {
+    let _ = fs::remove_file(path);
+    remove_catalog_sidecars(path);
+}
+
+fn remove_catalog_sidecars(path: &Path) {
+    for suffix in ["-wal", "-shm"] {
+        let _ = fs::remove_file(path_with_suffix(path, suffix));
+    }
 }
 
 fn prepare_catalog_path(path: &Path, create: bool) -> Result<bool, CatalogError> {

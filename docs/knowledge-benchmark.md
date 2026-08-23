@@ -86,6 +86,37 @@ results; it is deliberately difficult. Alias and package lookups are selective.
 The exact CSV is retained at
 [`docs/evidence/catalog-benchmark-2026-08-23.csv`](./evidence/catalog-benchmark-2026-08-23.csv).
 
+## Modular distribution on the retained real pilot
+
+A release-profile CLI build created all three
+`secureflow-catalog-bundle-v1` profiles from the retained 229,644-record
+catalog. Projected profiles contain one current revision per record and no
+snapshot/delta cursor claims; `full` is the byte-exact compressed payload of a
+logically complete 1,202,384,896-byte online-backup artifact. It is not claimed
+to be byte-identical to the live source main file.
+
+| Profile | Source records | Canonical entities | Installed DB | Zstd payload | Reduction vs uncompressed origin DB | Create | Peak RSS | Deep verify |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `core` | 9,986 | 9,039 | 87,277,568 B | 20,242,641 B | 98.32% | 22.94 s | 144,128 KiB | 0.44 s |
+| `malicious` | 219,658 | 219,647 | 1,042,145,280 B | 138,085,256 B | 88.52% | 65.57 s | 230,748 KiB | 5.29 s |
+| `full` | 229,644 | 228,674 | 1,202,384,896 B | 178,149,536 B | 85.18% | 25.13 s | 144,216 KiB | 6.15 s |
+
+Every deep verification used the exact caller-supplied manifest SHA-256,
+bounded decompression, database hashes, `quick_check`, foreign keys, the stored
+FTS readiness marker and composition. The hashes were supplied from retained
+local evidence, not an independently authenticated publisher channel. A real
+`core` install took 0.44 seconds, used mode `0600`, retained 9,986 records/9,039
+canonical entities and refused overwrite.
+
+These are one-run, warm-cache observations on the documented NVMe host.
+Creation timings are order-dependent and should not be compared as independent
+cold-start measurements. The final large artifacts remain under ignored
+`target/` storage and are neither committed nor published. The run is retained
+as observational evidence: its binary hash and command order are recorded, but
+the origin database and benchmark binary are not published, so the run is not
+independently reproducible. Exact evidence:
+[`catalog-bundle-benchmark-2026-08-23.json`](./evidence/catalog-bundle-benchmark-2026-08-23.json).
+
 ## Decision
 
 - The V1 target of 300k–500k canonical entities is technically plausible on

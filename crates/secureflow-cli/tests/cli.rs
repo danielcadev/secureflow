@@ -504,6 +504,114 @@ fn imports_and_queries_a_deduplicated_local_osv_catalog() {
         serde_json::from_slice(&restored_stats.stdout).expect("restored stats JSON");
     assert_eq!(restored_stats["source_records"], 2);
     assert_eq!(restored_stats["canonical_vulnerabilities"], 1);
+
+    let bundle_manifest = root.join("catalog.full.manifest.json");
+    let installed = root.join("catalog.installed.sqlite3");
+    let bundle_create = Command::new(binary())
+        .current_dir(&root)
+        .arg("catalog-bundle-create")
+        .args(["--database"])
+        .arg(&database)
+        .args(["--profile", "full"])
+        .args(["--output", "catalog.full.sqlite3.zst"])
+        .args(["--manifest-output", "catalog.full.manifest.json"])
+        .output()
+        .expect("catalog bundle creation should start");
+    assert!(
+        bundle_create.status.success(),
+        "{}",
+        String::from_utf8_lossy(&bundle_create.stderr)
+    );
+    let bundle_create_stdout = String::from_utf8_lossy(&bundle_create.stdout);
+    let manifest_sha256 = bundle_create_stdout
+        .split_whitespace()
+        .find_map(|field| field.strip_prefix("manifest_sha256="))
+        .expect("create output should include manifest SHA-256")
+        .to_owned();
+    let bundle_manifest_value: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(&bundle_manifest).expect("bundle manifest should be readable"),
+    )
+    .expect("bundle manifest JSON");
+    validate_with_schema(
+        "secureflow-catalog-bundle-v1.schema.json",
+        &bundle_manifest_value,
+    );
+    assert_eq!(bundle_manifest_value["profile"], "full");
+    assert_eq!(
+        bundle_manifest_value["payload"]["composition"]["active_unclassified_records"],
+        2
+    );
+
+    let bundle_verify = Command::new(binary())
+        .current_dir(&root)
+        .arg("catalog-bundle-verify")
+        .args(["--bundle", "catalog.full.sqlite3.zst"])
+        .args(["--manifest", "catalog.full.manifest.json"])
+        .args(["--required-profile", "full"])
+        .output()
+        .expect("catalog bundle verification should start");
+    assert!(
+        bundle_verify.status.success(),
+        "{}",
+        String::from_utf8_lossy(&bundle_verify.stderr)
+    );
+    let bundle_verification: serde_json::Value =
+        serde_json::from_slice(&bundle_verify.stdout).expect("bundle verification JSON");
+    assert_eq!(bundle_verification["integrity"], "verified");
+    assert_eq!(bundle_verification["authenticity"], "unverified");
+
+    let profile_substitution = Command::new(binary())
+        .current_dir(&root)
+        .arg("catalog-bundle-verify")
+        .args(["--bundle", "catalog.full.sqlite3.zst"])
+        .args(["--manifest", "catalog.full.manifest.json"])
+        .args(["--required-profile", "core"])
+        .output()
+        .expect("profile-substitution check should start");
+    assert!(!profile_substitution.status.success());
+
+    let unverified_install = Command::new(binary())
+        .current_dir(&root)
+        .arg("catalog-bundle-install")
+        .args(["--bundle", "catalog.full.sqlite3.zst"])
+        .args(["--manifest", "catalog.full.manifest.json"])
+        .args(["--output", "catalog.installed.sqlite3"])
+        .args(["--required-profile", "full"])
+        .output()
+        .expect("catalog bundle installation should start");
+    assert!(!unverified_install.status.success());
+    assert!(!installed.exists());
+
+    let bundle_install = Command::new(binary())
+        .current_dir(&root)
+        .arg("catalog-bundle-install")
+        .args(["--bundle", "catalog.full.sqlite3.zst"])
+        .args(["--manifest", "catalog.full.manifest.json"])
+        .args(["--output", "catalog.installed.sqlite3"])
+        .args(["--required-profile", "full"])
+        .args(["--expected-manifest-sha256", &manifest_sha256])
+        .output()
+        .expect("authenticated catalog bundle installation should start");
+    assert!(
+        bundle_install.status.success(),
+        "{}",
+        String::from_utf8_lossy(&bundle_install.stderr)
+    );
+    let installed_before = std::fs::read(&installed).expect("installed database");
+    let repeated_install = Command::new(binary())
+        .current_dir(&root)
+        .arg("catalog-bundle-install")
+        .args(["--bundle", "catalog.full.sqlite3.zst"])
+        .args(["--manifest", "catalog.full.manifest.json"])
+        .args(["--output", "catalog.installed.sqlite3"])
+        .args(["--expected-manifest-sha256", &manifest_sha256])
+        .output()
+        .expect("repeated catalog bundle installation should start");
+    assert!(!repeated_install.status.success());
+    assert_eq!(
+        std::fs::read(&installed).expect("preserved installed database"),
+        installed_before
+    );
     std::fs::remove_dir_all(root).expect("temporary catalog cleanup");
 }
 
@@ -525,6 +633,10 @@ fn prints_new_phase_two_schemas_and_seals_a_prospective_protocol() {
         (
             "advisory-delta-schema",
             "secureflow-advisory-delta-v1.schema.json",
+        ),
+        (
+            "catalog-bundle-schema",
+            "secureflow-catalog-bundle-v1.schema.json",
         ),
     ] {
         let output = Command::new(binary())
