@@ -4,7 +4,7 @@
 
 | Claim acotado | Evidencia reproducible | Límite que debe acompañarlo |
 | --- | --- | --- |
-| Prototipo local-first en Rust | workspace con nueve packages, toolchain 1.92 fijado y gates locales/CI | no release firmada ni publicación todavía |
+| Prototipo local-first en Rust | workspace con nueve packages, toolchain 1.92 fijado, repositorio público y gates locales/CI | la publicación no demuestra eficacia general y la release inicial no está firmada |
 | Integra un analizador por proceso externo | `scan`, SHA-256 de binario/target/reporte, límites y `secure-json-v1` | validado con fixtures locales; no demuestra cobertura general |
 | Aísla la ejecución Linux por defecto | grupo de procesos, rlimits y Bubblewrap con root host de sólo lectura y namespace de red privado | no equivale a una VM ni protege frente a un kernel comprometido; el modo deshabilitado exige una elección explícita |
 | Mantiene validación humana como autoridad | estados human review, manifests derivados, tests que IA no altera decisión | depende de identidad declarada por CLI; no hay firma humana aún |
@@ -22,7 +22,7 @@
 | Correlaciona sin elevar señales | lookup exacto evalúa listas/rangos SEMVER y conserva unknown, hashes de run/catálogo y causalidad=false | el contexto de paquete es declarado por el operador y requiere revisión humana; affected no prueba exploitabilidad |
 | Sella un protocolo prospectivo | contrato con holdout, etiquetas ocultas, cohorte humana, dos adjudicadores, tiempo/coste, resultados negativos y preflight de hashes reales | el fixture es sintético; todavía no existe holdout/cohorte/ejecución ni base para comparar con humanos |
 | Inventaría APIs Next.js sin red | scope sellado, 6/6 rutas del fixture, 11 candidatos locales, JSON/SARIF y 24/24 aserciones | fixture sintético conocido, no holdout; no mide repositorios reales ni autoriza claims de superioridad |
-| Genera evidencia de release | CI por commits, SBOM CycloneDX determinista y bundle local hasheado desde un commit limpio | falta firma, tag, ejecución CI remota y verificación binaria entre hosts |
+| Genera evidencia de release | CI remoto por commits, SBOM CycloneDX determinista y bundle hasheado desde un commit limpio publicado con `v0.1.0` | tag anotado sin firma y sin verificación de reproducibilidad binaria entre hosts |
 
 ## Formulación sugerida para CV
 
@@ -91,9 +91,10 @@ Cada resultado publicable debería fijar antes de ejecutar:
   Esto prueba los contratos y el fixture conocido; `independent_holdout=false`
   impide presentarlo como eficacia general o comparación humana.
 
-## Bloqueos antes de publicación
+## Bloqueos antes de claims comparativos
 
-1. Falta aprobar una release candidata, tag firmado y ejecución CI retenida.
+1. La release pública, su CI y sus checksums no sustituyen un estudio de
+   eficacia; el tag inicial tampoco aporta firma criptográfica.
 2. Falta congelar un corpus propio con controles usando el protocolo
    prospectivo antes de observar resultados.
 3. Falta ejecutar comparadores bajo capacidades y condiciones equivalentes.

@@ -471,7 +471,7 @@ La decisión provisional JSONL vs. SQLite, repetida para knowledge v2, está res
 El flujo de demostración está en [`docs/demo.md`](./docs/demo.md) y la matriz de
 claims permitidos para CV/paper en
 [`docs/evidence-and-claims.md`](./docs/evidence-and-claims.md).
-La matriz requisito-evidencia y los pendientes de publicación están en
+La matriz requisito-evidencia y la auditoría de completitud están en
 [`docs/completion-audit.md`](./docs/completion-audit.md).
 
 ## Estado de la implementación

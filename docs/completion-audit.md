@@ -29,15 +29,15 @@ las vulnerabilidades ni de que supere a un investigador humano.
 | Backups operativos | SQLite Online Backup API, manifiesto hasheado, `quick_check`, claves foráneas, creación sin overwrite y restore a destino nuevo | Cumplido con round-trip y concurrencia en pruebas; falta una política externa de retención, cifrado y recuperación ante desastre |
 | IA local-first | Preparación redacted desactivada por defecto, consentimiento, presupuesto, Luna por defecto, modelo/prompt/tokens y respuesta advisory | Cumplido como contrato offline; no hay cliente de red ni medición de calidad/coste real de un proveedor |
 | Evidencia para CV/paper | Demo, evaluación separada, schemas, ADRs y matriz de claims permitidos/prohibidos | Cumplido para describir un prototipo de ingeniería; no respalda superioridad, production readiness ni eficacia general |
-| Preservación de originales | Demo y evaluación escriben bajo `/tmp`; verificación Git posterior | Cumplido en esta sesión: `secure-engine`, `secure-skill`, `secure-bench` y `cms-nova-secure-engine-test` siguen limpios. Fuera de SecureFlow se observaron ocho cambios en `cms-nova`, `SEO.md` sin seguimiento en `mitiquete` y siete cambios en su backup; no fueron creados ni alterados por este trabajo |
-| Publicación reproducible | Rust 1.92 fijado, CI con acciones por commit, fmt/clippy/test/audit/build, SBOM CycloneDX determinista y script de bundle local desde Git limpio | Implementado localmente; todavía no existe tag, remoto, firma ni publicación |
+| Preservación de originales | Demo y evaluación escriben bajo `/tmp`; verificación Git posterior | Cumplido en esta sesión: los repositorios fuente permanecieron fuera de SecureFlow y no se alteraron cambios preexistentes en otros worktrees |
+| Publicación reproducible | Repositorio público `danielcadev/secureflow`, Rust 1.92 fijado, CI con acciones por commit, fmt/clippy/test/audit/build, SBOM CycloneDX determinista y bundle hasheado desde Git limpio | CI remoto aprobado; la release `v0.1.0` usa un tag anotado y checksums, pero el tag inicial no tiene firma criptográfica |
 
 ## Evidencia ejecutada
 
 - `cargo +1.92.0 fmt --all -- --check`: aprobado.
-- `cargo +1.92.0 clippy --workspace --all-targets --locked --offline -- -D
+- `cargo +1.92.0 clippy --workspace --all-targets --locked -- -D
   warnings`: aprobado.
-- `cargo +1.92.0 test --workspace --locked --offline`: 117 pruebas aprobadas,
+- `cargo +1.92.0 test --workspace --locked`: 138 pruebas aprobadas,
   0 fallos.
 - `cargo +1.92.0 audit`: lockfile revisado contra 1.225 advisories,
   sin vulnerabilidades reportadas.
@@ -46,10 +46,10 @@ las vulnerabilidades ni de que supere a un investigador humano.
   Skill y del benchmark histórico válidas. El catálogo sintético importó 2
   registros de origen como 1 entidad canónica,
   pasó `quick_check` y no tuvo violaciones de claves foráneas. Artefactos de
-  esta ejecución: `/tmp/secureflow-demo.tEoYF3`.
+  esta ejecución quedaron en un directorio temporal privado y no se publican.
 - `scripts/eval-local.sh`: 14 casos sintéticos, 0 TP, 7 FN, 2 FP, 5 TN, 0
-  fallos operativos y 70 ms agregados. Artefactos de esta ejecución:
-  `/tmp/secureflow-eval.FcND1S`.
+  fallos operativos y 70 ms agregados. Sus artefactos quedaron en un directorio
+  temporal privado y no se publican.
 - El SHA-256 del reporte raw de la demo coincide con el hash registrado en el
   manifiesto; los timestamps de creación y finalización delimitan la ejecución.
 - Dos demos consecutivos conservaron exactamente el target hash, el orden y el
@@ -93,10 +93,11 @@ Los paths bajo `/tmp` y los pilotos ignorados bajo `target/` son evidencia local
 retenida de la sesión, no artefactos publicables permanentes. Una release debe
 producir un bundle versionado y hasheado desde un commit limpio.
 
-## Qué falta antes de llamar al proyecto publicable
+## Pendientes posteriores a la publicación del MVP
 
-1. Revisar y aprobar una versión candidata, crear un tag firmado y repetir los
-   gates en CI antes de publicar. No existe remoto ni se ha publicado nada.
+1. Añadir firma criptográfica y procedencia verificable más fuerte a releases
+   futuras; `v0.1.0` conserva checksums y SBOM, pero su tag inicial no está
+   firmado.
 2. Corpus prospectivo congelado con controles, anti-leakage, protocolo de
    adjudicación y comparadores bajo capacidades equivalentes.
 3. Cohorte humana y evaluación ciega antes de cualquier claim de superar a
