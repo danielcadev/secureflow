@@ -19,6 +19,7 @@ secureflow-knowledge = { path = "../secureflow-knowledge" }
 secureflow-orchestrator = { path = "../secureflow-orchestrator" }
 secureflow-model = { path = "../secureflow-model" }
 secureflow-secure-adapter = { path = "../secureflow-secure-adapter" }
+secureflow-web = { path = "../secureflow-web" }
 serde_json.workspace = true
 time.workspace = true
 thiserror.workspace = true

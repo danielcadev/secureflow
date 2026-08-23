@@ -1,0 +1,42 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact tag
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.92.0 --profile minimal --component clippy,rustfmt
+
+      - name: Audit Rust dependencies
+        run: |
+          cargo +1.92.0 install cargo-audit --version 0.22.2 --locked
+          cargo +1.92.0 audit
+
+      - name: Build verified release bundle
+        run: bash scripts/release-local.sh target/dist
+
+      - name: Publish immutable GitHub release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "${GITHUB_REF_NAME}"
+          target/dist/*
+          --repo "${GITHUB_REPOSITORY}"
+          --verify-tag
+          --title "SecureFlow ${GITHUB_REF_NAME}"
+          --generate-notes

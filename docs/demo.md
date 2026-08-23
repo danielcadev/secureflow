@@ -20,7 +20,7 @@ presenta el resultado histórico como capacidad actual.
 En el layout local inspeccionado:
 
 ```bash
-cd /home/danielcastrillon/Proyectos/secureflow
+cd /ruta/al/checkout/secureflow
 bash scripts/demo-local.sh
 ```
 

@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://secureflow.local/schemas/secureflow-web-lab-result-v1.schema.json",
+  "title": "SecureFlow Web local lab result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "run_id", "case_id", "inventory_id", "expected_sha256", "counts", "metrics", "mismatches", "safety", "claims"],
+  "properties": {
+    "contract_version": { "const": "secureflow-web-lab-result-v1" },
+    "run_id": { "type": "string", "pattern": "^sf_web_lab_[0-9a-f]{64}$" },
+    "case_id": { "type": "string", "pattern": "^sf_web_case_[0-9a-f]{64}$" },
+    "inventory_id": { "type": "string", "pattern": "^sf_web_inventory_[0-9a-f]{64}$" },
+    "expected_sha256": { "$ref": "#/$defs/sha256" },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["expected_routes", "reported_routes", "matched_routes", "missing_routes", "unexpected_routes"],
+      "properties": {
+        "expected_routes": { "type": "integer", "minimum": 0 },
+        "reported_routes": { "type": "integer", "minimum": 0 },
+        "matched_routes": { "type": "integer", "minimum": 0 },
+        "missing_routes": { "type": "integer", "minimum": 0 },
+        "unexpected_routes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["route_precision", "route_recall", "route_f1"],
+      "properties": {
+        "route_precision": { "$ref": "#/$defs/metric" },
+        "route_recall": { "$ref": "#/$defs/metric" },
+        "route_f1": { "$ref": "#/$defs/metric" }
+      }
+    },
+    "mismatches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "route"],
+        "properties": {
+          "kind": { "enum": ["missing-expected", "unexpected-actual"] },
+          "route": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "methods"],
+            "properties": {
+              "route": { "type": ["string", "null"], "pattern": "^/", "maxLength": 2000 },
+              "kind": { "enum": ["api-route", "page-route", "middleware", "server-action"] },
+              "methods": {
+                "type": "array",
+                "maxItems": 7,
+                "uniqueItems": true,
+                "items": { "enum": ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"] }
+              }
+            }
+          }
+        }
+      }
+    },
+    "safety": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["network_used", "target_code_executed", "target_preserved", "failures_are_clean"],
+      "properties": {
+        "network_used": { "const": false },
+        "target_code_executed": { "const": false },
+        "target_preserved": { "const": true },
+        "failures_are_clean": { "const": false }
+      }
+    },
+    "claims": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evaluation_only", "superiority_claim_allowed", "production_safety_claim_allowed"],
+      "properties": {
+        "evaluation_only": { "const": true },
+        "superiority_claim_allowed": { "const": false },
+        "production_safety_claim_allowed": { "const": false }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["numerator", "denominator", "basis_points"],
+      "properties": {
+        "numerator": { "type": "integer", "minimum": 0 },
+        "denominator": { "type": "integer", "minimum": 0 },
+        "basis_points": { "type": ["integer", "null"], "minimum": 0, "maximum": 10000 }
+      }
+    }
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://secureflow.local/schemas/secureflow-web-corpus-result-v1.schema.json",
+  "title": "SecureFlow Web development corpus result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "result_id", "corpus_id", "corpus_sha256", "inventory_id", "inference_id", "counts", "cases", "claims"],
+  "properties": {
+    "contract_version": { "const": "secureflow-web-corpus-result-v1" },
+    "result_id": { "type": "string", "pattern": "^sf_web_corpus_result_[0-9a-f]{64}$" },
+    "corpus_id": { "type": "string", "pattern": "^sf_web_corpus_[0-9a-f]{64}$" },
+    "corpus_sha256": { "$ref": "#/$defs/sha256" },
+    "inventory_id": { "type": "string", "pattern": "^sf_web_inventory_[0-9a-f]{64}$" },
+    "inference_id": { "type": "string", "pattern": "^sf_web_inference_[0-9a-f]{64}$" },
+    "counts": {
+      "type": "object", "additionalProperties": false,
+      "required": ["total", "passed", "failed"],
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "passed": { "type": "integer", "minimum": 0 },
+        "failed": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "cases": {
+      "type": "array", "minItems": 20, "maxItems": 40,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["case_id", "passed", "detail"],
+        "properties": {
+          "case_id": { "type": "string", "pattern": "^[A-Z0-9-]{8,80}$" },
+          "passed": { "type": "boolean" },
+          "detail": { "type": "string", "minLength": 1, "maxLength": 500 }
+        }
+      }
+    },
+    "claims": {
+      "type": "object", "additionalProperties": false,
+      "required": ["development_only", "independent_holdout", "superiority_claim_allowed", "production_safety_claim_allowed"],
+      "properties": {
+        "development_only": { "const": true },
+        "independent_holdout": { "const": false },
+        "superiority_claim_allowed": { "const": false },
+        "production_safety_claim_allowed": { "const": false }
+      }
+    }
+  },
+  "$defs": { "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" } }
+}

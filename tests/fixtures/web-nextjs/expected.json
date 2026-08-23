@@ -1,0 +1,19 @@
+{
+  "contract_version": "secureflow-web-case-v1",
+  "case_id": "sf_web_case_8b50986b4c59b7aed0e18208e78cebc8d5bca2470f19fd3fdfc97ab5070aae1f",
+  "lineage_group": "secureflow-synthetic-nextjs-v1",
+  "split": "development",
+  "license": {
+    "spdx": "MIT OR Apache-2.0",
+    "provenance": "SecureFlow synthetic fixture; no private API data",
+    "license_sha256": "8a59c035575dcb171fc2e90e0c92380d3c2ed1a0612e9577a420119c9ae322a5"
+  },
+  "routes": [
+    { "route": null, "kind": "middleware", "methods": [] },
+    { "route": null, "kind": "server-action", "methods": ["POST"] },
+    { "route": "/", "kind": "page-route", "methods": ["GET"] },
+    { "route": "/api/admin/{tenantId}/users/{id}", "kind": "api-route", "methods": ["GET", "DELETE"] },
+    { "route": "/api/health", "kind": "api-route", "methods": ["GET"] },
+    { "route": "/api/legacy/{id}", "kind": "api-route", "methods": [] }
+  ]
+}

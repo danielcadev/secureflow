@@ -1,0 +1,45 @@
+{
+  "contract_version": "secureflow-web-corpus-result-v1",
+  "result_id": "sf_web_corpus_result_288886b16b73c2c82c5c5983ad1ce5096e755fe19e9c1bcc1c55c7b58365bf6f",
+  "corpus_id": "sf_web_corpus_db8f1e502692d734e58c6279226ce916860c9341b73a1dd046890318201ca6f4",
+  "corpus_sha256": "6a51fb9420aff2dcd269af82a5128a287ae7926255e2c013b1eabe16872e1001",
+  "inventory_id": "sf_web_inventory_4b001aa8fc8ef260bb9b5d76c040af12cb62857aa5abbddb9f08da31e11c4609",
+  "inference_id": "sf_web_inference_ec564ddafa0e833357995222073c5eb88cb0ccb66201a061e2a0d86889e6e76b",
+  "counts": {
+    "total": 24,
+    "passed": 24,
+    "failed": 0
+  },
+  "cases": [
+    { "case_id": "WEBDEV001", "passed": true, "detail": "expectation satisfied" },
+    { "case_id": "WEBDEV002", "passed": true, "detail": "expectation satisfied" },
+    { "case_id": "WEBDEV003", "passed": true, "detail": "expectation satisfied" },
+    { "case_id": "WEBDEV004", "passed": true, "detail": "expectation satisfied" },
+    { "case_id": "WEBDEV005", "passed": true, "detail": "expectation satisfied" },
+    { "case_id": "WEBDEV006", "passed": true, "detail": "expectation satisfied" },
+    { "case_id": "WEBDEV007", "passed": true, "detail": "expectation satisfied" },
+    { "case_id": "WEBDEV008", "passed": true, "detail": "expectation satisfied" },
+    { "case_id": "WEBDEV009", "passed": true, "detail": "expectation satisfied" },
+    { "case_id": "WEBDEV010", "passed": true, "detail": "expectation satisfied" },
+    { "case_id": "WEBDEV011", "passed": true, "detail": "expectation satisfied" },
+    { "case_id": "WEBDEV012", "passed": true, "detail": "expectation satisfied" },
+    { "case_id": "WEBDEV013", "passed": true, "detail": "expectation satisfied" },
+    { "case_id": "WEBDEV014", "passed": true, "detail": "expectation satisfied" },
+    { "case_id": "WEBDEV015", "passed": true, "detail": "expectation satisfied" },
+    { "case_id": "WEBDEV016", "passed": true, "detail": "expectation satisfied" },
+    { "case_id": "WEBDEV017", "passed": true, "detail": "expectation satisfied" },
+    { "case_id": "WEBDEV018", "passed": true, "detail": "expectation satisfied" },
+    { "case_id": "WEBDEV019", "passed": true, "detail": "expectation satisfied" },
+    { "case_id": "WEBDEV020", "passed": true, "detail": "expectation satisfied" },
+    { "case_id": "WEBDEV021", "passed": true, "detail": "expectation satisfied" },
+    { "case_id": "WEBDEV022", "passed": true, "detail": "expectation satisfied" },
+    { "case_id": "WEBDEV023", "passed": true, "detail": "expectation satisfied" },
+    { "case_id": "WEBDEV024", "passed": true, "detail": "expectation satisfied" }
+  ],
+  "claims": {
+    "development_only": true,
+    "independent_holdout": false,
+    "superiority_claim_allowed": false,
+    "production_safety_claim_allowed": false
+  }
+}

@@ -922,6 +922,7 @@ dependencies = [
  "secureflow-model",
  "secureflow-orchestrator",
  "secureflow-secure-adapter",
+ "secureflow-web",
  "serde_json",
  "thiserror",
  "time",
@@ -1003,6 +1004,18 @@ dependencies = [
 name = "secureflow-secure-adapter"
 version = "0.1.0"
 dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror",
+ "time",
+]
+
+[[package]]
+name = "secureflow-web"
+version = "0.1.0"
+dependencies = [
+ "jsonschema",
  "serde",
  "serde_json",
  "sha2",

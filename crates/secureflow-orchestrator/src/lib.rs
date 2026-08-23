@@ -54,7 +54,12 @@ pub struct EvidenceArtifact {
 pub enum EvidenceKind {
     ContextualReview,
     AdvisoryCorrelation,
+    WebInventory,
+    WebInference,
+    WebAssessment,
     BenchmarkResult,
+    WebLabResult,
+    WebCorpusResult,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -183,12 +188,21 @@ pub fn derive_plan(
     let has_context = evidence.iter().any(|artifact| {
         matches!(
             artifact.kind,
-            EvidenceKind::ContextualReview | EvidenceKind::AdvisoryCorrelation
+            EvidenceKind::ContextualReview
+                | EvidenceKind::AdvisoryCorrelation
+                | EvidenceKind::WebInventory
+                | EvidenceKind::WebInference
+                | EvidenceKind::WebAssessment
         )
     });
-    let has_benchmark = evidence
-        .iter()
-        .any(|artifact| artifact.kind == EvidenceKind::BenchmarkResult);
+    let has_benchmark = evidence.iter().any(|artifact| {
+        matches!(
+            artifact.kind,
+            EvidenceKind::BenchmarkResult
+                | EvidenceKind::WebLabResult
+                | EvidenceKind::WebCorpusResult
+        )
+    });
     let phases = derive_phases(manifest, &state, has_context, has_benchmark);
     let next_action = if manifest.phases.deterministic != PhaseStatus::Completed {
         NextAction::CompleteDeterministicAnalysis
@@ -323,13 +337,21 @@ impl OrchestrationEnvelope {
         let has_context = self.evidence.iter().any(|artifact| {
             matches!(
                 artifact.kind,
-                EvidenceKind::ContextualReview | EvidenceKind::AdvisoryCorrelation
+                EvidenceKind::ContextualReview
+                    | EvidenceKind::AdvisoryCorrelation
+                    | EvidenceKind::WebInventory
+                    | EvidenceKind::WebInference
+                    | EvidenceKind::WebAssessment
             )
         });
-        let has_benchmark = self
-            .evidence
-            .iter()
-            .any(|artifact| artifact.kind == EvidenceKind::BenchmarkResult);
+        let has_benchmark = self.evidence.iter().any(|artifact| {
+            matches!(
+                artifact.kind,
+                EvidenceKind::BenchmarkResult
+                    | EvidenceKind::WebLabResult
+                    | EvidenceKind::WebCorpusResult
+            )
+        });
         let expected_context = if prioritization != OrchestratedStatus::Completed {
             OrchestratedStatus::Blocked
         } else if has_context {

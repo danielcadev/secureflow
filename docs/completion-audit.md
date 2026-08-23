@@ -10,7 +10,7 @@ las vulnerabilidades ni de que supere a un investigador humano.
 
 | Requisito | Evidencia actual | Estado y límite |
 | --- | --- | --- |
-| Workspace Rust independiente | Ocho packages bajo `crates/`; los repositorios fuente se consumen por procesos o contratos | Cumplido para el MVP; no hay copia física de los proyectos originales |
+| Workspace Rust independiente | Nueve packages bajo `crates/`; los repositorios fuente se consumen por procesos o contratos | Cumplido para el MVP; no hay copia física de los proyectos originales |
 | Análisis determinista autorizado | `secureflow scan` exige `--authorized`, ejecuta un binario explícito sin shell y valida `secure-json-v1` | Cumplido para targets locales; la identidad y la autorización son declaraciones del operador, no firmas verificables |
 | Provenance estable | Hashes SHA-256 de target, binario, configuración y reporte; fingerprint de árbol con dominio/longitudes; target y binario se comprueban antes y después del proceso | Cumplido con límites fail-closed; no es un snapshot transaccional y un cambio que se revierta entre ambas mediciones podría no observarse |
 | Boundary de proceso | Entorno limpio, stdin nulo, stdout/stderr separados y acotados, timeout 1–3.600 s ajustado a expiración, binario máximo 1 GiB, process group, rlimits Linux y Bubblewrap requerido por defecto | Cumplido para el MVP Linux; Bubblewrap aporta root de sólo lectura y namespace de red privado, pero no reemplaza una VM ni protege frente a un kernel comprometido |
@@ -24,7 +24,7 @@ las vulnerabilidades ni de que supere a un investigador humano.
 | Secure Bench | Import de `result-v2`, fingerprints de suite/run, verificación opcional de `HEAD`, TP/FN y FP/TN separados, claims bloqueados, protocolo prospectivo y preflight de artefactos | Cumplido como infraestructura evaluativa; el corpus Phase 1 es sintético y conocido y todavía no existe holdout/cohorte/estudio real |
 | Correlación conservadora | Enlace exacto finding-paquete-versión-advisory con hashes de run, catálogo, snapshots/deltas y canonicalización | V2 evalúa listas exactas y SEMVER, preserva unknown y no afirma causalidad; el contexto de paquete lo declara el operador |
 | Actualización incremental | `modified_id.csv` per-ecosystem, índice/payloads/licencias hasheados, cadena lineal, replay, recovery y `withdrawn` explícito | Cumplido con fixtures y replay real solapado de 7 RUSTSEC; la ausencia nunca borra y no hubo cambios nuevos posteriores al snapshot |
-| Recon/API Exposure | Diagnóstico modular de inventario Next.js/API, matriz de cobertura, scope allowlist y checks loopback | Diseñado, no implementado; no existe scanner remoto ni autorización de red automatizada |
+| Recon/API Exposure | `secureflow-web`: scope con expiración, inventario Next.js, inferencia local OpenAPI/manifests/GraphQL/tRPC, matriz de controles, JSON/SARIF y corpus de 24 casos | Cumplido para la vertical offline; no existe scanner remoto, DNS/CT, crawling ni autorización de red automatizada |
 | Orquestación fail-closed | State machine de siete fases, artefactos retenidos por hash, abstención y siguiente acción derivada | Cumplido como plan local; no ejecuta red, IA ni revisión humana automáticamente |
 | Backups operativos | SQLite Online Backup API, manifiesto hasheado, `quick_check`, claves foráneas, creación sin overwrite y restore a destino nuevo | Cumplido con round-trip y concurrencia en pruebas; falta una política externa de retención, cifrado y recuperación ante desastre |
 | IA local-first | Preparación redacted desactivada por defecto, consentimiento, presupuesto, Luna por defecto, modelo/prompt/tokens y respuesta advisory | Cumplido como contrato offline; no hay cliente de red ni medición de calidad/coste real de un proveedor |
@@ -83,6 +83,11 @@ las vulnerabilidades ni de que supere a un investigador humano.
   ventana solapada de 7 RUSTSEC se preparó sin cuarentena y se aplicó a la copia
   real como 7 unchanged/0 inserted/0 updated; primera aplicación 3,99 s y
   replay 0,99 s, con FTS ready e integridad aprobada.
+- SecureFlow Web inventarió 6/6 rutas del fixture sintético y obtuvo 24/24
+  aserciones de desarrollo, sin red ni ejecución del target. Los artefactos
+  retenidos bloquean expresamente claims de holdout, superioridad y seguridad
+  de producción: `docs/evidence/web-route-lab-2026-08-23.json` y
+  `docs/evidence/web-development-corpus-2026-08-23.json`.
 
 Los paths bajo `/tmp` y los pilotos ignorados bajo `target/` son evidencia local
 retenida de la sesión, no artefactos publicables permanentes. Una release debe

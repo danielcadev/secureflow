@@ -38,6 +38,11 @@ use secureflow_secure_adapter::{
     ImportContext, MAX_REVIEW_BYTES, SecureReviewEnvelope, import_review, load_source_provenance,
     parse_envelope, read_bounded,
 };
+use secureflow_web::{
+    AuthorizationStatus as WebAuthorizationStatus, AuthorizedRepository, InventorySource,
+    NetworkExecution as WebNetworkExecution, ScopeAuthorization, ScopeLimits, ScopePolicy,
+    SourceKind as WebSourceKind, WebScopeDraft,
+};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -69,10 +74,25 @@ const PROSPECTIVE_PROTOCOL_SCHEMA: &str =
     include_str!("../../../schemas/secureflow-prospective-protocol-v1.schema.json");
 const ADVISORY_DELTA_SCHEMA: &str =
     include_str!("../../../schemas/secureflow-advisory-delta-v1.schema.json");
+const WEB_SCOPE_SCHEMA: &str = include_str!("../../../schemas/secureflow-web-scope-v1.schema.json");
+const WEB_INVENTORY_SCHEMA: &str =
+    include_str!("../../../schemas/secureflow-web-inventory-v1.schema.json");
+const WEB_INFERENCE_SCHEMA: &str =
+    include_str!("../../../schemas/secureflow-web-inference-v1.schema.json");
+const WEB_ASSESSMENT_SCHEMA: &str =
+    include_str!("../../../schemas/secureflow-web-assessment-v1.schema.json");
+const WEB_CASE_SCHEMA: &str = include_str!("../../../schemas/secureflow-web-case-v1.schema.json");
+const WEB_LAB_RESULT_SCHEMA: &str =
+    include_str!("../../../schemas/secureflow-web-lab-result-v1.schema.json");
+const WEB_CORPUS_SCHEMA: &str =
+    include_str!("../../../schemas/secureflow-web-development-corpus-v1.schema.json");
+const WEB_CORPUS_RESULT_SCHEMA: &str =
+    include_str!("../../../schemas/secureflow-web-corpus-result-v1.schema.json");
 
 const MAX_MANIFEST_BYTES: u64 = 32 * 1024 * 1024;
 const MAX_LICENSE_EVIDENCE_BYTES: u64 = 1024 * 1024;
 const MAX_PROSPECTIVE_ARTIFACT_BYTES: u64 = 64 * 1024 * 1024;
+const MAX_HUMAN_EVIDENCE_BYTES: u64 = 64 * 1024 * 1024;
 const CATALOG_BATCH_BYTES: usize = 64 * 1024 * 1024;
 const CATALOG_BATCH_RECORDS: usize = 50_000;
 const MAX_CATALOG_INPUT_DEPTH: usize = 64;
@@ -117,6 +137,131 @@ enum Command {
     OrchestrationSchema,
     /// Print the normative sealed prospective benchmark protocol schema.
     ProspectiveProtocolSchema,
+    /// Print one normative SecureFlow Web schema.
+    WebSchema {
+        #[arg(value_enum)]
+        kind: WebArtifactKind,
+    },
+    /// Create a sealed offline scope for one explicitly authorized local repository.
+    WebScopeCreate {
+        #[arg(long)]
+        root: PathBuf,
+        #[arg(long)]
+        repository_label: String,
+        #[arg(long)]
+        authorization_reference: String,
+        #[arg(long)]
+        authorization_reviewer: String,
+        /// RFC3339 expiration for the authorization.
+        #[arg(long)]
+        authorization_expires_at: String,
+        #[arg(long, default_value_t = 100_000)]
+        max_files: u64,
+        #[arg(long, default_value_t = 8_388_608)]
+        max_file_bytes: u64,
+        #[arg(long, default_value_t = 1_073_741_824)]
+        max_total_bytes: u64,
+        #[arg(long, default_value_t = 100_000)]
+        max_routes: u64,
+        #[arg(long, default_value_t = 10_000)]
+        max_sources: u64,
+        #[arg(long)]
+        output: PathBuf,
+    },
+    /// Seal a reviewed SecureFlow Web scope draft without enabling network execution.
+    WebScopeSeal {
+        #[arg(long)]
+        draft: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+    },
+    /// Build a deterministic Next.js route inventory from an authorized local repository.
+    WebInventoryNextjs {
+        #[arg(long)]
+        root: PathBuf,
+        #[arg(long)]
+        scope: PathBuf,
+        #[arg(long)]
+        source_name: String,
+        #[arg(long)]
+        source_revision: String,
+        #[arg(long)]
+        source_license_spdx: String,
+        #[arg(long)]
+        output: PathBuf,
+    },
+    /// Infer local API candidates without network access or target-code execution.
+    WebInfer {
+        #[arg(long)]
+        root: PathBuf,
+        #[arg(long)]
+        scope: PathBuf,
+        #[arg(long)]
+        inventory: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+    },
+    /// Assess an operator-provided route/control matrix without automatic validation.
+    WebAssess {
+        #[arg(long)]
+        scope: PathBuf,
+        #[arg(long)]
+        inventory: PathBuf,
+        /// JSON array of strict CoverageRoute records.
+        #[arg(long)]
+        coverage: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+    },
+    /// Record a human reproduction decision as a new linked web assessment.
+    WebReviewAssessment {
+        #[arg(long)]
+        assessment: PathBuf,
+        #[arg(long)]
+        observation_id: String,
+        #[arg(long)]
+        reviewer: String,
+        #[arg(long)]
+        rationale: String,
+        /// Retained local reproduction artifact to hash; its contents are not embedded.
+        #[arg(long)]
+        evidence: PathBuf,
+        /// Stable, non-secret reference recorded in the assessment.
+        #[arg(long)]
+        evidence_reference: String,
+        #[arg(long)]
+        evidence_description: String,
+        #[arg(long)]
+        output: PathBuf,
+    },
+    /// Validate a retained SecureFlow Web artifact.
+    WebValidate {
+        #[arg(value_enum)]
+        kind: WebArtifactKind,
+        path: PathBuf,
+    },
+    /// Compare a retained web inventory against a labeled, licensed case.
+    WebLab {
+        #[arg(long)]
+        inventory: PathBuf,
+        #[arg(long)]
+        expected: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+        #[arg(long)]
+        sarif_output: PathBuf,
+    },
+    /// Evaluate the 20-40 case synthetic development corpus against retained artifacts.
+    WebCorpusEvaluate {
+        #[arg(long)]
+        inventory: PathBuf,
+        #[arg(long)]
+        inference: PathBuf,
+        #[arg(long)]
+        corpus: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+    },
     /// Validate a local secureflow-run-v1 manifest.
     ValidateRun { path: PathBuf },
     /// Export a validated run as a local Markdown report.
@@ -446,6 +591,21 @@ enum Command {
         /// Optional evaluation-only benchmark envelope.
         #[arg(long)]
         benchmark: Option<PathBuf>,
+        /// Optional validated web inventory linked to the run target hash.
+        #[arg(long)]
+        web_inventory: Option<PathBuf>,
+        /// Optional validated local-only API inference linked to the web inventory.
+        #[arg(long)]
+        web_inference: Option<PathBuf>,
+        /// Optional conservative web assessment; requires --web-inventory.
+        #[arg(long)]
+        web_assessment: Option<PathBuf>,
+        /// Optional evaluation-only web lab result; requires --web-inventory.
+        #[arg(long)]
+        web_lab_result: Option<PathBuf>,
+        /// Optional synthetic development-corpus result; requires web inventory and inference.
+        #[arg(long)]
+        web_corpus_result: Option<PathBuf>,
         /// New orchestration envelope. Inputs are never modified.
         #[arg(long)]
         output: PathBuf,
@@ -707,6 +867,18 @@ enum CorrelationSchemaVersion {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+enum WebArtifactKind {
+    Scope,
+    Inventory,
+    Inference,
+    Assessment,
+    Case,
+    LabResult,
+    Corpus,
+    CorpusResult,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
 enum KnowledgeLicenseStatus {
     SpdxDeclared,
     PrivateOrUndisclosed,
@@ -887,6 +1059,18 @@ enum CliError {
     Correlation(#[from] secureflow_knowledge::correlation::CorrelationError),
     #[error("orchestration contract failed: {0}")]
     Orchestration(#[from] secureflow_orchestrator::OrchestratorError),
+    #[error("web scope contract failed: {0}")]
+    WebScope(#[from] secureflow_web::ScopeError),
+    #[error("web inventory contract failed: {0}")]
+    WebInventory(#[from] secureflow_web::InventoryError),
+    #[error("web inference contract failed: {0}")]
+    WebInference(#[from] secureflow_web::InferenceError),
+    #[error("web assessment contract failed: {0}")]
+    WebAssessment(#[from] secureflow_web::AssessmentError),
+    #[error("web lab contract failed: {0}")]
+    WebLab(#[from] secureflow_web::LabError),
+    #[error("web development corpus contract failed: {0}")]
+    WebCorpus(#[from] secureflow_web::CorpusError),
     #[error("artifact does not link to the exact run: {0}")]
     ArtifactLinkMismatch(&'static str),
     #[error("expected a regular file: {0}")]
@@ -976,6 +1160,350 @@ fn execute(cli: Cli) -> Result<(), CliError> {
         }
         Command::ProspectiveProtocolSchema => {
             print!("{PROSPECTIVE_PROTOCOL_SCHEMA}");
+            Ok(())
+        }
+        Command::WebSchema { kind } => {
+            print!(
+                "{}",
+                match kind {
+                    WebArtifactKind::Scope => WEB_SCOPE_SCHEMA,
+                    WebArtifactKind::Inventory => WEB_INVENTORY_SCHEMA,
+                    WebArtifactKind::Inference => WEB_INFERENCE_SCHEMA,
+                    WebArtifactKind::Assessment => WEB_ASSESSMENT_SCHEMA,
+                    WebArtifactKind::Case => WEB_CASE_SCHEMA,
+                    WebArtifactKind::LabResult => WEB_LAB_RESULT_SCHEMA,
+                    WebArtifactKind::Corpus => WEB_CORPUS_SCHEMA,
+                    WebArtifactKind::CorpusResult => WEB_CORPUS_RESULT_SCHEMA,
+                }
+            );
+            Ok(())
+        }
+        Command::WebScopeCreate {
+            root,
+            repository_label,
+            authorization_reference,
+            authorization_reviewer,
+            authorization_expires_at,
+            max_files,
+            max_file_bytes,
+            max_total_bytes,
+            max_routes,
+            max_sources,
+            output,
+        } => {
+            ensure_output_outside_tree(&output, &root)?;
+            let root_sha256 = secureflow_web::hash_repository_tree(
+                &root,
+                max_files,
+                max_file_bytes,
+                max_total_bytes,
+            )?;
+            let draft = WebScopeDraft {
+                authorization: ScopeAuthorization {
+                    status: WebAuthorizationStatus::Authorized,
+                    reference: checked_review_field(
+                        authorization_reference.trim(),
+                        "authorization_reference",
+                        300,
+                    )?,
+                    reviewer: checked_review_field(
+                        authorization_reviewer.trim(),
+                        "authorization_reviewer",
+                        200,
+                    )?,
+                    expires_at: authorization_expires_at,
+                },
+                repositories: vec![AuthorizedRepository {
+                    label: checked_review_field(repository_label.trim(), "repository_label", 200)?,
+                    root_sha256,
+                }],
+                assets: vec![],
+                policy: ScopePolicy {
+                    passive_only: true,
+                    network_execution: WebNetworkExecution::Disabled,
+                    follow_redirects: false,
+                    third_party_scanning: false,
+                },
+                limits: ScopeLimits {
+                    max_files,
+                    max_file_bytes,
+                    max_total_bytes,
+                    max_routes,
+                    max_sources,
+                    max_requests: 0,
+                    requests_per_minute: 0,
+                    max_concurrency: 0,
+                },
+            };
+            let scope = secureflow_web::seal_scope(&serde_json::to_vec(&draft)?, None)?;
+            write_atomic_new(&output, &serde_json::to_vec_pretty(&scope)?)?;
+            println!(
+                "web scope sealed: output={} scope_id={} network=disabled authorization_status=authorized",
+                output.display(),
+                scope.scope_id
+            );
+            Ok(())
+        }
+        Command::WebScopeSeal { draft, output } => {
+            ensure_output_distinct(&output, &[&draft])?;
+            let bytes = read_bounded_file(&draft, secureflow_web::MAX_SCOPE_BYTES)?;
+            let scope = secureflow_web::seal_scope(&bytes, None)?;
+            write_atomic_new(&output, &serde_json::to_vec_pretty(&scope)?)?;
+            println!(
+                "web scope sealed: output={} scope_id={} network=disabled authorization_status=authorized",
+                output.display(),
+                scope.scope_id
+            );
+            Ok(())
+        }
+        Command::WebInventoryNextjs {
+            root,
+            scope,
+            source_name,
+            source_revision,
+            source_license_spdx,
+            output,
+        } => {
+            ensure_output_distinct(&output, &[&scope])?;
+            ensure_output_outside_tree(&output, &root)?;
+            let now = OffsetDateTime::now_utc();
+            let scope_bytes = read_bounded_file(&scope, secureflow_web::MAX_SCOPE_BYTES)?;
+            let web_scope = secureflow_web::parse_scope(&scope_bytes, now)?;
+            let root_sha256 = secureflow_web::hash_repository_tree(
+                &root,
+                web_scope.draft.limits.max_files,
+                web_scope.draft.limits.max_file_bytes,
+                web_scope.draft.limits.max_total_bytes,
+            )?;
+            let source = InventorySource::new(
+                WebSourceKind::Repository,
+                source_name,
+                source_revision,
+                root_sha256.clone(),
+                source_license_spdx,
+            )?;
+            let inventory =
+                secureflow_web::discover_nextjs(&root, &web_scope, &root_sha256, source, now)?;
+            write_atomic_new(&output, &serde_json::to_vec_pretty(&inventory)?)?;
+            println!(
+                "web inventory complete: output={} inventory_id={} routes={} network_used=false target_code_executed=false",
+                output.display(),
+                inventory.inventory_id,
+                inventory.stats.routes
+            );
+            Ok(())
+        }
+        Command::WebInfer {
+            root,
+            scope,
+            inventory,
+            output,
+        } => {
+            ensure_output_distinct(&output, &[&scope, &inventory])?;
+            ensure_output_outside_tree(&output, &root)?;
+            let now = OffsetDateTime::now_utc();
+            let scope_bytes = read_bounded_file(&scope, secureflow_web::MAX_SCOPE_BYTES)?;
+            let inventory_bytes =
+                read_bounded_file(&inventory, secureflow_web::MAX_INVENTORY_BYTES)?;
+            let web_scope = secureflow_web::parse_scope(&scope_bytes, now)?;
+            let web_inventory = secureflow_web::parse_inventory(&inventory_bytes)?;
+            let root_sha256 = secureflow_web::hash_repository_tree(
+                &root,
+                web_scope.draft.limits.max_files,
+                web_scope.draft.limits.max_file_bytes,
+                web_scope.draft.limits.max_total_bytes,
+            )?;
+            let inference = secureflow_web::infer_local_apis(
+                &root,
+                &web_scope,
+                &root_sha256,
+                &web_inventory,
+                now,
+            )?;
+            write_atomic_new(&output, &serde_json::to_vec_pretty(&inference)?)?;
+            println!(
+                "web inference complete: output={} inference_id={} candidates={} review={} abstentions={} network_used=false",
+                output.display(),
+                inference.inference_id,
+                inference.stats.candidates,
+                inference.stats.needs_human_review,
+                inference.stats.abstentions
+            );
+            Ok(())
+        }
+        Command::WebAssess {
+            scope,
+            inventory,
+            coverage,
+            output,
+        } => {
+            ensure_output_distinct(&output, &[&scope, &inventory, &coverage])?;
+            let now = OffsetDateTime::now_utc();
+            let scope_bytes = read_bounded_file(&scope, secureflow_web::MAX_SCOPE_BYTES)?;
+            let inventory_bytes =
+                read_bounded_file(&inventory, secureflow_web::MAX_INVENTORY_BYTES)?;
+            let coverage_bytes =
+                read_bounded_file(&coverage, secureflow_web::MAX_ASSESSMENT_BYTES)?;
+            let web_scope = secureflow_web::parse_scope(&scope_bytes, now)?;
+            let web_inventory = secureflow_web::parse_inventory(&inventory_bytes)?;
+            if web_inventory.scope_id != web_scope.scope_id
+                || !web_scope.authorizes_repository(&web_inventory.repository_root_sha256)
+            {
+                return Err(CliError::ArtifactLinkMismatch("web coverage assessment"));
+            }
+            let routes: Vec<secureflow_web::CoverageRoute> =
+                serde_json::from_slice(&coverage_bytes)?;
+            let assessment = secureflow_web::assess_routes(
+                web_scope.scope_id,
+                vec![web_inventory.inventory_id],
+                routes,
+                None,
+            )?;
+            write_atomic_new(&output, &serde_json::to_vec_pretty(&assessment)?)?;
+            println!(
+                "web assessment complete: output={} candidates={} hardening={} abstentions={} human_validated={} validation_authority=human-only",
+                output.display(),
+                assessment.summary.candidates,
+                assessment.summary.hardening,
+                assessment.summary.abstentions,
+                assessment.summary.human_validated_vulnerabilities
+            );
+            Ok(())
+        }
+        Command::WebReviewAssessment {
+            assessment,
+            observation_id,
+            reviewer,
+            rationale,
+            evidence,
+            evidence_reference,
+            evidence_description,
+            output,
+        } => {
+            ensure_output_distinct(&output, &[&assessment, &evidence])?;
+            let assessment_bytes =
+                read_bounded_file(&assessment, secureflow_web::MAX_ASSESSMENT_BYTES)?;
+            let evidence_bytes = read_bounded_file(&evidence, MAX_HUMAN_EVIDENCE_BYTES)?;
+            let assessment = secureflow_web::parse_assessment(&assessment_bytes)?;
+            let now = OffsetDateTime::now_utc().format(&Rfc3339)?;
+            let evidence_reference =
+                checked_review_field(evidence_reference.trim(), "evidence_reference", 300)?;
+            let reviewed = secureflow_web::record_human_validation(
+                &assessment,
+                &observation_id,
+                secureflow_web::HumanValidation {
+                    reviewer: checked_review_field(reviewer.trim(), "reviewer", 200)?,
+                    reviewed_at: now.clone(),
+                    rationale: checked_review_field(rationale.trim(), "rationale", 3_000)?,
+                    evidence_reference: evidence_reference.clone(),
+                },
+                secureflow_web::EvidenceReference {
+                    kind: secureflow_web::AssessmentEvidenceKind::HumanReproduction,
+                    reference: evidence_reference,
+                    sha256: sha256_bytes(&evidence_bytes),
+                    description: checked_review_field(
+                        evidence_description.trim(),
+                        "evidence_description",
+                        1_000,
+                    )?,
+                },
+                now,
+            )?;
+            write_atomic_new(&output, &serde_json::to_vec_pretty(&reviewed)?)?;
+            println!(
+                "web human validation recorded: output={} parent={} human_validated={} validation_authority=human-only",
+                output.display(),
+                reviewed.parent_assessment_id.as_deref().unwrap_or("none"),
+                reviewed.summary.human_validated_vulnerabilities
+            );
+            Ok(())
+        }
+        Command::WebValidate { kind, path } => {
+            match kind {
+                WebArtifactKind::Scope => {
+                    let bytes = read_bounded_file(&path, secureflow_web::MAX_SCOPE_BYTES)?;
+                    secureflow_web::parse_scope(&bytes, OffsetDateTime::now_utc())?;
+                }
+                WebArtifactKind::Inventory => {
+                    let bytes = read_bounded_file(&path, secureflow_web::MAX_INVENTORY_BYTES)?;
+                    secureflow_web::parse_inventory(&bytes)?;
+                }
+                WebArtifactKind::Inference => {
+                    let bytes = read_bounded_file(&path, secureflow_web::MAX_INFERENCE_BYTES)?;
+                    secureflow_web::parse_inference(&bytes)?;
+                }
+                WebArtifactKind::Assessment => {
+                    let bytes = read_bounded_file(&path, secureflow_web::MAX_ASSESSMENT_BYTES)?;
+                    secureflow_web::parse_assessment(&bytes)?;
+                }
+                WebArtifactKind::Case => {
+                    let bytes = read_bounded_file(&path, secureflow_web::MAX_CASE_BYTES)?;
+                    secureflow_web::parse_case(&bytes)?;
+                }
+                WebArtifactKind::LabResult => {
+                    let bytes = read_bounded_file(&path, secureflow_web::MAX_LAB_RESULT_BYTES)?;
+                    secureflow_web::parse_lab_result(&bytes)?;
+                }
+                WebArtifactKind::Corpus => {
+                    let bytes = read_bounded_file(&path, secureflow_web::MAX_CORPUS_BYTES)?;
+                    secureflow_web::parse_corpus(&bytes)?;
+                }
+                WebArtifactKind::CorpusResult => {
+                    let bytes = read_bounded_file(&path, secureflow_web::MAX_CORPUS_RESULT_BYTES)?;
+                    secureflow_web::parse_corpus_result(&bytes)?;
+                }
+            }
+            println!("valid SecureFlow Web {kind:?} artifact: {}", path.display());
+            Ok(())
+        }
+        Command::WebLab {
+            inventory,
+            expected,
+            output,
+            sarif_output,
+        } => {
+            ensure_output_distinct(&output, &[&inventory, &expected, &sarif_output])?;
+            ensure_output_distinct(&sarif_output, &[&inventory, &expected, &output])?;
+            let inventory_bytes =
+                read_bounded_file(&inventory, secureflow_web::MAX_INVENTORY_BYTES)?;
+            let expected_bytes = read_bounded_file(&expected, secureflow_web::MAX_CASE_BYTES)?;
+            let inventory = secureflow_web::parse_inventory(&inventory_bytes)?;
+            let result = secureflow_web::compare_inventory(&inventory, &expected_bytes)?;
+            let sarif = secureflow_web::lab_result_sarif(&result)?;
+            write_atomic_new(&output, &serde_json::to_vec_pretty(&result)?)?;
+            write_atomic_new(&sarif_output, &serde_json::to_vec_pretty(&sarif)?)?;
+            println!(
+                "web lab complete: output={} matched={} missing={} unexpected={} evaluation_only=true superiority_claim_allowed=false",
+                output.display(),
+                result.counts.matched_routes,
+                result.counts.missing_routes,
+                result.counts.unexpected_routes
+            );
+            Ok(())
+        }
+        Command::WebCorpusEvaluate {
+            inventory,
+            inference,
+            corpus,
+            output,
+        } => {
+            ensure_output_distinct(&output, &[&inventory, &inference, &corpus])?;
+            let inventory_bytes =
+                read_bounded_file(&inventory, secureflow_web::MAX_INVENTORY_BYTES)?;
+            let inference_bytes =
+                read_bounded_file(&inference, secureflow_web::MAX_INFERENCE_BYTES)?;
+            let corpus_bytes = read_bounded_file(&corpus, secureflow_web::MAX_CORPUS_BYTES)?;
+            let inventory = secureflow_web::parse_inventory(&inventory_bytes)?;
+            let inference = secureflow_web::parse_inference(&inference_bytes)?;
+            let result = secureflow_web::evaluate_corpus(&inventory, &inference, &corpus_bytes)?;
+            write_atomic_new(&output, &serde_json::to_vec_pretty(&result)?)?;
+            println!(
+                "web development corpus complete: output={} passed={} failed={} total={} independent_holdout=false superiority_claim_allowed=false",
+                output.display(),
+                result.counts.passed,
+                result.counts.failed,
+                result.counts.total
+            );
             Ok(())
         }
         Command::AdvisoryDeltaSchema => {
@@ -1635,6 +2163,11 @@ fn execute(cli: Cli) -> Result<(), CliError> {
             secure_review,
             correlation,
             benchmark,
+            web_inventory,
+            web_inference,
+            web_assessment,
+            web_lab_result,
+            web_corpus_result,
             output,
         } => {
             ensure_output_distinct(&output, &[&manifest])?;
@@ -1684,6 +2217,106 @@ fn execute(cli: Cli) -> Result<(), CliError> {
                 }
                 evidence.push(OrchestrationEvidence {
                     kind: OrchestrationEvidenceKind::BenchmarkResult,
+                    sha256: sha256_bytes(&bytes),
+                });
+            }
+
+            let retained_web_inventory = if let Some(path) = web_inventory.as_ref() {
+                ensure_output_distinct(&output, &[path])?;
+                let bytes = read_bounded_file(path, secureflow_web::MAX_INVENTORY_BYTES)?;
+                let inventory = secureflow_web::parse_inventory(&bytes)?;
+                if inventory.repository_root_sha256 != run_manifest.target.root_sha256 {
+                    return Err(CliError::ArtifactLinkMismatch("web inventory"));
+                }
+                evidence.push(OrchestrationEvidence {
+                    kind: OrchestrationEvidenceKind::WebInventory,
+                    sha256: sha256_bytes(&bytes),
+                });
+                Some(inventory)
+            } else {
+                None
+            };
+            let retained_web_inference = if let Some(path) = web_inference.as_ref() {
+                ensure_output_distinct(&output, &[path])?;
+                let bytes = read_bounded_file(path, secureflow_web::MAX_INFERENCE_BYTES)?;
+                let inference = secureflow_web::parse_inference(&bytes)?;
+                if inference.repository_root_sha256 != run_manifest.target.root_sha256
+                    || retained_web_inventory.as_ref().is_some_and(|inventory| {
+                        inference.scope_id != inventory.scope_id
+                            || !inference.inventory_ids.contains(&inventory.inventory_id)
+                    })
+                {
+                    return Err(CliError::ArtifactLinkMismatch("web inference"));
+                }
+                evidence.push(OrchestrationEvidence {
+                    kind: OrchestrationEvidenceKind::WebInference,
+                    sha256: sha256_bytes(&bytes),
+                });
+                Some(inference)
+            } else {
+                None
+            };
+            if let Some(path) = web_assessment.as_ref() {
+                ensure_output_distinct(&output, &[path])?;
+                let inventory =
+                    retained_web_inventory
+                        .as_ref()
+                        .ok_or(CliError::ArtifactLinkMismatch(
+                            "web assessment requires web inventory",
+                        ))?;
+                let bytes = read_bounded_file(path, secureflow_web::MAX_ASSESSMENT_BYTES)?;
+                let assessment = secureflow_web::parse_assessment(&bytes)?;
+                if assessment.scope_id != inventory.scope_id
+                    || !assessment.inventory_ids.contains(&inventory.inventory_id)
+                {
+                    return Err(CliError::ArtifactLinkMismatch("web assessment"));
+                }
+                evidence.push(OrchestrationEvidence {
+                    kind: OrchestrationEvidenceKind::WebAssessment,
+                    sha256: sha256_bytes(&bytes),
+                });
+            }
+            if let Some(path) = web_lab_result.as_ref() {
+                ensure_output_distinct(&output, &[path])?;
+                let inventory =
+                    retained_web_inventory
+                        .as_ref()
+                        .ok_or(CliError::ArtifactLinkMismatch(
+                            "web lab result requires web inventory",
+                        ))?;
+                let bytes = read_bounded_file(path, secureflow_web::MAX_LAB_RESULT_BYTES)?;
+                let result = secureflow_web::parse_lab_result(&bytes)?;
+                if result.inventory_id != inventory.inventory_id {
+                    return Err(CliError::ArtifactLinkMismatch("web lab result"));
+                }
+                evidence.push(OrchestrationEvidence {
+                    kind: OrchestrationEvidenceKind::WebLabResult,
+                    sha256: sha256_bytes(&bytes),
+                });
+            }
+            if let Some(path) = web_corpus_result.as_ref() {
+                ensure_output_distinct(&output, &[path])?;
+                let inventory =
+                    retained_web_inventory
+                        .as_ref()
+                        .ok_or(CliError::ArtifactLinkMismatch(
+                            "web corpus result requires web inventory",
+                        ))?;
+                let inference =
+                    retained_web_inference
+                        .as_ref()
+                        .ok_or(CliError::ArtifactLinkMismatch(
+                            "web corpus result requires web inference",
+                        ))?;
+                let bytes = read_bounded_file(path, secureflow_web::MAX_CORPUS_RESULT_BYTES)?;
+                let result = secureflow_web::parse_corpus_result(&bytes)?;
+                if result.inventory_id != inventory.inventory_id
+                    || result.inference_id != inference.inference_id
+                {
+                    return Err(CliError::ArtifactLinkMismatch("web corpus result"));
+                }
+                evidence.push(OrchestrationEvidence {
+                    kind: OrchestrationEvidenceKind::WebCorpusResult,
                     sha256: sha256_bytes(&bytes),
                 });
             }

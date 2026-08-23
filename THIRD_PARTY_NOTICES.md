@@ -13,7 +13,7 @@ domain. These dependencies contain no advisory feed data.
 ## Secure Skill
 
 - Project: Secure Skill
-- Local source inspected: `/home/danielcastrillon/Proyectos/secure-skill`
+- Source inspected as a separate local checkout; it is not redistributed here.
 - Upstream contract: `urn:usesecure:review-contract:1.1`
 - License: MIT
 - Copyright: Copyright (c) 2026 Secure contributors
@@ -26,7 +26,7 @@ the contract, skill instructions and license used.
 ## Secure Bench
 
 - Project: Secure Bench
-- Local source inspected: `/home/danielcastrillon/Proyectos/secure-bench`
+- Source inspected as a separate local checkout; it is not redistributed here.
 - Interoperability contract: `secure-bench-result-v2`
 - License: Apache-2.0
 

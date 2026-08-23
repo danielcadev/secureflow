@@ -35,7 +35,7 @@
         "additionalProperties": false,
         "required": ["kind", "sha256"],
         "properties": {
-          "kind": { "enum": ["contextual-review", "advisory-correlation", "benchmark-result"] },
+          "kind": { "enum": ["contextual-review", "advisory-correlation", "web-inventory", "web-inference", "web-assessment", "benchmark-result", "web-lab-result", "web-corpus-result"] },
           "sha256": { "$ref": "#/$defs/sha256" }
         }
       }

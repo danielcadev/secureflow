@@ -10,7 +10,7 @@ benchmark al scanner.
 ## Ejecución
 
 ```bash
-cd /home/danielcastrillon/Proyectos/secureflow
+cd /ruta/al/checkout/secureflow
 bash scripts/eval-local.sh
 ```
 
@@ -68,6 +68,30 @@ del corpus después de observar los resultados.
 - una ejecución no permite intervalos de incertidumbre ni claims generales;
 - los resultados no demuestran superioridad, production readiness ni desempeño
   en repositorios reales.
+
+## Diagnóstico separado de SecureFlow Web
+
+La vertical Web tiene un segundo diagnóstico completamente local. El fixture
+Next.js etiqueta seis rutas y 24 aserciones sobre inventario, correlación de
+artefactos, exclusión de decoys y semántica segura. La ejecución retenida del
+23 de agosto de 2026 produjo:
+
+| Medida | Resultado |
+| --- | ---: |
+| Rutas esperadas/reportadas | 6 / 6 |
+| Precision/recall/F1 de rutas | 1,00 / 1,00 / 1,00 |
+| Candidatos locales | 11 |
+| Correlacionados/revisión/abstención | 4 / 5 / 2 |
+| Aserciones de desarrollo | 24 / 24 |
+| Red o ejecución del target | no / no |
+
+Los contratos de resultado fijan `independent_holdout=false`,
+`superiority_claim_allowed=false` y `production_safety_claim_allowed=false`.
+El corpus fue construido junto al parser y puede tener leakage de desarrollo;
+por eso no se combina con las métricas históricas de Secure Bench ni con un
+futuro estudio humano. Evidencia:
+[`web-route-lab-2026-08-23.json`](./evidence/web-route-lab-2026-08-23.json) y
+[`web-development-corpus-2026-08-23.json`](./evidence/web-development-corpus-2026-08-23.json).
 
 ## Estudio prospectivo siguiente
 

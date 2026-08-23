@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://secureflow.local/schemas/secureflow-web-inference-v1.schema.json",
+  "title": "SecureFlow Web local API inference v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "inference_id", "generated_at", "scope_id", "repository_root_sha256", "inventory_ids", "sources", "candidates", "issues", "stats", "semantics"],
+  "properties": {
+    "contract_version": { "const": "secureflow-web-inference-v1" },
+    "inference_id": { "type": "string", "pattern": "^sf_web_inference_[0-9a-f]{64}$" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "scope_id": { "type": "string", "pattern": "^sf_web_scope_[0-9a-f]{64}$" },
+    "repository_root_sha256": { "$ref": "#/$defs/sha256" },
+    "inventory_ids": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100000,
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^sf_web_inventory_[0-9a-f]{64}$" }
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100000,
+      "items": { "$ref": "#/$defs/source" }
+    },
+    "candidates": {
+      "type": "array",
+      "maxItems": 2000000,
+      "items": { "$ref": "#/$defs/candidate" }
+    },
+    "issues": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/issue" }
+    },
+    "stats": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["files_seen", "files_read", "bytes_read", "candidates", "correlated_local", "needs_human_review", "abstentions", "symlinks_skipped", "truncated"],
+      "properties": {
+        "files_seen": { "type": "integer", "minimum": 0 },
+        "files_read": { "type": "integer", "minimum": 0 },
+        "bytes_read": { "type": "integer", "minimum": 0 },
+        "candidates": { "type": "integer", "minimum": 0 },
+        "correlated_local": { "type": "integer", "minimum": 0 },
+        "needs_human_review": { "type": "integer", "minimum": 0 },
+        "abstentions": { "type": "integer", "minimum": 0 },
+        "symlinks_skipped": { "type": "integer", "minimum": 0 },
+        "truncated": { "type": "boolean" }
+      }
+    },
+    "semantics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["network_used", "target_code_executed", "target_preserved", "obscurity_is_control", "guesses_are_vulnerabilities"],
+      "properties": {
+        "network_used": { "const": false },
+        "target_code_executed": { "const": false },
+        "target_preserved": { "const": true },
+        "obscurity_is_control": { "const": false },
+        "guesses_are_vulnerabilities": { "const": false }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "evidenceState": { "enum": ["present", "missing", "inconsistent", "unknown", "not-applicable"] },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_id", "kind", "name", "revision", "sha256", "license_spdx"],
+      "properties": {
+        "source_id": { "type": "string", "pattern": "^sf_web_source_[0-9a-f]{64}$" },
+        "kind": { "enum": ["repository", "build-manifest", "open-api", "graph-ql", "trpc", "authorized-log", "simulated-dns", "simulated-certificate-transparency"] },
+        "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "revision": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "license_spdx": { "type": "string", "minLength": 1, "maxLength": 100 }
+      }
+    },
+    "sourceLocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_id", "path", "sha256"],
+      "properties": {
+        "source_id": { "type": "string", "pattern": "^sf_web_source_[0-9a-f]{64}$" },
+        "path": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "line": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidate_id", "kind", "methods", "presence", "confidence", "disposition", "classification", "vulnerability_status", "evidence", "limitations"],
+      "anyOf": [
+        { "required": ["route"] },
+        { "required": ["operation"] }
+      ],
+      "properties": {
+        "candidate_id": { "type": "string", "pattern": "^sf_web_candidate_[0-9a-f]{64}$" },
+        "kind": { "enum": ["http-endpoint", "graph-ql-operation", "trpc-procedure", "server-action", "unresolved-client-call"] },
+        "route": { "type": "string", "pattern": "^/(?!/)", "maxLength": 2000 },
+        "operation": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "methods": {
+          "type": "array",
+          "maxItems": 7,
+          "uniqueItems": true,
+          "items": { "enum": ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"] }
+        },
+        "presence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["implemented", "documented", "observed", "inferred"],
+          "properties": {
+            "implemented": { "$ref": "#/$defs/evidenceState" },
+            "documented": { "$ref": "#/$defs/evidenceState" },
+            "observed": { "const": "unknown" },
+            "inferred": { "$ref": "#/$defs/evidenceState" }
+          }
+        },
+        "confidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["level", "score_basis_points", "rationale"],
+          "properties": {
+            "level": { "enum": ["low", "medium", "high"] },
+            "score_basis_points": { "type": "integer", "minimum": 0, "maximum": 10000 },
+            "rationale": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 20,
+              "items": { "type": "string", "minLength": 1, "maxLength": 500 }
+            }
+          }
+        },
+        "disposition": { "enum": ["correlated-local", "needs-human-review", "abstained"] },
+        "classification": { "const": "candidate" },
+        "vulnerability_status": { "const": "not-assessed" },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["origin", "source", "description"],
+            "properties": {
+              "origin": { "enum": ["implemented-route", "client-call", "build-manifest", "open-api", "graph-ql-schema", "trpc-router"] },
+              "source": { "$ref": "#/$defs/sourceLocation" },
+              "description": { "type": "string", "minLength": 1, "maxLength": 1000 }
+            }
+          }
+        },
+        "limitations": {
+          "type": "array",
+          "maxItems": 100,
+          "items": { "type": "string", "minLength": 1, "maxLength": 500 }
+        }
+      }
+    },
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "detail"],
+      "properties": {
+        "kind": { "enum": ["unsupported-pattern", "malformed-artifact", "file-skipped", "limit-reached"] },
+        "path": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "detail": { "type": "string", "minLength": 1, "maxLength": 1000 }
+      }
+    }
+  }
+}

@@ -1,0 +1,133 @@
+{
+  "contract_version": "secureflow-web-development-corpus-v1",
+  "corpus_id": "sf_web_corpus_db8f1e502692d734e58c6279226ce916860c9341b73a1dd046890318201ca6f4",
+  "name": "SecureFlow synthetic Next.js development assertions v1",
+  "split": "development",
+  "license": {
+    "spdx": "MIT OR Apache-2.0",
+    "provenance": "SecureFlow synthetic fixture; no private API data",
+    "license_sha256": "8a59c035575dcb171fc2e90e0c92380d3c2ed1a0612e9577a420119c9ae322a5"
+  },
+  "cases": [
+    {
+      "case_id": "WEBDEV001",
+      "description": "root middleware is inventoried without an HTTP route",
+      "expectation": { "kind": "inventory-route-present", "route_kind": "middleware", "methods": [] }
+    },
+    {
+      "case_id": "WEBDEV002",
+      "description": "use-server module is inventoried as a POST server action",
+      "expectation": { "kind": "inventory-route-present", "route_kind": "server-action", "methods": ["POST"] }
+    },
+    {
+      "case_id": "WEBDEV003",
+      "description": "route groups are omitted from the public page path",
+      "expectation": { "kind": "inventory-route-present", "route": "/", "route_kind": "page-route", "methods": ["GET"] }
+    },
+    {
+      "case_id": "WEBDEV004",
+      "description": "App Router dynamic parameters and named methods are normalized",
+      "expectation": { "kind": "inventory-route-present", "route": "/api/admin/{tenantId}/users/{id}", "route_kind": "api-route", "methods": ["GET", "DELETE"] }
+    },
+    {
+      "case_id": "WEBDEV005",
+      "description": "App Router health route is inventoried",
+      "expectation": { "kind": "inventory-route-present", "route": "/api/health", "route_kind": "api-route", "methods": ["GET"] }
+    },
+    {
+      "case_id": "WEBDEV006",
+      "description": "Pages Router API path is normalized while methods remain unknown",
+      "expectation": { "kind": "inventory-route-present", "route": "/api/legacy/{id}", "route_kind": "api-route", "methods": [] }
+    },
+    {
+      "case_id": "WEBDEV007",
+      "description": "server action remains a local correlated candidate",
+      "expectation": { "kind": "inference-candidate-present", "operation": "app/actions.ts", "candidate_kind": "server-action", "origin": "implemented-route", "disposition": "correlated-local" }
+    },
+    {
+      "case_id": "WEBDEV008",
+      "description": "concrete client path correlates to the parameterized admin route",
+      "expectation": { "kind": "inference-candidate-present", "route": "/api/admin/{tenantId}/users/{id}", "candidate_kind": "http-endpoint", "origin": "client-call", "disposition": "correlated-local" }
+    },
+    {
+      "case_id": "WEBDEV009",
+      "description": "health route is corroborated by local OpenAPI evidence",
+      "expectation": { "kind": "inference-candidate-present", "route": "/api/health", "candidate_kind": "http-endpoint", "origin": "open-api", "disposition": "correlated-local" }
+    },
+    {
+      "case_id": "WEBDEV010",
+      "description": "Pages Router implementation remains correlated locally",
+      "expectation": { "kind": "inference-candidate-present", "route": "/api/legacy/{id}", "candidate_kind": "http-endpoint", "origin": "implemented-route", "disposition": "correlated-local" }
+    },
+    {
+      "case_id": "WEBDEV011",
+      "description": "client-only forgotten API requires human review",
+      "expectation": { "kind": "inference-candidate-present", "route": "/api/forgotten", "candidate_kind": "http-endpoint", "origin": "client-call", "disposition": "needs-human-review" }
+    },
+    {
+      "case_id": "WEBDEV012",
+      "description": "retained build-only internal API requires human review",
+      "expectation": { "kind": "inference-candidate-present", "route": "/api/internal", "candidate_kind": "http-endpoint", "origin": "build-manifest", "disposition": "needs-human-review" }
+    },
+    {
+      "case_id": "WEBDEV013",
+      "description": "documented-only OpenAPI path requires human review",
+      "expectation": { "kind": "inference-candidate-present", "route": "/api/documented-only", "candidate_kind": "http-endpoint", "origin": "open-api", "disposition": "needs-human-review" }
+    },
+    {
+      "case_id": "WEBDEV014",
+      "description": "tRPC public procedure is represented without proving transport",
+      "expectation": { "kind": "inference-candidate-present", "route": "/api/trpc/health", "operation": "health", "candidate_kind": "trpc-procedure", "origin": "trpc-router", "disposition": "needs-human-review" }
+    },
+    {
+      "case_id": "WEBDEV015",
+      "description": "tRPC protected procedure is represented without inferring authorization",
+      "expectation": { "kind": "inference-candidate-present", "route": "/api/trpc/adminUser", "operation": "adminUser", "candidate_kind": "trpc-procedure", "origin": "trpc-router", "disposition": "needs-human-review" }
+    },
+    {
+      "case_id": "WEBDEV016",
+      "description": "GraphQL operation abstains when its transport route is unproven",
+      "expectation": { "kind": "inference-candidate-present", "operation": "Query.user", "candidate_kind": "graph-ql-operation", "origin": "graph-ql-schema", "disposition": "abstained" }
+    },
+    {
+      "case_id": "WEBDEV017",
+      "description": "dynamic client URL is retained only as an abstained unresolved call",
+      "expectation": { "kind": "inference-candidate-present", "operation": "client/api.ts:11", "candidate_kind": "unresolved-client-call", "origin": "client-call", "disposition": "abstained" }
+    },
+    {
+      "case_id": "WEBDEV018",
+      "description": "concrete parameter value is not duplicated after canonical correlation",
+      "expectation": { "kind": "inference-route-absent", "route": "/api/admin/acme/users/user-1" }
+    },
+    {
+      "case_id": "WEBDEV019",
+      "description": "external URL is not converted into an authorized local route",
+      "expectation": { "kind": "inference-route-absent", "route": "/api/private" }
+    },
+    {
+      "case_id": "WEBDEV020",
+      "description": "comment decoy is ignored",
+      "expectation": { "kind": "inference-route-absent", "route": "/api/comment-decoy" }
+    },
+    {
+      "case_id": "WEBDEV021",
+      "description": "string-literal decoy is ignored",
+      "expectation": { "kind": "inference-route-absent", "route": "/api/string-decoy" }
+    },
+    {
+      "case_id": "WEBDEV022",
+      "description": "inventory and inference use no network",
+      "expectation": { "kind": "semantic-invariant", "invariant": "network-not-used" }
+    },
+    {
+      "case_id": "WEBDEV023",
+      "description": "target code is never executed",
+      "expectation": { "kind": "semantic-invariant", "invariant": "target-code-not-executed" }
+    },
+    {
+      "case_id": "WEBDEV024",
+      "description": "automated candidates never become vulnerabilities",
+      "expectation": { "kind": "semantic-invariant", "invariant": "no-automatic-vulnerability" }
+    }
+  ]
+}

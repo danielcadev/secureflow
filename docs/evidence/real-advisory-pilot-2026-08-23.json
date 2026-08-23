@@ -86,6 +86,24 @@
     "foreign_key_violations": 0,
     "restore_at_full_scale": "not-run; round-trip restore is covered by the automated fixture"
   },
+  "incremental_refresh": {
+    "index_locator": "https://storage.googleapis.com/osv-vulnerabilities/crates.io/modified_id.csv",
+    "observed_at": "2026-08-23T20:26:55Z",
+    "gcs_generation": "1787294010693912",
+    "etag": "9f86d98cb5bbfa7b671b3254c579d298",
+    "index_sha256": "c42f620143308073460dfb42b5a305d91742026f64bed984ca72589210b8481f",
+    "index_records": 2749,
+    "maximum_modified": "2026-08-21T06:30:03.271544435Z",
+    "new_records_after_cursor": 0,
+    "overlap_replay": {
+      "records": 7,
+      "inserted": 0,
+      "updated": 0,
+      "unchanged": 7,
+      "quarantined": 0
+    },
+    "interpretation": "The official index had no entries newer than the retained cursor; no insert or update was manufactured."
+  },
   "claim_boundaries": [
     "Counts measure ingested security records and exact-alias components, not human-validated vulnerabilities.",
     "Malicious-package reports are not relabeled as CVEs or independently verified vulnerabilities.",

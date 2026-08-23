@@ -45,6 +45,10 @@ El MVP debe responder una sola pregunta:
 12. Adapter de Secure Bench. **Implementado para importar resultados v2
     retenidos, verificar fingerprints y separar métricas; no ejecuta scanners ni
     permite rankings o claims de superioridad.**
+13. Recon/API Exposure offline. **Implementado como `secureflow-web`: scope
+    autorizado, inventario Next.js, inferencia desde artefactos locales,
+    evaluación JSON/SARIF y 24 aserciones sintéticas de desarrollo. No existe
+    adquisición DNS/CT, crawling ni tráfico HTTP.**
 
 ## Orden de implementación
 
@@ -117,7 +121,7 @@ El MVP debe responder una sola pregunta:
 - benchmark competitivo o leaderboard;
 - soporte universal de lenguajes.
 
-El módulo propuesto Recon/API Exposure permanece fuera del MVP ejecutable. Su
-diagnóstico, scope gate y MVP offline/loopback están en
+La fase offline de Recon/API Exposure forma parte del MVP ejecutable. Su
+diagnóstico y la frontera futura de red están en
 [`diagnosis-recon-api-exposure.md`](./diagnosis-recon-api-exposure.md); no se ha
 creado un scanner de red.

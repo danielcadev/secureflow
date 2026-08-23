@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use SecureFlow in research, cite this software and the exact commit or release."
+title: "SecureFlow"
+type: software
+authors:
+  - family-names: "Castrillon"
+    given-names: "Daniel"
+repository-code: "https://github.com/danielcadev/secureflow"
+url: "https://github.com/danielcadev/secureflow"
+license: "MIT OR Apache-2.0"
+version: "0.1.0"
+date-released: 2026-08-23
+keywords:
+  - application security
+  - static analysis
+  - vulnerability research
+  - Rust
+  - reproducible evaluation

@@ -1,0 +1,31 @@
+{
+  "contract_version": "secureflow-web-lab-result-v1",
+  "run_id": "sf_web_lab_45064cf37fbb45b2b42a632cacb8dc834c1b9067a0d0b66c8176b334d8ee30c2",
+  "case_id": "sf_web_case_8b50986b4c59b7aed0e18208e78cebc8d5bca2470f19fd3fdfc97ab5070aae1f",
+  "inventory_id": "sf_web_inventory_4b001aa8fc8ef260bb9b5d76c040af12cb62857aa5abbddb9f08da31e11c4609",
+  "expected_sha256": "9d65d35376ca85c5fa06e89c54074db6e77084ebac678f68da5a4f38479f8d7e",
+  "counts": {
+    "expected_routes": 6,
+    "reported_routes": 6,
+    "matched_routes": 6,
+    "missing_routes": 0,
+    "unexpected_routes": 0
+  },
+  "metrics": {
+    "route_precision": { "numerator": 6, "denominator": 6, "basis_points": 10000 },
+    "route_recall": { "numerator": 6, "denominator": 6, "basis_points": 10000 },
+    "route_f1": { "numerator": 12, "denominator": 12, "basis_points": 10000 }
+  },
+  "mismatches": [],
+  "safety": {
+    "network_used": false,
+    "target_code_executed": false,
+    "target_preserved": true,
+    "failures_are_clean": false
+  },
+  "claims": {
+    "evaluation_only": true,
+    "superiority_claim_allowed": false,
+    "production_safety_claim_allowed": false
+  }
+}

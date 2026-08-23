@@ -1,0 +1,8 @@
+{
+  "openapi": "3.1.0",
+  "info": { "title": "SecureFlow synthetic fixture", "version": "1.0.0" },
+  "paths": {
+    "/api/health": { "get": { "responses": { "200": { "description": "healthy" } } } },
+    "/api/documented-only": { "post": { "responses": { "202": { "description": "accepted" } } } }
+  }
+}

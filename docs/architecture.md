@@ -66,12 +66,19 @@ secureflow-bench-adapter
     ├── protocolo prospectivo sellado con cohorte humana y blinding
     └── sin ranking, superioridad global ni claims de producción
 
-secureflow-recon (propuesto; no implementado)
-    ├── scope/allowlist verificable antes de cualquier red
-    ├── inventario offline de Next.js, OpenAPI, tRPC, GraphQL y artefactos
-    ├── matriz declared/documented/observed/expected-control
-    ├── checks sólo loopback en su primer MVP
-    └── candidatos contextuales; humano conserva autoridad
+secureflow-web
+    ├── scope de repositorio autorizado, hasheado y con expiración
+    ├── inventario offline Next.js sin ejecutar código del target
+    ├── inferencia desde cliente, OpenAPI, manifests, tRPC y GraphQL
+    ├── matriz de controles y observaciones candidatas/hardening
+    ├── lab JSON/SARIF y corpus sintético de 24 casos de desarrollo
+    └── sin red, sin validación automática y con outputs privados
+
+secureflow-recon-network (propuesto; no implementado)
+    ├── allowlist verificable y autorización adicional antes de cada request
+    ├── revalidación de DNS, redirects y activos compartidos
+    ├── adquisición pasiva acotada y checks seguros primero en loopback
+    └── rate limits, redacción, stop rules y revisión humana
 ```
 
 ## Estructura futura del repositorio
@@ -94,6 +101,7 @@ secureflow/
 │   ├── secureflow-ai/
 │   ├── secureflow-knowledge/
 │   ├── secureflow-orchestrator/
+│   ├── secureflow-web/
 │   └── secureflow-cli/
 ├── tests/
 │   ├── contracts/
@@ -130,7 +138,7 @@ exista una frontera de responsabilidad y una prueba que justifique cada uno.
 - cada retry debe ser idempotente y conservar el intento anterior;
 - un fallo operativo nunca equivale a un resultado limpio.
 
-El diagnóstico y los límites de `secureflow-recon` están en
-[`diagnosis-recon-api-exposure.md`](./diagnosis-recon-api-exposure.md). No se
-creará el crate ni tráfico remoto hasta aprobar su contrato de autorización,
-fixtures y benchmark.
+El diagnóstico y los límites de recon están en
+[`diagnosis-recon-api-exposure.md`](./diagnosis-recon-api-exposure.md). La fase
+offline ya existe como `secureflow-web`; no se habilitará tráfico remoto hasta
+aprobar una ADR adicional, tests loopback, límites y un benchmark independiente.

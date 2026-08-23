@@ -65,6 +65,10 @@ fn prospective_protocol_fixture() -> PathBuf {
         .join("../../tests/fixtures/prospective-protocol-draft.json")
 }
 
+fn web_fixture() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/web-nextjs")
+}
+
 #[test]
 fn validates_the_canonical_fixture() {
     let output = Command::new(binary())
@@ -1423,4 +1427,310 @@ fn invalid_timeout_fails_before_engine_execution() {
     assert!(String::from_utf8_lossy(&output.stderr).contains("invalid timeout"));
     assert!(!report.exists());
     assert!(!manifest.exists());
+}
+
+#[test]
+fn web_cli_runs_an_offline_authorized_inventory_inference_and_lab() {
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("system clock")
+        .as_nanos();
+    let output_root = std::env::temp_dir().join(format!(
+        "secureflow-web-cli-{}-{unique}",
+        std::process::id()
+    ));
+    std::fs::create_dir(&output_root).expect("temporary output directory");
+    let scope = output_root.join("scope.json");
+    let inventory = output_root.join("inventory.json");
+    let inference = output_root.join("inference.json");
+    let coverage = output_root.join("coverage.json");
+    let assessment = output_root.join("assessment.json");
+    let reproduction = output_root.join("reproduction.json");
+    let reviewed_assessment = output_root.join("assessment-reviewed.json");
+    let lab = output_root.join("lab.json");
+    let sarif = output_root.join("lab.sarif");
+    let corpus_result = output_root.join("corpus-result.json");
+    std::fs::write(
+        &coverage,
+        serde_json::to_vec_pretty(&serde_json::json!([{
+            "route_key": "GET /api/admin/{tenantId}/users/{id}",
+            "method": "GET",
+            "route": "/api/admin/{tenantId}/users/{id}",
+            "implemented": true,
+            "documented": false,
+            "observed": true,
+            "access_intent": "privileged",
+            "expected": {
+                "authentication_required": true,
+                "authorization_required": true,
+                "owner_scope_required": false,
+                "tenant_scope_required": true,
+                "restricted_cors_required": true,
+                "private_cache_required": true,
+                "sanitized_errors_required": true
+            },
+            "observed_controls": {
+                "authentication": "present",
+                "authorization": "inconsistent",
+                "owner_scope": "not-applicable",
+                "tenant_scope": "missing",
+                "restricted_cors": "missing",
+                "private_cache": "missing",
+                "sanitized_errors": "missing"
+            },
+            "allowed_response_fields": ["id"],
+            "response_allowlist_declared": true,
+            "observed_response_fields": ["email", "id", "tenantId"],
+            "evidence": [{
+                "kind": "code",
+                "reference": "app/api/admin/[tenantId]/users/[id]/route.ts:1",
+                "sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+                "description": "synthetic route-to-query evidence"
+            }]
+        }]))
+        .expect("coverage JSON"),
+    )
+    .expect("coverage fixture");
+
+    let created = Command::new(binary())
+        .arg("web-scope-create")
+        .args(["--root"])
+        .arg(web_fixture())
+        .args([
+            "--repository-label",
+            "synthetic-nextjs",
+            "--authorization-reference",
+            "AUTH-SYNTHETIC-WEB-CLI",
+            "--authorization-reviewer",
+            "fixture-reviewer",
+            "--authorization-expires-at",
+            "2099-01-01T00:00:00Z",
+            "--output",
+        ])
+        .arg(&scope)
+        .output()
+        .expect("scope CLI should start");
+    assert!(
+        created.status.success(),
+        "{}",
+        String::from_utf8_lossy(&created.stderr)
+    );
+
+    let inventoried = Command::new(binary())
+        .arg("web-inventory-nextjs")
+        .args(["--root"])
+        .arg(web_fixture())
+        .args(["--scope"])
+        .arg(&scope)
+        .args([
+            "--source-name",
+            "secureflow-synthetic-nextjs",
+            "--source-revision",
+            "fixture-v1",
+            "--source-license-spdx",
+            "MIT OR Apache-2.0",
+            "--output",
+        ])
+        .arg(&inventory)
+        .output()
+        .expect("inventory CLI should start");
+    assert!(
+        inventoried.status.success(),
+        "{}",
+        String::from_utf8_lossy(&inventoried.stderr)
+    );
+
+    let inferred = Command::new(binary())
+        .arg("web-infer")
+        .args(["--root"])
+        .arg(web_fixture())
+        .args(["--scope"])
+        .arg(&scope)
+        .args(["--inventory"])
+        .arg(&inventory)
+        .args(["--output"])
+        .arg(&inference)
+        .output()
+        .expect("inference CLI should start");
+    assert!(
+        inferred.status.success(),
+        "{}",
+        String::from_utf8_lossy(&inferred.stderr)
+    );
+
+    let assessed = Command::new(binary())
+        .arg("web-assess")
+        .args(["--scope"])
+        .arg(&scope)
+        .args(["--inventory"])
+        .arg(&inventory)
+        .args(["--coverage"])
+        .arg(&coverage)
+        .args(["--output"])
+        .arg(&assessment)
+        .output()
+        .expect("assessment CLI should start");
+    assert!(
+        assessed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&assessed.stderr)
+    );
+    let initial_assessment: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(&assessment).expect("assessment artifact should be readable"),
+    )
+    .expect("assessment artifact should be JSON");
+    let observation_id = initial_assessment["observations"]
+        .as_array()
+        .and_then(|items| items.iter().find(|item| item["class"] == "candidate"))
+        .and_then(|item| item["observation_id"].as_str())
+        .expect("candidate observation id");
+    std::fs::write(
+        &reproduction,
+        b"{\"fixture\":\"synthetic authorized reproduction\"}\n",
+    )
+    .expect("reproduction artifact");
+    let reviewed = Command::new(binary())
+        .arg("web-review-assessment")
+        .args(["--assessment"])
+        .arg(&assessment)
+        .args(["--observation-id", observation_id])
+        .args([
+            "--reviewer",
+            "fixture-reviewer",
+            "--rationale",
+            "synthetic reproduction verified the expected control invariant",
+            "--evidence",
+        ])
+        .arg(&reproduction)
+        .args([
+            "--evidence-reference",
+            "reproductions/WEB-CLI-001.json",
+            "--evidence-description",
+            "retained synthetic reproduction",
+            "--output",
+        ])
+        .arg(&reviewed_assessment)
+        .output()
+        .expect("web review CLI should start");
+    assert!(
+        reviewed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&reviewed.stderr)
+    );
+
+    let evaluated = Command::new(binary())
+        .arg("web-lab")
+        .args(["--inventory"])
+        .arg(&inventory)
+        .args(["--expected"])
+        .arg(web_fixture().join("expected.json"))
+        .args(["--output"])
+        .arg(&lab)
+        .args(["--sarif-output"])
+        .arg(&sarif)
+        .output()
+        .expect("lab CLI should start");
+    assert!(
+        evaluated.status.success(),
+        "{}",
+        String::from_utf8_lossy(&evaluated.stderr)
+    );
+
+    let corpus_evaluated = Command::new(binary())
+        .arg("web-corpus-evaluate")
+        .args(["--inventory"])
+        .arg(&inventory)
+        .args(["--inference"])
+        .arg(&inference)
+        .args(["--corpus"])
+        .arg(web_fixture().join("corpus.json"))
+        .args(["--output"])
+        .arg(&corpus_result)
+        .output()
+        .expect("corpus CLI should start");
+    assert!(
+        corpus_evaluated.status.success(),
+        "{}",
+        String::from_utf8_lossy(&corpus_evaluated.stderr)
+    );
+
+    let scope_value: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&scope).expect("scope artifact should be readable"))
+            .expect("scope artifact should be JSON");
+    let inventory_value: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(&inventory).expect("inventory artifact should be readable"),
+    )
+    .expect("inventory artifact should be JSON");
+    let inference_value: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(&inference).expect("inference artifact should be readable"),
+    )
+    .expect("inference artifact should be JSON");
+    let assessment_value: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(&assessment).expect("assessment artifact should be readable"),
+    )
+    .expect("assessment artifact should be JSON");
+    let reviewed_assessment_value: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(&reviewed_assessment)
+            .expect("reviewed assessment artifact should be readable"),
+    )
+    .expect("reviewed assessment artifact should be JSON");
+    let lab_value: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&lab).expect("lab artifact should be readable"))
+            .expect("lab artifact should be JSON");
+    let corpus_result_value: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(&corpus_result).expect("corpus result should be readable"),
+    )
+    .expect("corpus result should be JSON");
+    validate_with_schema("secureflow-web-scope-v1.schema.json", &scope_value);
+    validate_with_schema("secureflow-web-inventory-v1.schema.json", &inventory_value);
+    validate_with_schema("secureflow-web-inference-v1.schema.json", &inference_value);
+    validate_with_schema(
+        "secureflow-web-assessment-v1.schema.json",
+        &assessment_value,
+    );
+    validate_with_schema(
+        "secureflow-web-assessment-v1.schema.json",
+        &reviewed_assessment_value,
+    );
+    validate_with_schema("secureflow-web-lab-result-v1.schema.json", &lab_value);
+    validate_with_schema(
+        "secureflow-web-corpus-result-v1.schema.json",
+        &corpus_result_value,
+    );
+    assert_eq!(inference_value["semantics"]["network_used"], false);
+    assert_eq!(lab_value["claims"]["superiority_claim_allowed"], false);
+    assert_eq!(lab_value["counts"]["missing_routes"], 0);
+    assert_eq!(lab_value["counts"]["unexpected_routes"], 0);
+    assert_eq!(corpus_result_value["counts"]["total"], 24);
+    assert_eq!(corpus_result_value["counts"]["passed"], 24);
+    assert_eq!(corpus_result_value["claims"]["independent_holdout"], false);
+    assert_eq!(
+        reviewed_assessment_value["summary"]["human_validated_vulnerabilities"],
+        1
+    );
+    assert_eq!(
+        reviewed_assessment_value["parent_assessment_id"],
+        assessment_value["assessment_id"]
+    );
+
+    #[cfg(unix)]
+    for path in [
+        &scope,
+        &inventory,
+        &inference,
+        &assessment,
+        &reviewed_assessment,
+        &lab,
+        &sarif,
+        &corpus_result,
+    ] {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(path)
+            .expect("artifact metadata")
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(mode, 0o600);
+    }
+    std::fs::remove_dir_all(&output_root).expect("remove exact temporary output directory");
 }

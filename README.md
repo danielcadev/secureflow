@@ -1,5 +1,9 @@
 # SecureFlow
 
+[![CI](https://github.com/danielcadev/secureflow/actions/workflows/ci.yml/badge.svg)](https://github.com/danielcadev/secureflow/actions/workflows/ci.yml)
+[![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](./LICENSE-MIT)
+[![Rust 1.92](https://img.shields.io/badge/Rust-1.92-orange.svg)](./rust-toolchain.toml)
+
 SecureFlow es una plataforma local-first para analizar código autorizado,
 priorizar señales de seguridad y ayudar a un investigador humano a validar
 vulnerabilidades con evidencia reproducible.
@@ -15,10 +19,83 @@ El proyecto combina, mediante contratos versionados y procesos separados:
 La decisión humana es siempre autoritativa. Un candidato no se convierte en
 vulnerabilidad sólo porque lo sugiera un scanner o un modelo.
 
-El humano debe seguir siendo mejor que SecureFlow en el juicio contextual y la
-decisión de seguridad. La plataforma sólo debe aportar más cobertura,
-velocidad, memoria de patrones y reproducibilidad; cuando no tenga evidencia
-suficiente, debe abstenerse.
+La meta investigativa es superar baselines humanos en tareas estrechas y
+medibles de cobertura, velocidad, memoria de patrones y reproducibilidad. Eso
+debe demostrarse con un estudio ciego; no transfiere la autoridad final. El
+juicio contextual y la validación de una vulnerabilidad siguen siendo humanos,
+y SecureFlow debe abstenerse cuando no tenga evidencia suficiente.
+
+## SecureFlow Web: inventario de APIs sin red
+
+La vertical Web implementada sella un scope local con autorización y
+expiración, inventaría rutas Next.js, correlaciona llamadas cliente, OpenAPI,
+manifests, GraphQL y tRPC, y conserva todo como candidatos. No ejecuta código
+del target ni realiza requests:
+
+```bash
+cargo run -p secureflow -- web-scope-create \
+  --root /ruta/al/target \
+  --repository-label mi-app \
+  --authorization-reference "repositorio propio" \
+  --authorization-reviewer "Daniel" \
+  --authorization-expires-at 2027-01-01T00:00:00Z \
+  --output /tmp/web-scope.json
+
+cargo run -p secureflow -- web-inventory-nextjs \
+  --root /ruta/al/target \
+  --scope /tmp/web-scope.json \
+  --source-name mi-app \
+  --source-revision <commit-o-snapshot> \
+  --source-license-spdx MIT \
+  --output /tmp/web-inventory.json
+
+cargo run -p secureflow -- web-infer \
+  --root /ruta/al/target \
+  --scope /tmp/web-scope.json \
+  --inventory /tmp/web-inventory.json \
+  --output /tmp/web-inference.json
+
+# Una matriz de cobertura revisada por el operador produce sólo candidatos,
+# hardening y abstenciones; nunca valida automáticamente una vulnerabilidad.
+cargo run -p secureflow -- web-assess \
+  --scope /tmp/web-scope.json \
+  --inventory /tmp/web-inventory.json \
+  --coverage /ruta/coverage-routes.json \
+  --output /tmp/web-assessment.json
+
+# Sólo una persona, con evidencia local retenida, puede elevar un candidato.
+cargo run -p secureflow -- web-review-assessment \
+  --assessment /tmp/web-assessment.json \
+  --observation-id sf_web_observation_<hash> \
+  --reviewer "Daniel" \
+  --rationale "reproducción autorizada y verificada" \
+  --evidence /ruta/reproduccion-redactada.json \
+  --evidence-reference reproducciones/WEB-001.json \
+  --evidence-description "reproducción local retenida" \
+  --output /tmp/web-assessment-reviewed.json
+```
+
+El fixture público contiene 24 aserciones de desarrollo. La ejecución retenida
+pasó 24/24 y el inventario de seis rutas obtuvo 6/6, pero ambos contratos dicen
+explícitamente `independent_holdout=false` o
+`superiority_claim_allowed=false`: son pruebas del pipeline, no evidencia de
+generalización. Resultados:
+[`web-development-corpus-2026-08-23.json`](./docs/evidence/web-development-corpus-2026-08-23.json)
+y [`web-route-lab-2026-08-23.json`](./docs/evidence/web-route-lab-2026-08-23.json).
+
+```bash
+cargo run -p secureflow -- web-lab \
+  --inventory /tmp/web-inventory.json \
+  --expected tests/fixtures/web-nextjs/expected.json \
+  --output /tmp/web-lab.json \
+  --sarif-output /tmp/web-lab.sarif
+
+cargo run -p secureflow -- web-corpus-evaluate \
+  --inventory /tmp/web-inventory.json \
+  --inference /tmp/web-inference.json \
+  --corpus tests/fixtures/web-nextjs/corpus.json \
+  --output /tmp/web-corpus-result.json
+```
 
 ## Primera ejecución reproducible
 
@@ -368,7 +445,7 @@ El primer contrato es [`secureflow-run-v1`](./docs/contracts/secureflow-run-v1.m
 
 ```text
 scope autorizado
-  -> análisis determinista local
+  -> análisis determinista e inventario API local
   -> normalización y deduplicación
   -> priorización determinista
   -> validación IA opcional
@@ -399,7 +476,7 @@ La matriz requisito-evidencia y los pendientes de publicación están en
 
 ## Estado de la implementación
 
-El MVP local está operativo: workspace Rust, contrato y schema,
+El MVP local está operativo: workspace Rust, contratos y schemas,
 adapter de proceso externo, proyección, ordenamiento, deduplicación dentro de
 un engine, informe Markdown, registro explícito de revisión humana y ledger
 local JSONL. La
@@ -410,6 +487,18 @@ SQLite/FTS5 implementa revisiones de origen, alias exactos, paquetes, consultas
 e integridad local. La ruta IA ya tiene preparación redacted y accounting
 offline; el transporte a proveedor continúa deshabilitado y no se presenta
 como funcionalidad terminada.
+
+La vertical `secureflow-web` también está operativa para análisis estrictamente
+offline: scope autorizado, inventario Next.js, inferencia local, evaluación de
+rutas y corpus sintético de desarrollo. El recon remoto, DNS/CT y los checks
+HTTP siguen sin implementarse.
+
+## Seguridad y contribuciones
+
+Consulta [`SECURITY.md`](./SECURITY.md) para reportar vulnerabilidades de forma
+privada y [`CONTRIBUTING.md`](./CONTRIBUTING.md) para reproducir los gates. El
+software sólo debe usarse sobre código y sistemas propios, open source o con
+autorización explícita.
 
 ## Licencia
 

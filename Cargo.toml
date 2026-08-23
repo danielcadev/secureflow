@@ -8,6 +8,7 @@ members = [
     "crates/secureflow-ai",
     "crates/secureflow-knowledge",
     "crates/secureflow-orchestrator",
+    "crates/secureflow-web",
     "crates/secureflow-cli",
 ]
 

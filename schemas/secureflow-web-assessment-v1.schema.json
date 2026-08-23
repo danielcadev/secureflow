@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://secureflow.local/schemas/secureflow-web-assessment-v1.schema.json",
+  "title": "SecureFlow Web conservative assessment v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "assessment_id", "created_at", "scope_id", "inventory_ids", "observations", "summary", "semantics"],
+  "properties": {
+    "contract_version": { "const": "secureflow-web-assessment-v1" },
+    "assessment_id": { "type": "string", "pattern": "^sf_web_assessment_[0-9a-f]{64}$" },
+    "parent_assessment_id": { "type": "string", "pattern": "^sf_web_assessment_[0-9a-f]{64}$" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "scope_id": { "type": "string", "pattern": "^sf_web_scope_[0-9a-f]{64}$" },
+    "inventory_ids": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100000,
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^sf_web_inventory_[0-9a-f]{64}$" }
+    },
+    "observations": {
+      "type": "array",
+      "maxItems": 2000000,
+      "items": { "$ref": "#/$defs/observation" }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidates", "hardening", "human_validated_vulnerabilities", "abstentions"],
+      "properties": {
+        "candidates": { "type": "integer", "minimum": 0 },
+        "hardening": { "type": "integer", "minimum": 0 },
+        "human_validated_vulnerabilities": { "type": "integer", "minimum": 0 },
+        "abstentions": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "semantics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["automated_validation_authority", "validation_authority", "obscurity_is_a_control", "no_observations_mean_safe", "network_used"],
+      "properties": {
+        "automated_validation_authority": { "const": false },
+        "validation_authority": { "const": "human-only" },
+        "obscurity_is_a_control": { "const": false },
+        "no_observations_mean_safe": { "const": false },
+        "network_used": { "const": false }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "reference", "sha256", "description"],
+      "properties": {
+        "kind": { "enum": ["code", "build", "documentation", "authorized-traffic", "control-flow", "response", "human-reproduction"] },
+        "reference": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "description": { "type": "string", "minLength": 1, "maxLength": 1000 }
+      }
+    },
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observation_id", "rule_id", "class", "route_key", "method", "route", "title", "invariant", "evidence", "limitations"],
+      "properties": {
+        "observation_id": { "type": "string", "pattern": "^sf_web_observation_[0-9a-f]{64}$" },
+        "rule_id": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "class": { "enum": ["candidate", "hardening", "human-validated-vulnerability"] },
+        "route_key": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "method": { "enum": ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"] },
+        "route": { "type": "string", "pattern": "^/", "maxLength": 2000 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "invariant": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/evidence" }
+        },
+        "limitations": {
+          "type": "array",
+          "maxItems": 100,
+          "items": { "type": "string", "minLength": 1, "maxLength": 500 }
+        },
+        "human_validation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["reviewer", "reviewed_at", "rationale", "evidence_reference"],
+          "properties": {
+            "reviewer": { "type": "string", "minLength": 1, "maxLength": 200 },
+            "reviewed_at": { "type": "string", "format": "date-time" },
+            "rationale": { "type": "string", "minLength": 1, "maxLength": 3000 },
+            "evidence_reference": { "type": "string", "minLength": 1, "maxLength": 300 }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "class": { "const": "human-validated-vulnerability" } } },
+          "then": { "required": ["human_validation"] },
+          "else": { "not": { "required": ["human_validation"] } }
+        }
+      ]
+    }
+  }
+}

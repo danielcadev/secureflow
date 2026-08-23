@@ -3,16 +3,31 @@
 ## Decisión
 
 Sí debe existir como módulo de SecureFlow, pero **no debe implementarse aún como
-scanner de red general**. La frontera recomendada es un componente futuro
-`secureflow-recon` que produce un inventario trazable y una matriz de cobertura;
-Secure Engine y Secure Skill consumen ese contexto sin convertir una ruta
-descubierta en vulnerabilidad.
+scanner de red general**. La primera frontera ya está implementada como
+`secureflow-web`: produce un inventario trazable, inferencia local y una matriz
+de cobertura sin convertir una ruta descubierta en vulnerabilidad.
 
-El primer incremento debe ser offline y local. El descubrimiento pasivo de
+El primer incremento offline y local ya existe. El descubrimiento pasivo de
 subdominios y las comprobaciones HTTP requieren antes un contrato de
 autorización verificable, protección frente a scope escape y un benchmark
 local. “El usuario escribió `--authorized`” no es evidencia suficiente para
 automatizar tráfico contra terceros.
+
+## Estado implementado al 23 de agosto de 2026
+
+- contrato `secureflow-web-scope-v1` con autorización, expiración, hashes y
+  presupuestos de red obligatoriamente en cero;
+- inventario App Router/Pages Router, middleware y server actions;
+- inferencia desde llamadas literales `fetch`/Axios, OpenAPI JSON, manifests
+  Next.js retenidos, schemas GraphQL y routers tRPC simples;
+- comparación de rutas y matriz conservadora de controles;
+- outputs JSON/SARIF, IDs ligados al contenido y límites de archivos/bytes/rutas;
+- fixture sintético con seis rutas y 24 aserciones de desarrollo, todas
+  reproducibles pero explícitamente no holdout;
+- integración con el CLI principal y el plan de orquestación por hashes.
+
+No están implementados DNS/CT, crawling, tráfico HTTP, OpenAPI YAML, análisis
+AST completo, HAR/logs reales ni validación automática de vulnerabilidades.
 
 ## Flujo propuesto
 
@@ -179,6 +194,6 @@ a superar “al mejor humano” ni a garantizar seguridad del sistema.
 - reproducibilidad: builds y tráfico volátiles;
 - coste: crawling y análisis IA innecesarios.
 
-No se crea el crate hasta aprobar el contrato de scope, fixtures y métricas. El
-primer código debe demostrar inventario offline y loopback; sólo después una
-ADR separada puede autorizar un adapter de red.
+El crate offline se creó después de fijar el scope, fixtures y métricas. Una ADR
+separada, pruebas loopback y revisión explícita siguen siendo requisitos antes
+de autorizar cualquier adapter de red.

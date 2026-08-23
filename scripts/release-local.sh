@@ -32,7 +32,8 @@ cargo build --release --locked -p secureflow
 
 mkdir -p "$release_stage/$release_name/bin" "$release_stage/$release_name/evidence"
 install -m 0755 target/release/secureflow "$release_stage/$release_name/bin/secureflow"
-cp -a README.md LICENSE-MIT LICENSE-APACHE THIRD_PARTY_NOTICES.md docs schemas "$release_stage/$release_name/"
+cp -a README.md CHANGELOG.md SECURITY.md CONTRIBUTING.md CITATION.cff LICENSE-MIT LICENSE-APACHE \
+  THIRD_PARTY_NOTICES.md docs schemas "$release_stage/$release_name/"
 python3 scripts/generate-sbom.py --output "$release_stage/$release_name/evidence/sbom.cdx.json"
 git archive --format=tar --prefix="$release_name/source/" HEAD > "$release_stage/source.tar"
 tar -xf "$release_stage/source.tar" -C "$release_stage"

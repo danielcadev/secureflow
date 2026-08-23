@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://secureflow.local/schemas/secureflow-web-development-corpus-v1.schema.json",
+  "title": "SecureFlow Web synthetic development corpus v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "corpus_id", "name", "split", "license", "cases"],
+  "properties": {
+    "contract_version": { "const": "secureflow-web-development-corpus-v1" },
+    "corpus_id": { "type": "string", "pattern": "^sf_web_corpus_[0-9a-f]{64}$" },
+    "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "split": { "const": "development" },
+    "license": { "$ref": "#/$defs/license" },
+    "cases": {
+      "type": "array",
+      "minItems": 20,
+      "maxItems": 40,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/case" }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "license": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["spdx", "provenance", "license_sha256"],
+      "properties": {
+        "spdx": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "provenance": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "license_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["case_id", "description", "expectation"],
+      "properties": {
+        "case_id": { "type": "string", "pattern": "^[A-Z0-9-]{8,80}$" },
+        "description": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "expectation": { "$ref": "#/$defs/expectation" }
+      }
+    },
+    "expectation": {
+      "oneOf": [
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["kind", "route_kind", "methods"],
+          "properties": {
+            "kind": { "const": "inventory-route-present" },
+            "route": { "type": "string", "pattern": "^/", "maxLength": 2000 },
+            "route_kind": { "$ref": "#/$defs/routeKind" },
+            "methods": { "$ref": "#/$defs/methods" }
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["kind", "candidate_kind", "disposition"],
+          "properties": {
+            "kind": { "const": "inference-candidate-present" },
+            "route": { "type": "string", "pattern": "^/", "maxLength": 2000 },
+            "operation": { "type": "string", "minLength": 1, "maxLength": 300 },
+            "candidate_kind": { "enum": ["http-endpoint", "graph-ql-operation", "trpc-procedure", "server-action", "unresolved-client-call"] },
+            "origin": { "enum": ["implemented-route", "client-call", "build-manifest", "open-api", "graph-ql-schema", "trpc-router"] },
+            "disposition": { "enum": ["correlated-local", "needs-human-review", "abstained"] }
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["kind", "route"],
+          "properties": {
+            "kind": { "const": "inference-route-absent" },
+            "route": { "type": "string", "pattern": "^/", "maxLength": 2000 }
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["kind", "invariant"],
+          "properties": {
+            "kind": { "const": "semantic-invariant" },
+            "invariant": { "enum": ["network-not-used", "target-code-not-executed", "no-automatic-vulnerability"] }
+          }
+        }
+      ]
+    },
+    "routeKind": { "enum": ["api-route", "page-route", "middleware", "server-action"] },
+    "methods": {
+      "type": "array", "maxItems": 7, "uniqueItems": true,
+      "items": { "enum": ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"] }
+    }
+  }
+}

@@ -4,7 +4,7 @@
 
 | Claim acotado | Evidencia reproducible | Límite que debe acompañarlo |
 | --- | --- | --- |
-| Prototipo local-first en Rust | workspace con ocho packages, toolchain 1.92 fijado y gates locales/CI | no release firmada ni publicación todavía |
+| Prototipo local-first en Rust | workspace con nueve packages, toolchain 1.92 fijado y gates locales/CI | no release firmada ni publicación todavía |
 | Integra un analizador por proceso externo | `scan`, SHA-256 de binario/target/reporte, límites y `secure-json-v1` | validado con fixtures locales; no demuestra cobertura general |
 | Aísla la ejecución Linux por defecto | grupo de procesos, rlimits y Bubblewrap con root host de sólo lectura y namespace de red privado | no equivale a una VM ni protege frente a un kernel comprometido; el modo deshabilitado exige una elección explícita |
 | Mantiene validación humana como autoridad | estados human review, manifests derivados, tests que IA no altera decisión | depende de identidad declarada por CLI; no hay firma humana aún |
@@ -21,6 +21,7 @@
 | Actualiza el catálogo sin inferir bajas | delta per-ecosystem encadenado, payloads exactos, replay/recovery y `withdrawn`; piloto solapado oficial de 7 RUSTSEC sobre la copia real | no hubo cambios posteriores al snapshot; el piloto prueba idempotencia, no siete advisories nuevos |
 | Correlaciona sin elevar señales | lookup exacto evalúa listas/rangos SEMVER y conserva unknown, hashes de run/catálogo y causalidad=false | el contexto de paquete es declarado por el operador y requiere revisión humana; affected no prueba exploitabilidad |
 | Sella un protocolo prospectivo | contrato con holdout, etiquetas ocultas, cohorte humana, dos adjudicadores, tiempo/coste, resultados negativos y preflight de hashes reales | el fixture es sintético; todavía no existe holdout/cohorte/ejecución ni base para comparar con humanos |
+| Inventaría APIs Next.js sin red | scope sellado, 6/6 rutas del fixture, 11 candidatos locales, JSON/SARIF y 24/24 aserciones | fixture sintético conocido, no holdout; no mide repositorios reales ni autoriza claims de superioridad |
 | Genera evidencia de release | CI por commits, SBOM CycloneDX determinista y bundle local hasheado desde un commit limpio | falta firma, tag, ejecución CI remota y verificación binaria entre hosts |
 
 ## Formulación sugerida para CV
@@ -86,6 +87,9 @@ Cada resultado publicable debería fijar antes de ejecutar:
 - El piloto real produjo 228.674 componentes canónicos por aliases exactos a
   partir de 229.644 registros aceptados. La diferencia es deduplicación de IDs,
   no confirmación de exploits ni una métrica de precisión.
+- La vertical Web pasó 24/24 aserciones de desarrollo y 6/6 rutas etiquetadas.
+  Esto prueba los contratos y el fixture conocido; `independent_holdout=false`
+  impide presentarlo como eficacia general o comparación humana.
 
 ## Bloqueos antes de publicación
 
