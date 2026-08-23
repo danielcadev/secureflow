@@ -30,7 +30,12 @@ jobs:
       - name: Build verified release bundle
         run: bash scripts/release-local.sh target/dist
 
-      - name: Publish immutable GitHub release assets
+      - name: Verify downloadable checksum
+        run: |
+          cd target/dist
+          sha256sum --check *.sha256
+
+      - name: Publish GitHub release assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-

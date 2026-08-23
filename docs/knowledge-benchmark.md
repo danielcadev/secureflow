@@ -15,7 +15,7 @@ vulnerability detection.
 
 Date: 2026-08-23.
 
-- Fedora Linux 7.1.8, x86_64;
+- Fedora Linux 44, kernel 7.1.8-200.fc44.x86_64;
 - Rust/Cargo 1.97.1, `release` profile;
 - AMD Ryzen 7 5700X, 8 cores/16 threads;
 - 15 GiB RAM;

@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Keep every compiler invocation and the recorded provenance on the repository's
+# release toolchain, even when the host has a different rustup default.
+export RUSTUP_TOOLCHAIN=1.92.0
+
 if [[ $# -ne 1 ]]; then
   echo "usage: $0 OUTPUT_DIRECTORY" >&2
   exit 2
@@ -17,6 +21,10 @@ if [[ -n "$(git status --porcelain=v1 --untracked-files=all)" ]]; then
 fi
 
 release_version=$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)
+if [[ "${GITHUB_REF_TYPE:-}" == "tag" && "${GITHUB_REF_NAME:-}" != "v${release_version}" ]]; then
+  echo "release tag ${GITHUB_REF_NAME:-<missing>} does not match package version v${release_version}" >&2
+  exit 1
+fi
 release_commit=$(git rev-parse --verify HEAD)
 release_epoch=$(git show -s --format=%ct HEAD)
 release_name="secureflow-${release_version}-${release_commit:0:12}"
@@ -65,6 +73,9 @@ PY
 mkdir "$release_output"
 tar --sort=name --mtime="@$release_epoch" --owner=0 --group=0 --numeric-owner \
   -C "$release_stage" -cf - "$release_name" | gzip -n > "$release_output/$release_name.tar.gz"
-sha256sum "$release_output/$release_name.tar.gz" > "$release_output/$release_name.tar.gz.sha256"
+(
+  cd "$release_output"
+  sha256sum "$release_name.tar.gz" > "$release_name.tar.gz.sha256"
+)
 printf 'release bundle: %s\n' "$release_output/$release_name.tar.gz"
 printf 'release checksum: %s\n' "$release_output/$release_name.tar.gz.sha256"
