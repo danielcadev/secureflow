@@ -1,0 +1,77 @@
+{
+  "schema_version": "secure-bench-result-v2",
+  "suite_id": "fixture-suite",
+  "run_id": "fixture-run",
+  "normalized_findings": [],
+  "matching": {
+    "expectations": [],
+    "findings": []
+  },
+  "score": {
+    "vulnerable_recall": { "numerator": 1, "denominator": 2, "basis_points": 5000 },
+    "attempted_vulnerable_recall": { "numerator": 1, "denominator": 2, "basis_points": 5000 },
+    "safe_control_false_positive_rate": { "numerator": 1, "denominator": 2, "basis_points": 5000 },
+    "safe_control_clean_coverage": { "numerator": 1, "denominator": 2, "basis_points": 5000 },
+    "evidence_path_accuracy": { "numerator": 1, "denominator": 1, "basis_points": 10000 },
+    "source_localization_accuracy": { "numerator": 1, "denominator": 1, "basis_points": 10000 },
+    "sink_localization_accuracy": { "numerator": 1, "denominator": 1, "basis_points": 10000 },
+    "severity_calibration_accuracy": { "numerator": 1, "denominator": 1, "basis_points": 10000 },
+    "confidence_calibration_accuracy": { "numerator": 1, "denominator": 1, "basis_points": 10000 },
+    "duplicate_rate": { "numerator": 0, "denominator": 1, "basis_points": 0 },
+    "counts": {
+      "vulnerable_cases": 2,
+      "safe_control_cases": 2,
+      "attempted_vulnerable_cases": 2,
+      "attempted_safe_control_cases": 2,
+      "eligible_expectations": 2,
+      "attempted_expectations": 2,
+      "detected_expectations": 1,
+      "missed_expectations": 1,
+      "false_positive_safe_controls": 1,
+      "clean_safe_controls": 1,
+      "normalized_findings": 1,
+      "duplicate_findings": 0,
+      "unmatched_findings": 0,
+      "ambiguous_expectations": 0
+    },
+    "failures": {
+      "crashes": 0,
+      "timeouts": 0,
+      "missing": 0,
+      "unsupported": 0,
+      "parse_failures": 0
+    },
+    "performance": {
+      "cold_duration": { "total": 20, "samples": 4 },
+      "warm_duration": { "total": 0, "samples": 0 },
+      "peak_memory": { "maximum": 4096, "samples": 4 },
+      "output_size": { "total": 1024, "samples": 4 }
+    }
+  },
+  "errors": [],
+  "provenance": {
+    "suite_fingerprint": "138e5a18eba70be40151870d077d13fa96fc97a542a1867efc34b7858437a2b4",
+    "run_manifest_fingerprint": "e46b04dfa4e13d10857a3247e012ddf48215de1611d51d9866d0bd8a22be9eab",
+    "report_fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "tool": {
+      "name": "Secure Engine",
+      "version": "fixture-0.0.0",
+      "command": ["scan", "{fixture}"],
+      "configuration_fingerprint": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "report_schema": "secure-json-v1",
+      "binary_fingerprint": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    },
+    "host": {
+      "os": "linux",
+      "architecture": "x86_64",
+      "logical_cpus": 1,
+      "memory_bytes": 1024
+    },
+    "schemas": {
+      "result": "secure-bench-result-v2",
+      "run": "secure-bench-live-run-v1",
+      "suite": "secure-bench-suite-v2",
+      "tool_report": "secure-json-v1"
+    }
+  }
+}

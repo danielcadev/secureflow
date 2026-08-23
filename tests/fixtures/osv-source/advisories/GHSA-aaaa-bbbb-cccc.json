@@ -1,0 +1,33 @@
+{
+  "schema_version": "1.7.0",
+  "id": "GHSA-aaaa-bbbb-cccc",
+  "modified": "2026-08-23T00:00:00Z",
+  "published": "2026-08-22T00:00:00Z",
+  "aliases": ["CVE-2026-0001"],
+  "summary": "Synthetic fixture command injection",
+  "details": "A synthetic local record used only to verify SecureFlow ingestion.",
+  "affected": [
+    {
+      "package": {
+        "ecosystem": "crates.io",
+        "name": "secureflow-fixture",
+        "purl": "pkg:cargo/secureflow-fixture"
+      },
+      "ranges": [
+        {
+          "type": "SEMVER",
+          "events": [
+            {"introduced": "0"},
+            {"fixed": "1.0.1"}
+          ]
+        }
+      ]
+    }
+  ],
+  "references": [
+    {
+      "type": "ADVISORY",
+      "url": "https://example.invalid/GHSA-aaaa-bbbb-cccc"
+    }
+  ]
+}

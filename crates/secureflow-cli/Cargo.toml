@@ -1,0 +1,26 @@
+[package]
+name = "secureflow"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "secureflow"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
+secureflow-engine-adapter = { path = "../secureflow-engine-adapter" }
+secureflow-bench-adapter = { path = "../secureflow-bench-adapter" }
+secureflow-ai = { path = "../secureflow-ai" }
+secureflow-knowledge = { path = "../secureflow-knowledge" }
+secureflow-model = { path = "../secureflow-model" }
+secureflow-secure-adapter = { path = "../secureflow-secure-adapter" }
+serde_json.workspace = true
+time.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+jsonschema.workspace = true

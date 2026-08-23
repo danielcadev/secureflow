@@ -1,0 +1,5 @@
+[workspace]
+
+[workspace.package]
+version = "0.0.0-fixture"
+license = "Apache-2.0"

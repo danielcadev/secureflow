@@ -1,0 +1,214 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://usesecure.dev/secureflow/schemas/secureflow-benchmark-result-v1.schema.json",
+  "title": "SecureFlow Benchmark Result v1",
+  "description": "Evaluation-only import of a fingerprint-verified Secure Bench result-v2. It cannot support rankings, superiority, or production-readiness claims.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "import_id",
+    "imported_at",
+    "study_kind",
+    "source",
+    "artifacts",
+    "claims",
+    "reproducibility",
+    "result"
+  ],
+  "properties": {
+    "contract_version": { "const": "secureflow-benchmark-result-v1" },
+    "import_id": { "type": "string", "pattern": "^sf_bench_[a-f0-9]{64}$" },
+    "imported_at": { "type": "string", "format": "date-time" },
+    "study_kind": {
+      "enum": ["local-development-diagnostic", "historical-public-diagnostic", "preregistered-one-shot", "post-open-recovery"]
+    },
+    "source": { "$ref": "#/$defs/source" },
+    "artifacts": { "$ref": "#/$defs/artifacts" },
+    "claims": { "$ref": "#/$defs/claims" },
+    "reproducibility": { "$ref": "#/$defs/reproducibility" },
+    "result": { "$ref": "#/$defs/result" }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "identifier": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$", "maxLength": 200 },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "revision", "result_contract", "result_schema_sha256", "license_spdx", "license_sha256"],
+      "properties": {
+        "name": { "const": "secure-bench" },
+        "version": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "revision": {
+          "type": "string",
+          "oneOf": [
+            { "pattern": "^[a-f0-9]{40}$" },
+            { "pattern": "^[a-f0-9]{64}$" }
+          ]
+        },
+        "result_contract": { "const": "secure-bench-result-v2" },
+        "result_schema_sha256": { "$ref": "#/$defs/sha256" },
+        "license_spdx": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "license_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["result_sha256", "result_bytes", "run_manifest_sha256", "run_manifest_bytes", "suite_sha256", "suite_bytes"],
+      "properties": {
+        "result_sha256": { "$ref": "#/$defs/sha256" },
+        "result_bytes": { "type": "integer", "minimum": 1, "maximum": 134217728 },
+        "run_manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "run_manifest_bytes": { "type": "integer", "minimum": 1, "maximum": 67108864 },
+        "suite_sha256": { "$ref": "#/$defs/sha256" },
+        "suite_bytes": { "type": "integer", "minimum": 1, "maximum": 67108864 }
+      }
+    },
+    "claims": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evaluation_only", "ranking_allowed", "superiority_claim_allowed", "production_readiness_claim_allowed"],
+      "properties": {
+        "evaluation_only": { "const": true },
+        "ranking_allowed": { "const": false },
+        "superiority_claim_allowed": { "const": false },
+        "production_readiness_claim_allowed": { "const": false }
+      }
+    },
+    "reproducibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["result_schema_validated", "suite_fingerprint_verified", "run_manifest_fingerprint_verified", "result_fingerprints_retained", "study_kind_operator_declared"],
+      "properties": {
+        "result_schema_validated": { "const": true },
+        "suite_fingerprint_verified": { "const": true },
+        "run_manifest_fingerprint_verified": { "const": true },
+        "result_fingerprints_retained": { "const": true },
+        "study_kind_operator_declared": { "const": true }
+      }
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["upstream_schema_version", "suite_id", "benchmark_run_id", "tool", "confusion", "metrics", "counts", "failures", "performance", "structured_error_count", "provenance"],
+      "properties": {
+        "upstream_schema_version": { "const": "secure-bench-result-v2" },
+        "suite_id": { "$ref": "#/$defs/identifier" },
+        "benchmark_run_id": { "$ref": "#/$defs/identifier" },
+        "tool": { "$ref": "#/$defs/tool" },
+        "confusion": { "$ref": "#/$defs/confusion" },
+        "metrics": { "$ref": "#/$defs/metrics" },
+        "counts": { "$ref": "#/$defs/integer_map" },
+        "failures": { "$ref": "#/$defs/integer_map" },
+        "performance": { "$ref": "#/$defs/performance" },
+        "structured_error_count": { "type": "integer", "minimum": 0 },
+        "provenance": { "$ref": "#/$defs/provenance" }
+      }
+    },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "report_schema", "binary_sha256", "configuration_sha256"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "version": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "report_schema": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "binary_sha256": { "$ref": "#/$defs/sha256" },
+        "configuration_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "confusion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["true_positive_expectations", "false_negative_expectations", "false_positive_safe_controls", "true_negative_safe_controls", "positive_unit", "negative_unit", "failures_are_not_clean"],
+      "properties": {
+        "true_positive_expectations": { "type": "integer", "minimum": 0 },
+        "false_negative_expectations": { "type": "integer", "minimum": 0 },
+        "false_positive_safe_controls": { "type": "integer", "minimum": 0 },
+        "true_negative_safe_controls": { "type": "integer", "minimum": 0 },
+        "positive_unit": { "const": "vulnerable-expectation" },
+        "negative_unit": { "const": "safe-control-case" },
+        "failures_are_not_clean": { "const": true }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["vulnerable_recall", "attempted_vulnerable_recall", "safe_control_false_positive_rate", "safe_control_clean_coverage", "evidence_path_accuracy", "source_localization_accuracy", "sink_localization_accuracy", "severity_calibration_accuracy", "confidence_calibration_accuracy", "duplicate_rate"],
+      "properties": {
+        "vulnerable_recall": { "$ref": "#/$defs/ratio" },
+        "attempted_vulnerable_recall": { "$ref": "#/$defs/ratio" },
+        "safe_control_false_positive_rate": { "$ref": "#/$defs/ratio" },
+        "safe_control_clean_coverage": { "$ref": "#/$defs/ratio" },
+        "evidence_path_accuracy": { "$ref": "#/$defs/ratio" },
+        "source_localization_accuracy": { "$ref": "#/$defs/ratio" },
+        "sink_localization_accuracy": { "$ref": "#/$defs/ratio" },
+        "severity_calibration_accuracy": { "$ref": "#/$defs/ratio" },
+        "confidence_calibration_accuracy": { "$ref": "#/$defs/ratio" },
+        "duplicate_rate": { "$ref": "#/$defs/ratio" }
+      }
+    },
+    "ratio": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["numerator", "denominator", "basis_points"],
+      "properties": {
+        "numerator": { "type": "integer", "minimum": 0 },
+        "denominator": { "type": "integer", "minimum": 0 },
+        "basis_points": { "type": ["integer", "null"], "minimum": 0, "maximum": 10000 }
+      }
+    },
+    "integer_map": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 10000,
+      "propertyNames": { "$ref": "#/$defs/identifier" },
+      "additionalProperties": { "type": ["integer", "null"], "minimum": 0 }
+    },
+    "performance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cold_duration_ms", "warm_duration_ms", "peak_memory_bytes", "output_bytes"],
+      "properties": {
+        "cold_duration_ms": { "$ref": "#/$defs/measurement_total" },
+        "warm_duration_ms": { "$ref": "#/$defs/measurement_total" },
+        "peak_memory_bytes": { "$ref": "#/$defs/measurement_maximum" },
+        "output_bytes": { "$ref": "#/$defs/measurement_total" }
+      }
+    },
+    "measurement_total": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total", "samples"],
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "samples": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "measurement_maximum": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maximum", "samples"],
+      "properties": {
+        "maximum": { "type": "integer", "minimum": 0 },
+        "samples": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["suite_fingerprint", "run_manifest_fingerprint", "report_fingerprint", "schemas"],
+      "properties": {
+        "suite_fingerprint": { "$ref": "#/$defs/sha256" },
+        "run_manifest_fingerprint": { "$ref": "#/$defs/sha256" },
+        "report_fingerprint": { "$ref": "#/$defs/sha256" },
+        "schemas": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "type": "string", "minLength": 1, "maxLength": 200 }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,15 @@
+[package]
+name = "secureflow-ai"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+secureflow-model = { path = "../secureflow-model" }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+time.workspace = true
+thiserror.workspace = true

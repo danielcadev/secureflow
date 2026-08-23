@@ -1,0 +1,30 @@
+{
+  "contract_version": "secureflow-run-v1",
+  "run_id": "sf_run_test_0000000000000000",
+  "status": "completed",
+  "created_at": "2026-08-23T03:00:00Z",
+  "completed_at": "2026-08-23T03:00:01Z",
+  "target": {
+    "label": "fixture",
+    "root_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "authorization": {
+      "status": "authorized",
+      "basis": "local-project",
+      "reviewer": "human"
+    }
+  },
+  "engine": {
+    "name": "secure-engine",
+    "version": "0.1.10-rc2",
+    "binary_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "report_schema": "secure-json-v1",
+    "report_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  "phases": {
+    "deterministic": "completed",
+    "prioritization": "completed",
+    "validation": "skipped",
+    "evaluation": "skipped"
+  },
+  "findings": []
+}

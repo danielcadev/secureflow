@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://usesecure.dev/secureflow/schemas/secureflow-ai-request-v1.schema.json",
+  "title": "SecureFlow Redacted AI Request v1",
+  "description": "A locally prepared, minimized and budgeted advisory request. This artifact does not prove transmission and cannot validate a finding.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "request_id",
+    "created_at",
+    "linked_run_id",
+    "target_sha256",
+    "finding_id",
+    "purpose",
+    "provider",
+    "model_family",
+    "prompt_version",
+    "budget",
+    "data_policy",
+    "escalation",
+    "authority",
+    "payload_sha256",
+    "payload_bytes",
+    "payload"
+  ],
+  "properties": {
+    "contract_version": { "const": "secureflow-ai-request-v1" },
+    "request_id": { "type": "string", "pattern": "^sf_ai_request_[a-f0-9]{64}$" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "linked_run_id": { "type": "string", "pattern": "^sf_run_[A-Za-z0-9_-]{16,100}$" },
+    "target_sha256": { "$ref": "#/$defs/sha256" },
+    "finding_id": { "type": "string", "pattern": "^sf_finding_[A-Za-z0-9_-]{16,100}$" },
+    "purpose": { "enum": ["ambiguity-analysis", "candidate-prioritization"] },
+    "provider": { "const": "openai" },
+    "model_family": { "const": "luna" },
+    "prompt_version": { "const": "secureflow-ai-triage-v1" },
+    "budget": { "$ref": "#/$defs/budget" },
+    "data_policy": { "$ref": "#/$defs/data_policy" },
+    "escalation": { "$ref": "#/$defs/escalation" },
+    "authority": { "$ref": "#/$defs/authority" },
+    "payload_sha256": { "$ref": "#/$defs/sha256" },
+    "payload_bytes": { "type": "integer", "minimum": 1, "maximum": 262144 },
+    "payload": { "$ref": "#/$defs/payload" }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "relative_path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000,
+      "pattern": "^(?:\\[REDACTED_POTENTIAL_SECRET\\]|(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+)$"
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_calls", "max_input_tokens", "max_output_tokens", "max_payload_bytes", "reserved_prompt_tokens", "payload_token_upper_bound", "token_bound_method"],
+      "properties": {
+        "max_calls": { "const": 1 },
+        "max_input_tokens": { "type": "integer", "minimum": 1000, "maximum": 200000 },
+        "max_output_tokens": { "type": "integer", "minimum": 1, "maximum": 20000 },
+        "max_payload_bytes": { "type": "integer", "minimum": 256, "maximum": 262144 },
+        "reserved_prompt_tokens": { "const": 700 },
+        "payload_token_upper_bound": { "type": "integer", "minimum": 1, "maximum": 262144 },
+        "token_bound_method": { "const": "utf8-bytes-conservative-upper-bound" }
+      }
+    },
+    "data_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["local_preparation_only", "source_code_included", "evidence_descriptions_included", "secret_redaction_enabled", "external_transmission_consented", "redaction_version", "redaction_events"],
+      "properties": {
+        "local_preparation_only": { "const": true },
+        "source_code_included": { "const": false },
+        "evidence_descriptions_included": { "const": false },
+        "secret_redaction_enabled": { "const": true },
+        "external_transmission_consented": { "const": true },
+        "redaction_version": { "const": "secureflow-redaction-v1" },
+        "redaction_events": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "escalation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy", "automatic", "max_escalations", "requires_human_approval"],
+      "properties": {
+        "policy": { "const": "only-if-ambiguous" },
+        "automatic": { "const": false },
+        "max_escalations": { "const": 1 },
+        "requires_human_approval": { "const": true }
+      }
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assessment_role", "validation_authority", "can_change_human_decision"],
+      "properties": {
+        "assessment_role": { "const": "advisory-only" },
+        "validation_authority": { "const": "human-only" },
+        "can_change_human_decision": { "const": false }
+      }
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "rule_id", "taxonomy", "severity", "confidence", "source", "sink", "invariant", "evidence_path", "limitations", "excluded_fields"],
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "rule_id": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "taxonomy": { "oneOf": [{ "$ref": "#/$defs/taxonomy" }, { "type": "null" }] },
+        "severity": { "enum": ["critical", "high", "medium", "low", "unknown", null] },
+        "confidence": { "enum": ["high", "medium", "low", "unknown"] },
+        "source": { "$ref": "#/$defs/location" },
+        "sink": { "$ref": "#/$defs/location" },
+        "invariant": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "evidence_path": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1000,
+          "items": { "$ref": "#/$defs/evidence_step" }
+        },
+        "limitations": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": { "type": "string", "minLength": 1, "maxLength": 500 }
+        },
+        "excluded_fields": {
+          "const": ["source-code", "evidence-descriptions", "human-review-metadata", "absolute-paths"]
+        }
+      }
+    },
+    "taxonomy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "category_id", "invariant_id"],
+      "properties": {
+        "version": { "type": "string", "minLength": 1, "maxLength": 50 },
+        "category_id": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "invariant_id": { "type": "string", "minLength": 1, "maxLength": 100 }
+      }
+    },
+    "location": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "line", "column"],
+      "properties": {
+        "path": { "$ref": "#/$defs/relative_path" },
+        "line": { "type": "integer", "minimum": 1 },
+        "column": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "evidence_step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "location"],
+      "properties": {
+        "kind": { "enum": ["source", "transform", "guard", "sanitizer", "authorization", "sink", "barrier", "unknown"] },
+        "location": { "$ref": "#/$defs/location" }
+      }
+    }
+  }
+}

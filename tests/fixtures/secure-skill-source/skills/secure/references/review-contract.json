@@ -1,0 +1,8 @@
+{
+  "$id": "urn:usesecure:review-contract:1.1",
+  "properties": {
+    "schema_version": {
+      "const": "1.1"
+    }
+  }
+}

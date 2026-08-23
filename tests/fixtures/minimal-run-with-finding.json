@@ -1,0 +1,91 @@
+{
+  "contract_version": "secureflow-run-v1",
+  "run_id": "sf_run_fixture_1234567890abcdef",
+  "status": "completed",
+  "created_at": "2026-08-23T12:00:00Z",
+  "completed_at": "2026-08-23T12:00:01Z",
+  "target": {
+    "label": "authorized-fixture",
+    "root_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "authorization": {
+      "status": "authorized",
+      "basis": "local-project",
+      "reviewer": "fixture-user"
+    }
+  },
+  "engine": {
+    "name": "secure-engine",
+    "version": "fixture",
+    "binary_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "report_schema": "secure-json-v1",
+    "report_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  "phases": {
+    "deterministic": "completed",
+    "prioritization": "completed",
+    "validation": "skipped",
+    "evaluation": "skipped"
+  },
+  "artifacts": [],
+  "findings": [
+    {
+      "finding_id": "sf_finding_fixture_1234567890abcdef",
+      "title": "Potential command injection",
+      "rule_id": "SE1001",
+      "severity": "high",
+      "confidence": "medium",
+      "source_location": {
+        "path": "src/handler.ts",
+        "start_line": 10,
+        "start_column": 2
+      },
+      "sink_location": {
+        "path": "src/handler.ts",
+        "start_line": 14,
+        "start_column": 4
+      },
+      "invariant": "Untrusted input must not reach command execution",
+      "evidence_path": [
+        {
+          "kind": "source",
+          "location": {
+            "path": "src/handler.ts",
+            "start_line": 10,
+            "start_column": 2
+          },
+          "description": "This evidence description must not enter the AI payload"
+        },
+        {
+          "kind": "sink",
+          "location": {
+            "path": "src/handler.ts",
+            "start_line": 14,
+            "start_column": 4
+          },
+          "description": "Command execution sink"
+        }
+      ],
+      "limitations": ["Runtime behavior was not exercised"],
+      "human_review": {
+        "decision": "pending"
+      },
+      "ai_validation": {
+        "status": "not_requested"
+      }
+    }
+  ],
+  "summary": {
+    "candidate_count": 1,
+    "duplicate_count": 0,
+    "validated_count": 0,
+    "rejected_count": 0,
+    "abstained_count": 0,
+    "ai_calls": 0,
+    "ai_input_tokens": 0,
+    "ai_output_tokens": 0
+  },
+  "evaluation": {
+    "harness": "local-fixture",
+    "status": "not_run"
+  }
+}

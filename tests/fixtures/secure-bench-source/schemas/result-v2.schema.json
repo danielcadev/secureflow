@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://usesecure.dev/secure-bench/schemas/result-v2.schema.json",
+  "type": "object",
+  "required": ["schema_version", "suite_id", "run_id", "score", "errors", "provenance"],
+  "properties": {
+    "schema_version": { "const": "secure-bench-result-v2" },
+    "suite_id": { "type": "string" },
+    "run_id": { "type": "string" },
+    "score": { "type": "object" },
+    "errors": { "type": "array" },
+    "provenance": { "type": "object" }
+  }
+}

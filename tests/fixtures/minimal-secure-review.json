@@ -1,0 +1,61 @@
+{
+  "schema_version": "1.1",
+  "mode": "review",
+  "authorization": "read-only",
+  "scope": {
+    "paths": ["src/auth.rs"],
+    "basis": "authorized local fixture review",
+    "exclusions": ["vendor"]
+  },
+  "findings": [
+    {
+      "id": "SEC-001",
+      "severity": "high",
+      "confidence": "medium",
+      "title": "Tenant guard is missing from the update path",
+      "location": {
+        "file": "src/auth.rs",
+        "line": 42,
+        "symbol": "update_record"
+      },
+      "evidence": "The fixture lookup uses the object ID without tenant scope.",
+      "invariant": "Trusted tenant scope must dominate every write.",
+      "source_to_sink": "request object ID -> unscoped lookup -> update",
+      "attacker_path": {
+        "actor": "authenticated tenant member",
+        "required_access": ["authenticated session"],
+        "controlled_input": "object ID",
+        "victim_action": "none",
+        "steps": ["submit an object ID from another tenant"],
+        "achieved_result": "cross-tenant modification",
+        "limitations": ["requires knowledge of a valid object ID"]
+      },
+      "impact": "A tenant member can modify another tenant's record in the fixture.",
+      "prerequisites": ["known object ID"],
+      "recommendation": "Scope the lookup and update by the trusted tenant.",
+      "verification_status": "unverified",
+      "residual_risk": "Equivalent background paths were not reviewed."
+    }
+  ],
+  "non_findings": [
+    {
+      "classification": "hardening",
+      "title": "Add an explicit invariant test",
+      "evidence": "No regression test was present in this synthetic fixture.",
+      "missing_gate": "No separate exploitable path was established.",
+      "next_step": "Add a cross-tenant negative test."
+    }
+  ],
+  "verification": [
+    {
+      "check": "source inspection",
+      "status": "passed",
+      "summary": "The synthetic path was inspected."
+    }
+  ],
+  "coverage": {
+    "reviewed": ["fixture authentication write path"],
+    "not_reviewed": ["background jobs"]
+  },
+  "residual_risk": ["Runtime behavior was not exercised."]
+}

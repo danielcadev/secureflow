@@ -1,0 +1,18 @@
+# Rust/build output
+/target/
+
+# Local SecureFlow state and reports
+/.secureflow/
+/runs/
+/reports/
+/knowledge-base/
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+
+# Editor and OS files
+.DS_Store
+.idea/
+.vscode/

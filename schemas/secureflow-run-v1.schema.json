@@ -1,0 +1,370 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://usesecure.dev/secureflow/schemas/secureflow-run-v1.schema.json",
+  "title": "SecureFlow Run v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "run_id",
+    "status",
+    "created_at",
+    "target",
+    "engine",
+    "phases",
+    "findings"
+  ],
+  "properties": {
+    "contract_version": { "const": "secureflow-run-v1" },
+    "run_id": {
+      "type": "string",
+      "pattern": "^sf_run_[A-Za-z0-9_-]{16,80}$"
+    },
+    "status": {
+      "enum": ["created", "running", "completed", "partial", "failed", "cancelled"]
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "completed_at": { "type": "string", "format": "date-time" },
+    "target": { "$ref": "#/$defs/target" },
+    "engine": { "$ref": "#/$defs/engine" },
+    "configuration_sha256": { "$ref": "#/$defs/sha256" },
+    "phases": { "$ref": "#/$defs/phases" },
+    "artifacts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/artifact" },
+      "default": []
+    },
+    "findings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/finding" },
+      "default": []
+    },
+    "summary": { "$ref": "#/$defs/summary" },
+    "evaluation": { "$ref": "#/$defs/evaluation" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": { "enum": ["completed", "partial", "failed", "cancelled"] }
+        }
+      },
+      "then": { "required": ["completed_at"] }
+    },
+    {
+      "if": {
+        "properties": { "status": { "enum": ["created", "running"] } }
+      },
+      "then": { "not": { "required": ["completed_at"] } }
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "relative_path": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "root_sha256", "authorization"],
+      "properties": {
+        "label": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "root_sha256": { "$ref": "#/$defs/sha256" },
+        "revision": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "value"],
+          "properties": {
+            "kind": { "enum": ["git", "snapshot", "working-tree", "unknown"] },
+            "value": { "type": "string", "minLength": 1, "maxLength": 200 }
+          },
+          "allOf": [
+            {
+              "if": { "properties": { "kind": { "const": "git" } }, "required": ["kind"] },
+              "then": { "properties": { "value": { "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$" } } }
+            }
+          ]
+        },
+        "authorization": { "$ref": "#/$defs/authorization" }
+      }
+    },
+    "authorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "basis", "reviewer"],
+      "properties": {
+        "status": { "const": "authorized" },
+        "basis": {
+          "enum": [
+            "repository-owner",
+            "written-consent",
+            "organization-policy",
+            "local-project",
+            "other-documented"
+          ]
+        },
+        "reviewer": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "reference": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "expires_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "engine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "binary_sha256", "report_schema", "report_sha256"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "version": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "binary_sha256": { "$ref": "#/$defs/sha256" },
+        "report_schema": { "const": "secure-json-v1" },
+        "report_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "phase_status": {
+      "enum": ["pending", "running", "completed", "partial", "failed", "skipped"]
+    },
+    "phases": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["deterministic", "prioritization", "validation", "evaluation"],
+      "properties": {
+        "deterministic": { "$ref": "#/$defs/phase_status" },
+        "prioritization": { "$ref": "#/$defs/phase_status" },
+        "validation": { "$ref": "#/$defs/phase_status" },
+        "evaluation": { "$ref": "#/$defs/phase_status" }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "relative_path", "sha256", "bytes"],
+      "properties": {
+        "kind": { "enum": ["raw-report", "adapted-report", "redacted-payload", "log", "other"] },
+        "relative_path": { "$ref": "#/$defs/relative_path" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "bytes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "location": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "start_line", "start_column"],
+      "properties": {
+        "path": { "$ref": "#/$defs/relative_path" },
+        "start_line": { "type": "integer", "minimum": 1 },
+        "start_column": { "type": "integer", "minimum": 1 },
+        "end_line": { "type": "integer", "minimum": 1 },
+        "end_column": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "evidence_step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "location", "description"],
+      "properties": {
+        "kind": {
+          "enum": ["source", "transform", "guard", "sanitizer", "authorization", "sink", "barrier", "unknown"]
+        },
+        "location": { "$ref": "#/$defs/location" },
+        "description": { "type": "string", "minLength": 1, "maxLength": 1000 }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "finding_id",
+        "title",
+        "rule_id",
+        "confidence",
+        "source_location",
+        "sink_location",
+        "invariant",
+        "evidence_path",
+        "human_review",
+        "ai_validation"
+      ],
+      "properties": {
+        "finding_id": {
+          "type": "string",
+          "pattern": "^sf_finding_[A-Za-z0-9_-]{16,100}$"
+        },
+        "engine_fingerprint": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "rule_id": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "taxonomy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["version", "category_id", "invariant_id"],
+          "properties": {
+            "version": { "type": "string", "minLength": 1, "maxLength": 50 },
+            "category_id": { "type": "string", "minLength": 1, "maxLength": 100 },
+            "invariant_id": { "type": "string", "minLength": 1, "maxLength": 100 }
+          }
+        },
+        "severity": { "enum": ["critical", "high", "medium", "low", "unknown"] },
+        "confidence": { "enum": ["high", "medium", "low", "unknown"] },
+        "source_location": { "$ref": "#/$defs/location" },
+        "sink_location": { "$ref": "#/$defs/location" },
+        "invariant": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "evidence_path": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/evidence_step" }
+        },
+        "limitations": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 500 },
+          "default": []
+        },
+        "human_review": { "$ref": "#/$defs/human_review" },
+        "ai_validation": { "$ref": "#/$defs/ai_validation" }
+      }
+    },
+    "human_review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision"],
+      "properties": {
+        "decision": { "enum": ["pending", "validated", "rejected", "abstained"] },
+        "reviewer": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "reviewed_at": { "type": "string", "format": "date-time" },
+        "rationale": { "type": "string", "minLength": 1, "maxLength": 3000 },
+        "evidence_reference": { "type": "string", "minLength": 1, "maxLength": 300 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "decision": { "const": "pending" } } },
+          "then": {
+            "not": {
+              "anyOf": [
+                { "required": ["reviewer"] },
+                { "required": ["reviewed_at"] },
+                { "required": ["rationale"] },
+                { "required": ["evidence_reference"] }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "decision": { "enum": ["validated", "rejected", "abstained"] }
+            }
+          },
+          "then": { "required": ["reviewer", "reviewed_at", "rationale"] }
+        }
+      ]
+    },
+    "ai_validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": { "enum": ["not_requested", "queued", "completed", "failed", "skipped"] },
+        "request_id": { "type": "string", "pattern": "^sf_ai_request_[A-Za-z0-9_-]{64}$" },
+        "provider": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "model": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "prompt_version": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "redacted_payload_sha256": { "$ref": "#/$defs/sha256" },
+        "response_sha256": { "$ref": "#/$defs/sha256" },
+        "input_tokens": { "type": "integer", "minimum": 0, "maximum": 10000000 },
+        "output_tokens": { "type": "integer", "minimum": 0, "maximum": 10000000 },
+        "assessment": { "enum": ["supports", "insufficient", "contradicts", "uncertain"] }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "enum": ["not_requested", "skipped"] } }, "required": ["status"] },
+          "then": {
+            "not": {
+              "anyOf": [
+                { "required": ["request_id"] },
+                { "required": ["provider"] },
+                { "required": ["model"] },
+                { "required": ["prompt_version"] },
+                { "required": ["redacted_payload_sha256"] },
+                { "required": ["response_sha256"] },
+                { "required": ["input_tokens"] },
+                { "required": ["output_tokens"] },
+                { "required": ["assessment"] }
+              ]
+            }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "queued" } }, "required": ["status"] },
+          "then": {
+            "required": ["request_id", "provider", "model", "prompt_version", "redacted_payload_sha256"],
+            "not": {
+              "anyOf": [
+                { "required": ["response_sha256"] },
+                { "required": ["input_tokens"] },
+                { "required": ["output_tokens"] },
+                { "required": ["assessment"] }
+              ]
+            }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "completed" } }, "required": ["status"] },
+          "then": {
+            "required": ["request_id", "provider", "model", "prompt_version", "redacted_payload_sha256", "response_sha256", "input_tokens", "output_tokens", "assessment"]
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "failed" } }, "required": ["status"] },
+          "then": {
+            "required": ["request_id", "provider", "model", "prompt_version", "redacted_payload_sha256"],
+            "not": { "required": ["assessment"] }
+          }
+        }
+      ]
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_count",
+        "duplicate_count",
+        "validated_count",
+        "rejected_count",
+        "abstained_count",
+        "ai_calls",
+        "ai_input_tokens",
+        "ai_output_tokens"
+      ],
+      "properties": {
+        "candidate_count": { "type": "integer", "minimum": 0 },
+        "duplicate_count": { "type": "integer", "minimum": 0 },
+        "validated_count": { "type": "integer", "minimum": 0 },
+        "rejected_count": { "type": "integer", "minimum": 0 },
+        "abstained_count": { "type": "integer", "minimum": 0 },
+        "ai_calls": { "type": "integer", "minimum": 0 },
+        "ai_input_tokens": { "type": "integer", "minimum": 0 },
+        "ai_output_tokens": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "evaluation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["harness", "status"],
+      "properties": {
+        "harness": { "enum": ["secure-bench", "local-fixture", "other"] },
+        "harness_version": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "result_sha256": { "$ref": "#/$defs/sha256" },
+        "status": { "enum": ["not_run", "completed", "partial", "failed"] }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "completed" } } },
+          "then": { "required": ["manifest_sha256", "result_sha256"] }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://usesecure.dev/secureflow/schemas/secureflow-ai-response-v1.schema.json",
+  "title": "SecureFlow Advisory AI Response v1",
+  "description": "A minimal response accounting record. Its assessment is advisory and cannot change the human decision.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "request_id",
+    "responded_at",
+    "provider",
+    "model_family",
+    "prompt_version",
+    "request_payload_sha256",
+    "assessment",
+    "analysis_summary",
+    "input_tokens",
+    "output_tokens",
+    "limitations",
+    "validation_authority"
+  ],
+  "properties": {
+    "contract_version": { "const": "secureflow-ai-response-v1" },
+    "request_id": { "type": "string", "pattern": "^sf_ai_request_[a-f0-9]{64}$" },
+    "responded_at": { "type": "string", "format": "date-time" },
+    "provider": { "const": "openai" },
+    "model_family": { "const": "luna" },
+    "prompt_version": { "const": "secureflow-ai-triage-v1" },
+    "request_payload_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "assessment": { "enum": ["supports", "insufficient", "contradicts", "uncertain"] },
+    "analysis_summary": { "type": "string", "minLength": 1, "maxLength": 8000 },
+    "input_tokens": { "type": "integer", "minimum": 0, "maximum": 10000000 },
+    "output_tokens": { "type": "integer", "minimum": 0, "maximum": 10000000 },
+    "limitations": {
+      "type": "array",
+      "maxItems": 100,
+      "items": { "enum": ["evidence-insufficient", "requires-runtime-validation", "requires-human-context", "possible-false-positive"] }
+    },
+    "validation_authority": { "const": "human-only" }
+  }
+}

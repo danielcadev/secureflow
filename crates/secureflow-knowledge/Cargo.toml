@@ -1,0 +1,16 @@
+[package]
+name = "secureflow-knowledge"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+rusqlite.workspace = true
+secureflow-model = { path = "../secureflow-model" }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+time.workspace = true
+thiserror.workspace = true

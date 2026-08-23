@@ -1,0 +1,16 @@
+[package]
+name = "secureflow-engine-adapter"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+secureflow-model = { path = "../secureflow-model" }
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2.177"
