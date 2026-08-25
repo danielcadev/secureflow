@@ -1395,7 +1395,7 @@ fn scan_records_explicit_authorization_and_target_revision() {
         .expect("temporary target should be writable");
     std::fs::write(
         &engine,
-        "#!/bin/sh\nprintf '%s\\n' '{\"schema_version\":\"secure-json-v1\",\"engine_version\":\"test\",\"findings\":[]}'\n",
+        "#!/bin/sh\nprintf '%s\\n' '{\"schema_version\":\"secure-json-v1\",\"engine_version\":\"test\",\"document_type\":\"scan-report\",\"findings\":[],\"graph\":{\"scope\":\"finding-evidence\",\"nodes\":[],\"edges\":[],\"total_nodes\":47293,\"total_edges\":83344},\"report_fingerprint\":\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\",\"authorization\":{\"reviewer\":\"engine-must-not-own-scope\"},\"scope\":\"/home/operator/private-target\"}'\n",
     )
     .expect("temporary engine should be writable");
     let mut permissions = std::fs::metadata(&engine)
@@ -1442,6 +1442,17 @@ fn scan_records_explicit_authorization_and_target_revision() {
     );
     assert_eq!(value["target"]["revision"]["kind"], "git");
     assert_eq!(value["target"]["revision"]["value"], revision);
+    assert_eq!(value["engine"]["version"], "test");
+    assert_eq!(
+        value["engine"]["report_fingerprint"],
+        "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    );
+    assert_eq!(value["engine"]["graph"]["scope"], "finding-evidence");
+    assert_eq!(value["engine"]["graph"]["nodes"], 0);
+    assert_eq!(value["engine"]["graph"]["total_nodes"], 47293);
+    let serialized = serde_json::to_string(&value).expect("manifest should serialize");
+    assert!(!serialized.contains("engine-must-not-own-scope"));
+    assert!(!serialized.contains("/home/operator/private-target"));
     assert_ne!(value["created_at"], value["completed_at"]);
     validate_with_schema("secureflow-run-v1.schema.json", &value);
 

@@ -126,8 +126,22 @@
         "binary_sha256": { "$ref": "#/$defs/sha256" },
         "report_schema": { "const": "secure-json-v1" },
         "report_sha256": { "$ref": "#/$defs/sha256" },
+        "report_fingerprint": { "$ref": "#/$defs/sha256" },
+        "graph": { "$ref": "#/$defs/engine_graph" },
         "sandbox_name": { "type": "string", "minLength": 1, "maxLength": 100 },
         "sandbox_binary_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "engine_graph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope", "nodes", "edges", "total_nodes", "total_edges"],
+      "properties": {
+        "scope": { "enum": ["full", "finding-evidence"] },
+        "nodes": { "type": "integer", "minimum": 0 },
+        "edges": { "type": "integer", "minimum": 0 },
+        "total_nodes": { "type": "integer", "minimum": 0 },
+        "total_edges": { "type": "integer", "minimum": 0 }
       }
     },
     "phase_status": {
@@ -158,9 +172,15 @@
     "location": {
       "type": "object",
       "additionalProperties": false,
+      "dependentRequired": {
+        "start_byte": ["end_byte"],
+        "end_byte": ["start_byte"]
+      },
       "required": ["path", "start_line", "start_column"],
       "properties": {
         "path": { "$ref": "#/$defs/relative_path" },
+        "start_byte": { "type": "integer", "minimum": 0 },
+        "end_byte": { "type": "integer", "minimum": 0 },
         "start_line": { "type": "integer", "minimum": 1 },
         "start_column": { "type": "integer", "minimum": 1 },
         "end_line": { "type": "integer", "minimum": 1 },
@@ -173,7 +193,7 @@
       "required": ["kind", "location", "description"],
       "properties": {
         "kind": {
-          "enum": ["source", "transform", "guard", "sanitizer", "authorization", "sink", "barrier", "unknown"]
+          "enum": ["source", "receiver", "transform", "guard", "sanitizer", "authorization", "sink", "barrier", "unknown"]
         },
         "location": { "$ref": "#/$defs/location" },
         "description": { "type": "string", "minLength": 1, "maxLength": 1000 }
@@ -200,6 +220,19 @@
           "pattern": "^sf_finding_[A-Za-z0-9_-]{16,100}$"
         },
         "engine_fingerprint": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "engine_finding_id": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "engine_verification_state": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "engine_evidence_state": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["taxonomy_version", "state"],
+          "properties": {
+            "taxonomy_version": { "const": "secure-evidence-state-v1" },
+            "state": {
+              "enum": ["syntactic-lead", "semantic-path", "guard-aware-lead", "manually-validated"]
+            }
+          }
+        },
         "title": { "type": "string", "minLength": 1, "maxLength": 300 },
         "rule_id": { "type": "string", "minLength": 1, "maxLength": 100 },
         "taxonomy": {

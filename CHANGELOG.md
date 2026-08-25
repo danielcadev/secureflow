@@ -4,6 +4,11 @@ All notable changes to SecureFlow are documented here.
 
 ## Unreleased
 
+- preserve Secure Engine report fingerprints, compact/full graph accounting,
+  finding/evidence states, locations, and limitations through a strict local
+  `secure-json-v1` adapter boundary;
+- keep compact Engine reports as the default and require an explicit
+  `--full-engine-graph` choice for complete graph retention;
 - add standalone `core`, `malicious` and `full` catalog distribution profiles;
 - add bounded single-frame Zstandard bundles with strict, hash-bound manifests;
 - add database-derived profile composition, fresh canonicalization for

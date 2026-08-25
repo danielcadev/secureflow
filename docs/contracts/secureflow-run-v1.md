@@ -26,6 +26,8 @@ The normative schema is
 7. `rejected` and `abstained` are valid outcomes, not errors.
 8. Every material claim points to a location, artifact, or hash.
 9. Exported paths are relative, POSIX, and contain no `..`.
+   When Engine byte offsets are available, locations preserve them together
+   with line/column spans.
 10. A scanner failure, timeout, or invalid report never becomes "clean."
 11. Secure Bench evaluation remains separate from production decisions and
     cannot inject expectations into analysis.
@@ -68,6 +70,12 @@ Its state is auxiliary and never replaces human review.
 - `target.revision` identifies the commit or snapshot when available.
 - `engine.binary_sha256` identifies the exact binary.
 - `engine.report_sha256` identifies the received report.
+- `engine.report_fingerprint` preserves the Engine's deterministic semantic
+  report identity separately from the byte hash, which includes retained raw
+  serialization details.
+- `engine.graph` records whether the raw report retained a `full` or
+  `finding-evidence` graph, its serialized node/edge counts, and the complete
+  internal totals reported by the Engine.
 - `configuration_sha256` identifies the effective configuration.
 - In the current adapter, that hash binds arguments, timeout, output limit,
   memory, CPU, and descriptor limits. It does not prove filesystem isolation.
@@ -94,6 +102,12 @@ supports review; it is neither a risk score nor a human decision. Exact
 duplicates within a run are removed after ordering, and
 `summary.duplicate_count` records how many were dropped. No equivalence across
 different engines is asserted.
+
+Engine finding identifiers, `verification_state`, and the versioned
+`secure-evidence-state-v1` value are retained under `engine_*` fields. They are
+scanner evidence states only. Even `manually-validated`, if received from an
+external report, does not change `human_review.decision`, which begins as
+`pending` and remains SecureFlow-owned.
 
 ## Privacy policy
 
@@ -143,7 +157,15 @@ reader maintains strict v1 compatibility without silent migration.
     "version": "0.1.10-rc2",
     "binary_sha256": "<sha256>",
     "report_schema": "secure-json-v1",
-    "report_sha256": "<sha256>"
+    "report_sha256": "<sha256>",
+    "report_fingerprint": "<sha256>",
+    "graph": {
+      "scope": "finding-evidence",
+      "nodes": 2,
+      "edges": 1,
+      "total_nodes": 47293,
+      "total_edges": 83344
+    }
   },
   "phases": {
     "deterministic": "completed",

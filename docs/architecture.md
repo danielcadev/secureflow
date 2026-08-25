@@ -23,6 +23,7 @@ secureflow-orchestrator
 secureflow-engine-adapter
     ├── Secure Engine as an external process
     ├── secure-json-v1
+    ├── boundary projection for report fingerprint, graph accounting, and evidence state
     ├── timeout, process group, and bounded output
     ├── Linux memory/CPU/descriptor/core resource limits
     ├── Bubblewrap required by default: read-only root and private network
@@ -116,6 +117,10 @@ test justify each one.
 ## Integration boundaries
 
 - Secure Engine remains the owner of `secure-json-v1`.
+- SecureFlow preserves selected Engine provenance and evidence metadata but
+  does not reinterpret an Engine evidence state as human validation.
+- SecureFlow alone owns the authorization scope and human-review decision in
+  `secureflow-run-v1`; similarly named Engine report fields cannot override it.
 - Secure Skill remains installable and usable without SecureFlow.
 - Secure Skill output remains a separate contextual envelope; upstream
   `verified` is not SecureFlow human validation.

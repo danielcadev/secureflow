@@ -6,6 +6,7 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 pub const CONTRACT_VERSION: &str = "secureflow-run-v1";
 pub const ENGINE_REPORT_SCHEMA: &str = "secure-json-v1";
+pub const ENGINE_EVIDENCE_STATE_TAXONOMY: &str = "secure-evidence-state-v1";
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -143,8 +144,10 @@ pub fn deduplicate_findings(findings: &mut Vec<Finding>) -> usize {
 
 fn location_key(location: &Location) -> String {
     format!(
-        "{}:{}:{}:{}:{}",
+        "{}:{}:{}:{}:{}:{}:{}",
         location.path,
+        location.start_byte.unwrap_or_default(),
+        location.end_byte.unwrap_or_default(),
         location.start_line,
         location.start_column,
         location.end_line.unwrap_or_default(),
@@ -296,6 +299,10 @@ pub struct EngineProvenance {
     pub report_schema: String,
     pub report_sha256: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub report_fingerprint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub graph: Option<EngineGraphSummary>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub sandbox_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sandbox_binary_sha256: Option<String>,
@@ -312,6 +319,12 @@ impl EngineProvenance {
         }
         validate_sha256(&self.binary_sha256, "engine.binary_sha256")?;
         validate_sha256(&self.report_sha256, "engine.report_sha256")?;
+        if let Some(value) = &self.report_fingerprint {
+            validate_sha256(value, "engine.report_fingerprint")?;
+        }
+        if let Some(graph) = &self.graph {
+            graph.validate()?;
+        }
         validate_optional_string(self.sandbox_name.as_deref(), "engine.sandbox_name", 100)?;
         if let Some(value) = &self.sandbox_binary_sha256 {
             validate_sha256(value, "engine.sandbox_binary_sha256")?;
@@ -323,6 +336,41 @@ impl EngineProvenance {
         }
         Ok(())
     }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct EngineGraphSummary {
+    pub scope: EngineGraphScope,
+    pub nodes: u64,
+    pub edges: u64,
+    pub total_nodes: u64,
+    pub total_edges: u64,
+}
+
+impl EngineGraphSummary {
+    fn validate(&self) -> Result<(), ModelError> {
+        if self.total_nodes < self.nodes || self.total_edges < self.edges {
+            return Err(ModelError::InconsistentState(
+                "engine graph totals cannot be smaller than serialized counts",
+            ));
+        }
+        if self.scope == EngineGraphScope::Full
+            && (self.total_nodes != self.nodes || self.total_edges != self.edges)
+        {
+            return Err(ModelError::InconsistentState(
+                "a full engine graph must serialize all reported nodes and edges",
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum EngineGraphScope {
+    Full,
+    FindingEvidence,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -401,6 +449,12 @@ pub struct Finding {
     pub finding_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub engine_fingerprint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub engine_finding_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub engine_verification_state: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub engine_evidence_state: Option<EngineEvidenceState>,
     pub title: String,
     pub rule_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -428,6 +482,24 @@ impl Finding {
             "finding.engine_fingerprint",
             200,
         )?;
+        validate_optional_string(
+            self.engine_finding_id.as_deref(),
+            "finding.engine_finding_id",
+            100,
+        )?;
+        validate_optional_string(
+            self.engine_verification_state.as_deref(),
+            "finding.engine_verification_state",
+            100,
+        )?;
+        if let Some(state) = &self.engine_evidence_state {
+            state.validate()?;
+            if self.engine_verification_state.as_deref() != Some(state.state.as_str()) {
+                return Err(ModelError::InconsistentState(
+                    "engine verification and evidence states must agree",
+                ));
+            }
+        }
         validate_bounded_string(&self.title, "finding.title", 300)?;
         validate_bounded_string(&self.rule_id, "finding.rule_id", 100)?;
         validate_bounded_string(&self.invariant, "finding.invariant", 1000)?;
@@ -449,6 +521,44 @@ impl Finding {
         self.human_review.validate()?;
         self.ai_validation.validate()?;
         Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct EngineEvidenceState {
+    pub taxonomy_version: String,
+    pub state: EngineEvidenceStateKind,
+}
+
+impl EngineEvidenceState {
+    fn validate(&self) -> Result<(), ModelError> {
+        if self.taxonomy_version != ENGINE_EVIDENCE_STATE_TAXONOMY {
+            return Err(ModelError::InconsistentState(
+                "unsupported engine evidence-state taxonomy",
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum EngineEvidenceStateKind {
+    SyntacticLead,
+    SemanticPath,
+    GuardAwareLead,
+    ManuallyValidated,
+}
+
+impl EngineEvidenceStateKind {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::SyntacticLead => "syntactic-lead",
+            Self::SemanticPath => "semantic-path",
+            Self::GuardAwareLead => "guard-aware-lead",
+            Self::ManuallyValidated => "manually-validated",
+        }
     }
 }
 
@@ -491,6 +601,10 @@ pub enum Confidence {
 #[serde(deny_unknown_fields)]
 pub struct Location {
     pub path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_byte: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub end_byte: Option<u64>,
     pub start_line: u32,
     pub start_column: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -502,6 +616,16 @@ pub struct Location {
 impl Location {
     fn validate(&self) -> Result<(), ModelError> {
         validate_relative_path(&self.path, "location.path")?;
+        if self.start_byte.is_some() != self.end_byte.is_some() {
+            return Err(ModelError::InvalidLocation);
+        }
+        if self
+            .start_byte
+            .zip(self.end_byte)
+            .is_some_and(|(start, end)| end < start)
+        {
+            return Err(ModelError::InvalidLocation);
+        }
         if self.start_line == 0 || self.start_column == 0 {
             return Err(ModelError::InvalidLocation);
         }
@@ -533,6 +657,7 @@ pub struct EvidenceStep {
 #[serde(rename_all = "lowercase")]
 pub enum EvidenceKind {
     Source,
+    Receiver,
     Transform,
     Guard,
     Sanitizer,
@@ -1022,6 +1147,8 @@ mod tests {
     fn finding(id: &str, severity: Severity, confidence: Confidence) -> Finding {
         let location = Location {
             path: "src/app.ts".into(),
+            start_byte: None,
+            end_byte: None,
             start_line: 1,
             start_column: 1,
             end_line: Some(1),
@@ -1030,6 +1157,9 @@ mod tests {
         Finding {
             finding_id: format!("sf_finding_{id}"),
             engine_fingerprint: None,
+            engine_finding_id: None,
+            engine_verification_state: None,
+            engine_evidence_state: None,
             title: "candidate".into(),
             rule_id: "SE1001".into(),
             taxonomy: None,
@@ -1091,6 +1221,8 @@ mod tests {
                 binary_sha256: "b".repeat(64),
                 report_schema: ENGINE_REPORT_SCHEMA.into(),
                 report_sha256: "c".repeat(64),
+                report_fingerprint: None,
+                graph: None,
                 sandbox_name: None,
                 sandbox_binary_sha256: None,
             },
@@ -1111,6 +1243,24 @@ mod tests {
     #[test]
     fn validates_minimal_authorized_manifest() {
         assert!(manifest().validate().is_ok());
+    }
+
+    #[test]
+    fn engine_manual_state_does_not_change_secureflow_human_authority() {
+        let mut candidate = finding("manual_state_0000", Severity::Low, Confidence::Medium);
+        candidate.engine_verification_state = Some("manually-validated".into());
+        candidate.engine_evidence_state = Some(EngineEvidenceState {
+            taxonomy_version: ENGINE_EVIDENCE_STATE_TAXONOMY.into(),
+            state: EngineEvidenceStateKind::ManuallyValidated,
+        });
+        let mut run = manifest();
+        run.findings.push(candidate);
+
+        assert!(run.validate().is_ok());
+        assert_eq!(
+            run.findings[0].human_review.decision,
+            HumanDecision::Pending
+        );
     }
 
     #[test]

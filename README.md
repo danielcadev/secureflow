@@ -130,7 +130,11 @@ outperforms a human researcher.
 
 The current CLI runs an explicitly selected Secure Engine binary, retains its
 `secure-json-v1` output without reserializing it, and generates a
-`secureflow-run-v1` manifest. Authorization acknowledgement is mandatory:
+`secureflow-run-v1` manifest. The manifest preserves the Engine version, report
+fingerprint, compact/full graph accounting, finding and evidence states,
+source/sink locations, and limitations. SecureFlow—not the Engine report—owns
+the authorization scope and human decision. Authorization acknowledgement is
+mandatory:
 
 ```bash
 cargo run -p secureflow -- scan \
@@ -142,6 +146,25 @@ cargo run -p secureflow -- scan \
   --manifest-output /tmp/secureflow-run.json \
   /path/to/target
 ```
+
+Compact Engine evidence is the default. A complete Engine graph is retained
+only after the explicit `--full-engine-graph` option; that mode raises the
+bounded output allowance to 256 MiB and can materially increase storage:
+
+```bash
+cargo run -p secureflow -- scan \
+  --binary /path/to/secure \
+  --authorized \
+  --authorization-reviewer "Daniel" \
+  --full-engine-graph \
+  --output /tmp/secureflow-full-report.json \
+  --manifest-output /tmp/secureflow-full-run.json \
+  /path/to/target
+```
+
+See [`docs/secure-engine-adapter.md`](./docs/secure-engine-adapter.md) for the
+exact contract boundary, compatibility policy, failure semantics, and retained
+evidence.
 
 On Linux, the CLI requires Bubblewrap by default, with a private network and a
 read-only host filesystem. The run retains the hash of `/usr/bin/bwrap`. Only
