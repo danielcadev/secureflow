@@ -9,6 +9,8 @@ mod corpus;
 mod inference;
 mod inventory;
 mod lab;
+mod pilot;
+mod risk_corpus;
 mod scope;
 
 pub use assessment::{
@@ -43,6 +45,25 @@ pub use lab::{
     LabMismatch, LabMismatchKind, LabSafety, MAX_CASE_BYTES, MAX_LAB_RESULT_BYTES,
     RouteExpectation, WebCase, WebLabResult, compare_inventory, lab_result_sarif, parse_case,
     parse_lab_result, seal_case,
+};
+pub use pilot::{
+    AuthorizationEvidenceKind, GuardedObservationRequest, OBSERVATION_PILOT_VERSION,
+    ObservationAuthorization, ObservationEvidence, ObservationHeader, ObservationPolicy,
+    ObservationSession, PilotBlocker, PilotClaims, PilotDraft, PilotError, PilotPrerequisites,
+    PilotReadiness, PilotStopReason, PilotTarget, RedirectPolicy, WebObservationPilot,
+    authorize_observation_request, mitiquete_pilot_draft, parse_observation_pilot,
+    record_observation_result, sanitize_response_metadata, seal_observation_pilot,
+};
+pub use risk_corpus::{
+    API_RISK_CORPUS_VERSION, API_RISK_GENERATOR_VERSION, ActorAuthentication, ActorKind, ActorRole,
+    ApiRiskCorpusError, ApiRiskScenario, AutomatedOutputCeiling, CorpusGenerator, CorpusPartition,
+    ExpectedControl, ExpectedDecision, FixtureDecision, GroundTruth, MAX_API_RISK_CORPUS_BYTES,
+    MAX_VARIANTS_PER_SCENARIO, RiskCorpusClaims, RiskCorpusCounts, RiskFamily, RiskPairing,
+    RiskScenarioEvidence, RiskScenarioFramework, RiskScenarioParameter, RiskScenarioProvenance,
+    RiskScenarioResponse, RiskSurface, ScenarioEvidenceKind, ScenarioParameterSensitivity,
+    SyntheticOrigin, TenantRelation, VariantAlias, VariantDescriptor, VariantPlan,
+    WebApiRiskCorpus, generate_api_risk_corpus, generate_variant_descriptors,
+    parse_api_risk_corpus,
 };
 pub use scope::{
     AuthorizationStatus, AuthorizedAsset, AuthorizedRepository, MAX_SCOPE_BYTES, NetworkExecution,

@@ -1,0 +1,52 @@
+{
+  "evidence_version": "secureflow-web-risk-corpus-and-pilot-evidence-v1",
+  "recorded_at": "2026-08-24T12:00:00Z",
+  "authorization": "explicit",
+  "risk_corpus": {
+    "contract_version": "secureflow-web-api-risk-corpus-v1",
+    "corpus_id": "sf_web_api_risk_corpus_460f1624fa3121372421039c6bdf5e6334fc16d6ca5e88b8bfdd703a4570b8d1",
+    "artifact_sha256": "e9332294c309e1ae4c561b64bc139ac71e5a7c13d5d94e01eb1a41a6e1a160d1",
+    "license_sha256": "8a59c035575dcb171fc2e90e0c92380d3c2ed1a0612e9577a420119c9ae322a5",
+    "canonical_pairs": 200,
+    "risky_scenarios": 200,
+    "safe_controls": 200,
+    "security_families": 20,
+    "runtime_profiles": 10,
+    "verified_variant_counts": [5200, 20000],
+    "variants_retained": false,
+    "known_to_developers": true,
+    "independent_holdout": false,
+    "human_superiority_claim_allowed": false
+  },
+  "mitiquete_pilot": {
+    "contract_version": "secureflow-web-observation-pilot-v1",
+    "pilot_id": "sf_web_pilot_a36b054e15aae01eaa83db71e83c06167b58cb8a1138de71d6a0dc7df98b1865",
+    "artifact_sha256": "73d0180ff96d585e8f99ef47392d4b844535468062e0f1f069e3a9a317bbc059",
+    "target": "https://mitiqueteonline.com",
+    "include_subdomains": false,
+    "readiness": "blocked",
+    "blockers": [
+      "ownership-evidence-unverified",
+      "bounded-transport-missing",
+      "staging-not-completed"
+    ],
+    "network_executed": false,
+    "production_execution_allowed": false
+  },
+  "verification": {
+    "command": "cargo test -p secureflow-web --locked",
+    "passed_tests": 32,
+    "failed_tests": 0,
+    "schema_validation": [
+      "secureflow-web-api-risk-corpus-v1.schema.json",
+      "secureflow-web-observation-pilot-v1.schema.json"
+    ]
+  },
+  "limitations": [
+    "The corpus is synthetic development data and is not an independent holdout.",
+    "No production HTTP transport is compiled into SecureFlow Web.",
+    "No request to mitiqueteonline.com or any other production host was executed.",
+    "The owner assertion is auditable but independent domain-ownership evidence is not yet bound.",
+    "Authentication, role, owner, and tenant comparisons remain disabled pending staging and dedicated test accounts."
+  ]
+}

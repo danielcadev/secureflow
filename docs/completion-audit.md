@@ -1,6 +1,6 @@
 # MVP completion audit
 
-Observed state: August 23, 2026.
+Observed state: August 24, 2026.
 
 This matrix separates demonstrable functionality, evidence, and later work. A
 technical check is not a claim that SecureFlow finds every vulnerability or
@@ -24,7 +24,7 @@ outperforms a human researcher.
 | Secure Bench | `result-v2` import, suite/run fingerprints, optional `HEAD` verification, separated TP/FN and FP/TN, blocked claims, prospective protocol, and artifact preflight | Complete as evaluation infrastructure; the Phase 1 corpus is synthetic and known, and no real holdout/cohort/study exists yet |
 | Conservative correlation | Exact finding-package-version-advisory link with run, catalog, snapshot/delta, and canonicalization hashes | V2 evaluates exact lists and `SEMVER`, preserves unknowns, and asserts no causality; package context is operator-declared |
 | Incremental updates | Per-ecosystem `modified_id.csv`, hashed index/payloads/licenses, linear chain, replay, recovery, and explicit `withdrawn` | Complete with fixtures and a real overlapping replay of 7 RUSTSEC records; absence never deletes, and there were no new post-snapshot changes |
-| Recon/API Exposure | `secureflow-web`: expiring scope, Next.js inventory, local OpenAPI/manifest/GraphQL/tRPC inference, control matrix, JSON/SARIF, and a 24-case corpus | Complete for the offline vertical; no remote scanner, DNS/CT, crawling, or automated network authorization exists |
+| Recon/API Exposure | `secureflow-web`: expiring scope, Next.js inventory, local OpenAPI/manifest/GraphQL/tRPC inference, control matrix, JSON/SARIF, 24 route assertions, and 400 paired API risk scenarios | Complete for the offline vertical and corpus-generation slice; the Mitiquete plan remains blocked because no production HTTP transport, independently bound ownership evidence, or staging run exists |
 | Fail-closed orchestration | Seven-phase state machine, artifacts retained by hash, abstention, and derived next action | Complete as a local plan; it does not automatically execute network activity, AI, or human review |
 | Operational backups | SQLite Online Backup API, hashed manifest, `quick_check`, foreign keys, no-overwrite creation, and restore to a new destination | Complete with round-trip and concurrency tests; external retention, encryption, and disaster-recovery policies are missing |
 | Modular catalog distribution | Database-derived `core`, `malicious`, and `full` profiles; bounded Zstandard; strict manifest; deep verify/install; manifest-hash pin required for installation by default | Implemented locally; stored source declarations do not authenticate publishers, projected profiles are standalone current-record catalogs, publisher signatures and incremental bundle updates are not implemented, and no advisory data ships in the app release |
@@ -35,12 +35,11 @@ outperforms a human researcher.
 
 ## Executed evidence
 
-- `cargo fmt --all -- --check`: passed on local Rust 1.97.1; CI remains pinned
-  to Rust 1.92.0.
-- `cargo clippy --workspace --all-targets --locked -- -D warnings`: passed on
-  local Rust 1.97.1; CI remains pinned to Rust 1.92.0.
-- `cargo test --workspace --locked`: 150 tests passed, 0 failed on the local
-  Rust 1.97.1 environment; CI remains pinned to Rust 1.92.0.
+- `cargo fmt --all -- --check`: passed in the pinned Rust 1.92.0 container.
+- `cargo clippy --workspace --all-targets --locked -- -D warnings`: passed in
+  the pinned Rust 1.92.0 container.
+- `cargo test --workspace --locked`: 162 tests passed, 0 failed in the pinned
+  Rust 1.92.0 container.
 - `cargo audit`: 173 dependencies checked against 1,225 advisories with no
   reported vulnerabilities.
 - `scripts/demo-local.sh`: 6 deterministic candidates, all `pending`; a Luna
@@ -97,6 +96,12 @@ outperforms a human researcher.
   artifacts expressly block holdout, superiority, and production-safety
   claims: `docs/evidence/web-route-lab-2026-08-23.json` and
   `docs/evidence/web-development-corpus-2026-08-23.json`.
+- The paired API risk corpus contains 200 risky synthetic scenarios and 200
+  safe controls across 20 families and 10 runtime profiles. The generator
+  reproduced the retained corpus and generated 5,200 and 20,000 variant
+  descriptors without retaining them as canonical records. The Mitiquete
+  pilot remained blocked, and no production network request was executed.
+  Evidence: `docs/evidence/web-api-risk-corpus-and-pilot-2026-08-24.json`.
 
 Paths under `/tmp` and ignored pilots under `target/` are retained local session
 evidence, not permanent publishable artifacts. A release must produce a

@@ -2,11 +2,13 @@ use secureflow_web::{
     AccessIntent, ApiCandidateKind, AssessmentEvidenceKind, AuthorizationStatus, AuthorizedAsset,
     AuthorizedRepository, CandidateDisposition, CandidateOrigin, ControlExpectation, ControlState,
     CoverageRoute, EvidenceReference, EvidenceState, HttpMethod, InventoryError, InventorySource,
-    NetworkExecution, ObservedControls, ScopeAuthorization, ScopeLimits, ScopePolicy, SourceKind,
-    TargetKind, WebScheme, WebScopeDraft, assess_routes, compare_inventory, discover_nextjs,
-    evaluate_corpus, hash_repository_tree, infer_local_apis, lab_result_sarif, parse_assessment,
-    parse_corpus, parse_corpus_result, parse_inference, parse_inventory, parse_lab_result,
-    parse_scope, seal_case, seal_scope,
+    NetworkExecution, ObservedControls, PilotBlocker, PilotReadiness, ScopeAuthorization,
+    ScopeLimits, ScopePolicy, SourceKind, TargetKind, WebScheme, WebScopeDraft, assess_routes,
+    compare_inventory, discover_nextjs, evaluate_corpus, generate_api_risk_corpus,
+    generate_variant_descriptors, hash_repository_tree, infer_local_apis, lab_result_sarif,
+    mitiquete_pilot_draft, parse_api_risk_corpus, parse_assessment, parse_corpus,
+    parse_corpus_result, parse_inference, parse_inventory, parse_lab_result,
+    parse_observation_pilot, parse_scope, seal_case, seal_observation_pilot, seal_scope,
 };
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
@@ -17,6 +19,14 @@ const EXPIRES_AT: &str = "2027-08-23T12:00:00Z";
 
 fn fixture_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/web-nextjs")
+}
+
+fn risk_corpus_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/web-api-risk-corpus")
+}
+
+fn pilot_fixture_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/web-pilot-mitiquete")
 }
 
 fn now() -> OffsetDateTime {
@@ -194,6 +204,84 @@ fn local_nextjs_inventory_matches_expected_and_preserves_target() {
     )
     .expect("second inventory");
     assert_eq!(inventory.inventory_id, inventory_again.inventory_id);
+}
+
+#[test]
+fn retained_api_risk_corpus_matches_generator_schema_and_scale_contract() {
+    let root = risk_corpus_root();
+    let license = std::fs::read(root.join("LICENSE")).expect("risk corpus license");
+    let license_sha256 = {
+        use sha2::{Digest, Sha256};
+        let digest = Sha256::digest(&license);
+        let mut value = String::with_capacity(64);
+        use std::fmt::Write as _;
+        for byte in digest {
+            write!(&mut value, "{byte:02x}").expect("hash formatting");
+        }
+        value
+    };
+    let retained_bytes = std::fs::read(root.join("corpus.json")).expect("retained risk corpus");
+    let retained = parse_api_risk_corpus(&retained_bytes).expect("parsed risk corpus");
+    let generated = generate_api_risk_corpus(&license_sha256).expect("generated risk corpus");
+    assert_eq!(retained, generated);
+    assert_eq!(retained.counts.canonical_pairs, 200);
+    assert_eq!(retained.counts.risky_scenarios, 200);
+    assert_eq!(retained.counts.safe_controls, 200);
+    assert_eq!(retained.counts.total_scenarios, 400);
+    assert!(!retained.partition.holdout_eligible);
+    assert!(!retained.claims.independent_holdout);
+    assert!(!retained.claims.human_superiority_claim_allowed);
+    validate_schema(
+        "secureflow-web-api-risk-corpus-v1.schema.json",
+        &serde_json::to_value(&retained).expect("risk corpus value"),
+    );
+    assert_eq!(
+        generate_variant_descriptors(&retained, 13)
+            .expect("minimum variants")
+            .len(),
+        5_200
+    );
+}
+
+#[test]
+fn retained_mitiquete_pilot_is_exactly_scoped_and_blocked_without_network() {
+    let root = pilot_fixture_root();
+    let retained_bytes = std::fs::read(root.join("plan.json")).expect("retained pilot plan");
+    let issued_at =
+        OffsetDateTime::parse("2026-08-24T12:00:00Z", &Rfc3339).expect("pilot issue time");
+    let retained = parse_observation_pilot(&retained_bytes, issued_at).expect("parsed pilot");
+    let draft = mitiquete_pilot_draft(
+        "codex-thread:01a02c99-9cb2-7c71-84b2-172cd2a7d498",
+        "2026-08-24T12:00:00Z",
+        "2026-09-24T12:00:00Z",
+    )
+    .expect("pilot draft");
+    let generated = seal_observation_pilot(
+        &serde_json::to_vec(&draft).expect("pilot draft JSON"),
+        Some("2026-08-24T12:00:00Z".into()),
+    )
+    .expect("generated pilot");
+    assert_eq!(retained, generated);
+    assert_eq!(retained.target.apex_host, "mitiqueteonline.com");
+    assert!(!retained.target.include_subdomains);
+    assert_eq!(retained.readiness, PilotReadiness::Blocked);
+    assert_eq!(
+        retained.blockers,
+        vec![
+            PilotBlocker::OwnershipEvidenceUnverified,
+            PilotBlocker::BoundedTransportMissing,
+            PilotBlocker::StagingNotCompleted,
+        ]
+    );
+    assert!(!retained.claims.network_executed);
+    assert!(!retained.claims.production_execution_allowed);
+    assert!(!retained.policy.send_credentials);
+    assert!(!retained.policy.retain_response_body);
+    assert!(!retained.policy.authentication_comparisons_enabled);
+    validate_schema(
+        "secureflow-web-observation-pilot-v1.schema.json",
+        &serde_json::to_value(&retained).expect("pilot value"),
+    );
 }
 
 #[test]
@@ -650,5 +738,96 @@ fn inference_binary_writes_outside_target_and_rejects_overwrite_or_target_mutati
         "target mutation must be rejected"
     );
     assert!(!forbidden_output.exists());
+    std::fs::remove_dir_all(&output_root).expect("remove exact temporary output directory");
+}
+
+#[test]
+fn risk_corpus_and_pilot_binaries_validate_outputs_and_reject_overwrite() {
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("system clock")
+        .as_nanos();
+    let output_root = std::env::temp_dir().join(format!(
+        "secureflow-web-generated-artifacts-{}-{unique}",
+        std::process::id()
+    ));
+    std::fs::create_dir(&output_root).expect("temporary output directory");
+
+    let corpus_path = output_root.join("corpus.json");
+    let corpus_binary = env!("CARGO_BIN_EXE_secureflow-web-risk-corpus");
+    let corpus_output = std::process::Command::new(corpus_binary)
+        .arg(risk_corpus_root().join("LICENSE"))
+        .arg(&corpus_path)
+        .output()
+        .expect("risk corpus binary");
+    assert!(
+        corpus_output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&corpus_output.stderr)
+    );
+    let corpus_value: Value =
+        serde_json::from_slice(&std::fs::read(&corpus_path).expect("generated corpus bytes"))
+            .expect("generated corpus JSON");
+    validate_schema(
+        "secureflow-web-api-risk-corpus-v1.schema.json",
+        &corpus_value,
+    );
+    let corpus_second = std::process::Command::new(corpus_binary)
+        .arg(risk_corpus_root().join("LICENSE"))
+        .arg(&corpus_path)
+        .output()
+        .expect("second risk corpus binary");
+    assert!(
+        !corpus_second.status.success(),
+        "corpus must not be overwritten"
+    );
+
+    let pilot_path = output_root.join("pilot.json");
+    let pilot_binary = env!("CARGO_BIN_EXE_secureflow-web-pilot-plan");
+    let pilot_output = std::process::Command::new(pilot_binary)
+        .arg("test-owner-authorization")
+        .arg("2026-08-24T12:00:00Z")
+        .arg("2026-09-24T12:00:00Z")
+        .arg(&pilot_path)
+        .output()
+        .expect("pilot plan binary");
+    assert!(
+        pilot_output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&pilot_output.stderr)
+    );
+    let pilot_value: Value =
+        serde_json::from_slice(&std::fs::read(&pilot_path).expect("pilot bytes"))
+            .expect("pilot JSON");
+    validate_schema(
+        "secureflow-web-observation-pilot-v1.schema.json",
+        &pilot_value,
+    );
+    assert_eq!(pilot_value["readiness"], "blocked");
+    assert_eq!(pilot_value["claims"]["network_executed"], false);
+    let pilot_second = std::process::Command::new(pilot_binary)
+        .arg("test-owner-authorization")
+        .arg("2026-08-24T12:00:00Z")
+        .arg("2026-09-24T12:00:00Z")
+        .arg(&pilot_path)
+        .output()
+        .expect("second pilot binary");
+    assert!(
+        !pilot_second.status.success(),
+        "pilot must not be overwritten"
+    );
+
+    #[cfg(unix)]
+    for path in [&corpus_path, &pilot_path] {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(
+            std::fs::metadata(path)
+                .expect("generated artifact metadata")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
+    }
     std::fs::remove_dir_all(&output_root).expect("remove exact temporary output directory");
 }

@@ -28,6 +28,12 @@ hidden or undocumented route as protected.
   assertions with provenance and an explicit split.
 - `secureflow-web-corpus-result-v1`: per-case results that block holdout,
   superiority, and production-safety claims.
+- `secureflow-web-api-risk-corpus-v1`: 200 deterministic risky API scenarios
+  paired with 200 safe controls across 20 security families and 10 runtime
+  profiles. Variants are generated on demand with lineage-preserving IDs.
+- `secureflow-web-observation-pilot-v1`: content-bound authorization, exact
+  host/method/path limits, readiness blockers, and claim boundaries for a
+  future low-rate production observation pilot.
 
 Normative schemas live in `schemas/` and reject unknown fields.
 
@@ -92,6 +98,11 @@ The versioned corpus in `tests/fixtures/web-nextjs/corpus.json` contains 24
 atomic assertions about inventory, correlation, decoys, and safe semantics.
 The retained run passed 24/24. This corpus is known to developers; it is neither
 an independent test nor a human study.
+
+The broader corpus in `tests/fixtures/web-api-risk-corpus/corpus.json` contains
+400 canonical synthetic scenarios. It is also a known development corpus. Its
+5,200–20,000 deterministic variants are not retained as duplicate records and
+inherit the canonical lineage for split and deduplication checks.
 
 Local inference consumes a sealed scope and an existing inventory. Output must
 remain outside the target to preserve the authorized tree:

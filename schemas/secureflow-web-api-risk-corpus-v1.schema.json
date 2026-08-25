@@ -1,0 +1,214 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://secureflow.local/schemas/secureflow-web-api-risk-corpus-v1.schema.json",
+  "title": "SecureFlow Web paired API risk corpus v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "corpus_id", "name", "split", "partition", "license", "generator", "counts", "cases", "claims"],
+  "properties": {
+    "contract_version": { "const": "secureflow-web-api-risk-corpus-v1" },
+    "corpus_id": { "type": "string", "pattern": "^sf_web_api_risk_corpus_[0-9a-f]{64}$" },
+    "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "split": { "const": "development" },
+    "partition": { "$ref": "#/$defs/partition" },
+    "license": { "$ref": "#/$defs/license" },
+    "generator": { "$ref": "#/$defs/generator" },
+    "counts": { "$ref": "#/$defs/counts" },
+    "cases": {
+      "type": "array",
+      "minItems": 400,
+      "maxItems": 400,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/scenario" }
+    },
+    "claims": { "$ref": "#/$defs/claims" }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "partition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lineage_group", "known_to_developers", "holdout_eligible"],
+      "properties": {
+        "lineage_group": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "known_to_developers": { "const": true },
+        "holdout_eligible": { "const": false }
+      }
+    },
+    "license": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["spdx", "provenance", "license_sha256"],
+      "properties": {
+        "spdx": { "const": "MIT OR Apache-2.0" },
+        "provenance": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "license_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "generator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "seed", "family_count", "profile_count", "pairing_strategy", "variant_plan"],
+      "properties": {
+        "version": { "const": "secureflow-web-api-risk-generator-v1" },
+        "seed": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "family_count": { "const": 20 },
+        "profile_count": { "const": 10 },
+        "pairing_strategy": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "variant_plan": { "$ref": "#/$defs/variantPlan" }
+      }
+    },
+    "variantPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["materialization", "identity_algorithm", "maximum_variants_per_scenario", "minimum_supported_total", "maximum_supported_total", "dimensions", "deduplication_key"],
+      "properties": {
+        "materialization": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "identity_algorithm": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "maximum_variants_per_scenario": { "const": 50 },
+        "minimum_supported_total": { "const": 5200 },
+        "maximum_supported_total": { "const": 20000 },
+        "dimensions": {
+          "type": "array", "minItems": 1, "maxItems": 20, "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+        },
+        "deduplication_key": {
+          "type": "array", "minItems": 1, "maxItems": 20, "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+        }
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["canonical_pairs", "risky_scenarios", "safe_controls", "total_scenarios"],
+      "properties": {
+        "canonical_pairs": { "const": 200 },
+        "risky_scenarios": { "const": 200 },
+        "safe_controls": { "const": 200 },
+        "total_scenarios": { "const": 400 }
+      }
+    },
+    "claims": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["development_only", "independent_holdout", "human_superiority_claim_allowed", "production_safety_claim_allowed"],
+      "properties": {
+        "development_only": { "const": true },
+        "independent_holdout": { "const": false },
+        "human_superiority_claim_allowed": { "const": false },
+        "production_safety_claim_allowed": { "const": false }
+      }
+    },
+    "scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scenario_id", "scenario_fingerprint", "title", "description", "family", "framework", "runtime", "surface", "method", "route", "actor", "authentication", "role", "tenant_relation", "parameters", "expected_controls", "response", "evidence", "provenance", "pairing", "ground_truth", "automated_output_ceiling"],
+      "properties": {
+        "scenario_id": { "type": "string", "pattern": "^WEBRISK-[0-9]{4}-(RISK|SAFE)$" },
+        "scenario_fingerprint": { "$ref": "#/$defs/sha256" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "description": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "family": { "$ref": "#/$defs/family" },
+        "framework": { "$ref": "#/$defs/framework" },
+        "runtime": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "surface": { "$ref": "#/$defs/surface" },
+        "method": { "$ref": "#/$defs/method" },
+        "route": { "type": "string", "pattern": "^/(?!/)", "maxLength": 2000 },
+        "actor": { "enum": ["anonymous-external", "authenticated-user", "tenant-member", "tenant-administrator", "webhook-sender"] },
+        "authentication": { "enum": ["none", "valid-session", "valid-api-token", "invalid-or-missing-signature"] },
+        "role": { "enum": ["none", "user", "member", "tenant-admin", "external-service"] },
+        "tenant_relation": { "enum": ["not-applicable", "own-tenant", "cross-tenant"] },
+        "parameters": {
+          "type": "array", "minItems": 1, "maxItems": 20,
+          "items": { "$ref": "#/$defs/parameter" }
+        },
+        "expected_controls": {
+          "type": "array", "minItems": 1, "maxItems": 20, "uniqueItems": true,
+          "items": { "$ref": "#/$defs/control" }
+        },
+        "response": { "$ref": "#/$defs/response" },
+        "evidence": {
+          "type": "array", "minItems": 1, "maxItems": 20,
+          "items": { "$ref": "#/$defs/evidence" }
+        },
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "pairing": { "$ref": "#/$defs/pairing" },
+        "ground_truth": { "enum": ["risky-synthetic", "safe-control"] },
+        "automated_output_ceiling": { "const": "candidate-or-hardening" }
+      }
+    },
+    "family": {
+      "enum": ["missing-authentication", "role-authorization", "bola-owner-scope", "tenant-isolation", "excessive-response-data", "mass-assignment", "cors-policy", "private-cache-policy", "verbose-error-disclosure", "webhook-signature", "webhook-replay", "upload-constraints", "path-traversal", "ssrf-destination", "abuse-rate-limit", "fail-open-dependency", "hidden-admin-exposure", "internal-endpoint-exposure", "server-action-authorization", "middleware-coverage"]
+    },
+    "framework": {
+      "enum": ["next-app-router", "next-pages-router", "next-server-action", "express", "fastify", "nest-js", "django", "axum", "graph-ql", "trpc"]
+    },
+    "surface": {
+      "enum": ["route-handler", "api-handler", "server-action", "middleware-protected-route", "rest-handler", "graph-ql-operation", "trpc-procedure"]
+    },
+    "method": { "enum": ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"] },
+    "parameter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "location", "attacker_controlled", "sensitivity"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "location": { "enum": ["path", "query", "body", "header"] },
+        "attacker_controlled": { "type": "boolean" },
+        "sensitivity": { "enum": ["public", "object-identifier", "tenant-identifier", "authorization-metadata", "file-path", "destination-url", "signature", "unknown"] }
+      }
+    },
+    "control": {
+      "enum": ["authentication", "role-authorization", "owner-scope", "tenant-scope", "response-field-allowlist", "input-field-allowlist", "restricted-cors", "private-no-store-cache", "sanitized-errors", "webhook-signature-verification", "webhook-replay-protection", "upload-type-and-size-limits", "canonical-path-confinement", "destination-allowlist", "rate-limit-and-quota", "fail-closed-dependency", "explicit-admin-authorization", "internal-route-non-exposure", "server-action-authorization", "middleware-matcher-coverage"]
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["expected_decision", "fixture_decision", "expected_status", "fixture_status", "expected_fields", "fixture_fields"],
+      "properties": {
+        "expected_decision": { "enum": ["allow-minimal", "deny", "reject", "restrict-metadata", "store-privately", "sanitize", "throttle", "fail-closed"] },
+        "fixture_decision": { "enum": ["matches-expected", "allows-unexpectedly", "exposes-excess-data", "accepts-policy-fields", "emits-unsafe-metadata", "stores-publicly", "emits-verbose-error", "accepts-unverified-event", "accepts-replay", "accepts-unsafe-upload", "escapes-confinement", "fetches-untrusted-destination", "omits-throttle", "fails-open"] },
+        "expected_status": { "type": "integer", "minimum": 100, "maximum": 599 },
+        "fixture_status": { "type": "integer", "minimum": 100, "maximum": 599 },
+        "expected_fields": { "$ref": "#/$defs/fields" },
+        "fixture_fields": { "$ref": "#/$defs/fields" }
+      }
+    },
+    "fields": {
+      "type": "array", "maxItems": 100,
+      "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "reference", "description"],
+      "properties": {
+        "kind": { "enum": ["synthetic-specification", "expected-control", "expected-decision"] },
+        "reference": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "description": { "type": "string", "minLength": 1, "maxLength": 1000 }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["origin", "license_spdx", "generator_version", "template_id", "profile_id"],
+      "properties": {
+        "origin": { "const": "secure-flow-synthetic" },
+        "license_spdx": { "const": "MIT OR Apache-2.0" },
+        "generator_version": { "const": "secureflow-web-api-risk-generator-v1" },
+        "template_id": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "profile_id": { "type": "string", "minLength": 1, "maxLength": 200 }
+      }
+    },
+    "pairing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pair_id", "counterpart_scenario_id"],
+      "properties": {
+        "pair_id": { "type": "string", "pattern": "^WEBRISK-PAIR-[0-9]{4}$" },
+        "counterpart_scenario_id": { "type": "string", "pattern": "^WEBRISK-[0-9]{4}-(RISK|SAFE)$" }
+      }
+    }
+  }
+}

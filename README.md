@@ -97,6 +97,35 @@ cargo run -p secureflow -- web-corpus-evaluate \
   --output /tmp/web-corpus-result.json
 ```
 
+The broader API risk corpus retains 200 risky synthetic scenarios paired with
+200 safe controls across 20 security families and 10 runtime profiles. It can
+generate 5,200–20,000 deterministic lineage-preserving variant descriptors
+without storing them as new canonical records:
+
+```bash
+cargo run -p secureflow-web --bin secureflow-web-risk-corpus -- \
+  tests/fixtures/web-api-risk-corpus/LICENSE \
+  /tmp/secureflow-web-api-risk-corpus.json
+```
+
+The prepared Mitiquete pilot is intentionally blocked. It records the owner's
+assertion, exact apex-host scope, read-only methods, request budgets, redaction,
+authorization validity window, and remaining gates. It contains no HTTP
+transport and has not contacted the production site:
+
+```bash
+cargo run -p secureflow-web --bin secureflow-web-pilot-plan -- \
+  <authorization-reference> \
+  <issued-at-rfc3339> \
+  <expires-at-rfc3339> \
+  /tmp/mitiquete-pilot.json
+```
+
+See [`secureflow-web-api-risk-corpus-v1`](./docs/contracts/secureflow-web-api-risk-corpus-v1.md)
+and the [blocked pilot plan](./docs/pilots/mitiquete-web-pilot.md). Neither
+artifact is a holdout, a production-safety result, or evidence that SecureFlow
+outperforms a human researcher.
+
 ## First reproducible run
 
 The current CLI runs an explicitly selected Secure Engine binary, retains its
@@ -529,8 +558,9 @@ disabled and is not presented as a completed feature.
 
 The `secureflow-web` vertical is also operational for strictly offline
 analysis: authorized scope, Next.js inventory, local inference, route
-assessment, and a synthetic development corpus. Remote recon, DNS/CT, and HTTP
-checks remain unimplemented.
+assessment, a 400-scenario paired API risk corpus, and a blocked-by-construction
+production pilot plan. Remote recon, DNS/CT, and HTTP transport remain
+unimplemented.
 
 ## Security and contributions
 

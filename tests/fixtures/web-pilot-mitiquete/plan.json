@@ -1,0 +1,79 @@
+{
+  "contract_version": "secureflow-web-observation-pilot-v1",
+  "pilot_id": "sf_web_pilot_a36b054e15aae01eaa83db71e83c06167b58cb8a1138de71d6a0dc7df98b1865",
+  "created_at": "2026-08-24T12:00:00Z",
+  "authorization": {
+    "reference": "codex-thread:01a02c99-9cb2-7c71-84b2-172cd2a7d498",
+    "owner_assertion": "The requesting user states that they own and authorize bounded security observation of https://mitiqueteonline.com for the SecureFlow Web pilot.",
+    "assertion_sha256": "92bd8dacc4108bdd4b7b66dbb4a0e9ee7bf97a887dcb385306136dcb86b8c62b",
+    "evidence_kind": "owner-assertion",
+    "reviewer": "pending-independent-ownership-review",
+    "issued_at": "2026-08-24T12:00:00Z",
+    "expires_at": "2026-09-24T12:00:00Z"
+  },
+  "target": {
+    "apex_host": "mitiqueteonline.com",
+    "include_subdomains": false,
+    "scheme": "https",
+    "port": 443,
+    "redirect_policy": "same-host-only"
+  },
+  "policy": {
+    "allowed_methods": [
+      "GET",
+      "HEAD",
+      "OPTIONS"
+    ],
+    "allowed_paths": [
+      "/",
+      "/.well-known/security.txt",
+      "/robots.txt",
+      "/sitemap.xml"
+    ],
+    "max_requests": 12,
+    "requests_per_minute": 3,
+    "max_concurrency": 1,
+    "max_redirects": 2,
+    "timeout_milliseconds": 5000,
+    "max_response_bytes": 1048576,
+    "max_total_response_bytes": 4194304,
+    "stop_after_consecutive_5xx": 2,
+    "dns_revalidate_before_every_request": true,
+    "redirect_revalidate_before_every_hop": true,
+    "retain_response_body": false,
+    "send_credentials": false,
+    "use_proxy": false,
+    "authentication_comparisons_enabled": false,
+    "allowed_response_headers": [
+      "access-control-allow-origin",
+      "cache-control",
+      "content-length",
+      "content-type",
+      "location",
+      "vary"
+    ]
+  },
+  "prerequisites": {
+    "authorization_record_bound": true,
+    "ownership_evidence_verified": false,
+    "bounded_transport_implemented": false,
+    "dns_revalidation_tested": true,
+    "redirect_revalidation_tested": true,
+    "redaction_tested": true,
+    "staging_completed": false,
+    "dedicated_test_accounts_available": false
+  },
+  "readiness": "blocked",
+  "blockers": [
+    "ownership-evidence-unverified",
+    "bounded-transport-missing",
+    "staging-not-completed"
+  ],
+  "claims": {
+    "authorization_acknowledged": true,
+    "network_executed": false,
+    "production_execution_allowed": false,
+    "vulnerability_validation_allowed": false,
+    "production_safety_claim_allowed": false
+  }
+}

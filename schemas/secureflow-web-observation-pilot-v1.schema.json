@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://secureflow.local/schemas/secureflow-web-observation-pilot-v1.schema.json",
+  "title": "SecureFlow Web bounded observation pilot v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "pilot_id", "created_at", "authorization", "target", "policy", "prerequisites", "readiness", "blockers", "claims"],
+  "properties": {
+    "contract_version": { "const": "secureflow-web-observation-pilot-v1" },
+    "pilot_id": { "type": "string", "pattern": "^sf_web_pilot_[0-9a-f]{64}$" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "authorization": { "$ref": "#/$defs/authorization" },
+    "target": { "$ref": "#/$defs/target" },
+    "policy": { "$ref": "#/$defs/policy" },
+    "prerequisites": { "$ref": "#/$defs/prerequisites" },
+    "readiness": { "enum": ["blocked", "ready"] },
+    "blockers": {
+      "type": "array",
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/blocker" }
+    },
+    "claims": { "$ref": "#/$defs/claims" }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "authorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reference", "owner_assertion", "assertion_sha256", "evidence_kind", "reviewer", "issued_at", "expires_at"],
+      "properties": {
+        "reference": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "owner_assertion": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "assertion_sha256": { "$ref": "#/$defs/sha256" },
+        "evidence_kind": { "enum": ["owner-assertion", "verified-ownership-artifact"] },
+        "ownership_evidence_sha256": { "$ref": "#/$defs/sha256" },
+        "reviewer": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "issued_at": { "type": "string", "format": "date-time" },
+        "expires_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["apex_host", "include_subdomains", "scheme", "port", "redirect_policy"],
+      "properties": {
+        "apex_host": { "type": "string", "pattern": "^[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?$", "maxLength": 253 },
+        "include_subdomains": { "const": false },
+        "scheme": { "const": "https" },
+        "port": { "const": 443 },
+        "redirect_policy": { "const": "same-host-only" }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allowed_methods", "allowed_paths", "max_requests", "requests_per_minute", "max_concurrency", "max_redirects", "timeout_milliseconds", "max_response_bytes", "max_total_response_bytes", "stop_after_consecutive_5xx", "dns_revalidate_before_every_request", "redirect_revalidate_before_every_hop", "retain_response_body", "send_credentials", "use_proxy", "authentication_comparisons_enabled", "allowed_response_headers"],
+      "properties": {
+        "allowed_methods": {
+          "type": "array", "minItems": 3, "maxItems": 3, "uniqueItems": true,
+          "items": { "enum": ["GET", "HEAD", "OPTIONS"] }
+        },
+        "allowed_paths": {
+          "type": "array", "minItems": 1, "maxItems": 100, "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^/(?!/)", "maxLength": 2000 }
+        },
+        "max_requests": { "type": "integer", "minimum": 1, "maximum": 20 },
+        "requests_per_minute": { "type": "integer", "minimum": 1, "maximum": 5 },
+        "max_concurrency": { "const": 1 },
+        "max_redirects": { "type": "integer", "minimum": 0, "maximum": 3 },
+        "timeout_milliseconds": { "type": "integer", "minimum": 1000, "maximum": 10000 },
+        "max_response_bytes": { "type": "integer", "minimum": 1, "maximum": 2097152 },
+        "max_total_response_bytes": { "type": "integer", "minimum": 1, "maximum": 8388608 },
+        "stop_after_consecutive_5xx": { "type": "integer", "minimum": 1, "maximum": 3 },
+        "dns_revalidate_before_every_request": { "const": true },
+        "redirect_revalidate_before_every_hop": { "const": true },
+        "retain_response_body": { "const": false },
+        "send_credentials": { "const": false },
+        "use_proxy": { "const": false },
+        "authentication_comparisons_enabled": { "type": "boolean" },
+        "allowed_response_headers": {
+          "type": "array", "maxItems": 20, "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z-]{1,100}$" }
+        }
+      }
+    },
+    "prerequisites": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authorization_record_bound", "ownership_evidence_verified", "bounded_transport_implemented", "dns_revalidation_tested", "redirect_revalidation_tested", "redaction_tested", "staging_completed", "dedicated_test_accounts_available"],
+      "properties": {
+        "authorization_record_bound": { "type": "boolean" },
+        "ownership_evidence_verified": { "type": "boolean" },
+        "bounded_transport_implemented": { "const": false },
+        "dns_revalidation_tested": { "type": "boolean" },
+        "redirect_revalidation_tested": { "type": "boolean" },
+        "redaction_tested": { "type": "boolean" },
+        "staging_completed": { "type": "boolean" },
+        "dedicated_test_accounts_available": { "type": "boolean" }
+      }
+    },
+    "blocker": {
+      "enum": ["authorization-record-missing", "ownership-evidence-unverified", "bounded-transport-missing", "dns-revalidation-untested", "redirect-revalidation-untested", "redaction-untested", "staging-not-completed", "dedicated-test-accounts-missing"]
+    },
+    "claims": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authorization_acknowledged", "network_executed", "production_execution_allowed", "vulnerability_validation_allowed", "production_safety_claim_allowed"],
+      "properties": {
+        "authorization_acknowledged": { "const": true },
+        "network_executed": { "const": false },
+        "production_execution_allowed": { "const": false },
+        "vulnerability_validation_allowed": { "const": false },
+        "production_safety_claim_allowed": { "const": false }
+      }
+    }
+  }
+}
