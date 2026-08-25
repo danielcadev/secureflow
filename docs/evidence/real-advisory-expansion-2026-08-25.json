@@ -1,0 +1,191 @@
+{
+  "evidence_version": "secureflow-real-advisory-expansion-v1",
+  "observed_at": "2026-08-25T01:56:52Z",
+  "classification": "local source-coverage and storage evidence; not a vulnerability efficacy result",
+  "scope": {
+    "baseline_ecosystems": [
+      "crates.io",
+      "GitHub Actions",
+      "npm"
+    ],
+    "added_ecosystems": [
+      "Go",
+      "PyPI"
+    ],
+    "method": "prepare and validate immutable OSV ecosystem snapshots, then import them into a verified restore of the retained catalog",
+    "baseline_modified": false,
+    "network_inside_secureflow": false
+  },
+  "snapshots": [
+    {
+      "ecosystem": "Go",
+      "snapshot_policy_version": "osv-ecosystem-source-policy-v3",
+      "snapshot_id": "sf_snapshot_6bde2831ab95428321e33a072936c5bbd0a619d5c51b3c74596f2115db4d9f6a",
+      "manifest_sha256": "37f9a63d1b5255ca80dc9032b0e279540466e6e5b3a2053b2e7ae77d6e53a2e8",
+      "artifact_locator": "https://osv-vulnerabilities.storage.googleapis.com/Go/all.zip",
+      "artifact_revision": "gcs-generation:1787618918925338;etag:fe27c091382e98ebf6248527aff4d2b7",
+      "artifact_sha256": "beb4ef474b0721700d68849568b287e46958b8de52ef0fd1d4447358a1a92d29",
+      "archive_bytes": 11310404,
+      "archive_entries": 8894,
+      "accepted_records": 8893,
+      "quarantined_records": 1,
+      "accepted_by_source": {
+        "github_advisory_database": 4565,
+        "go_vulnerability_database": 4310,
+        "openssf_malicious_packages": 18
+      },
+      "quarantine_reasons": {
+        "unsupported-primary-id": 1
+      }
+    },
+    {
+      "ecosystem": "PyPI",
+      "snapshot_policy_version": "osv-ecosystem-source-policy-v3",
+      "snapshot_id": "sf_snapshot_f5471d25725c0ffcda45d22f18caee7504ac4aae432cc33c90944cb55b7ae976",
+      "manifest_sha256": "5a9589110d8bb8d08dffd722db9a6dcdea1599b45166f2d8d114490446df1e4d",
+      "artifact_locator": "https://osv-vulnerabilities.storage.googleapis.com/PyPI/all.zip",
+      "artifact_revision": "gcs-generation:1787603616975465;etag:5025c4e3812cf8051bd5d80352967771",
+      "artifact_sha256": "ace064b0ab213e53dc783a24fa9b4d2eaaf4d4d9f88ac1bb01140ab966feb309",
+      "archive_bytes": 33701839,
+      "archive_entries": 25018,
+      "accepted_records": 24985,
+      "quarantined_records": 33,
+      "accepted_by_source": {
+        "github_advisory_database": 6000,
+        "pypa_advisory_database": 7342,
+        "openssf_malicious_packages": 11643
+      },
+      "quarantine_reasons": {
+        "malicious-package-provenance-not-openssf": 25,
+        "unsupported-primary-id": 8
+      }
+    }
+  ],
+  "license_evidence": [
+    {
+      "source": "GitHub Advisory Database",
+      "revision": "581fb6c509d3f0b30829f92b2ad3aad360cdb074",
+      "path": "LICENSE.md",
+      "spdx": "CC-BY-4.0",
+      "sha256": "9e5f1b3c610b9c2da5c313bf81d577a7d1acec686bdb0384edefa6df0f90cd94"
+    },
+    {
+      "source": "PyPA Advisory Database",
+      "revision": "0df4262e468590097cc85ff5f93962a4032e8160",
+      "path": "LICENSE",
+      "spdx": "CC-BY-4.0",
+      "sha256": "9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411"
+    },
+    {
+      "source": "Go Vulnerability Database data",
+      "revision": "a752ea54fd1b989d208a270aeef772f55a36b87a",
+      "path": "data/LICENSE",
+      "spdx": "CC-BY-4.0",
+      "sha256": "419896aea50c15d6e40c5b4baf4bd346f78223b9a354c7357ad00262afdc08ec"
+    },
+    {
+      "source": "OpenSSF Malicious Packages",
+      "revision": "d340bf81aa38584e72e0203487539f586b2232e9",
+      "path": "LICENSE",
+      "spdx": "Apache-2.0",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    }
+  ],
+  "copy_boundary": {
+    "method": "sqlite-online-backup-api followed by verified restore to a new path",
+    "backup_id": "sf_catalog_backup_0e4f0dfb4fea95fa89fa117c657418c537ef2ed0981b4bafcf29dc53188b5d41",
+    "backup_sha256": "0e4f0dfb4fea95fa89fa117c657418c537ef2ed0981b4bafcf29dc53188b5d41",
+    "backup_manifest_sha256": "7a0b38bee1b47e55e9fc367a0dde35914f454271ed28fdb0b6bef2840804d41f",
+    "restore_manifest_sha256": "7a5d747d0aed6266bedf38e954f38e91060e43b92f02b70a9f7d16626bb3fecf",
+    "backup_bytes": 1202384896,
+    "source_verified": true,
+    "quick_check": "ok",
+    "foreign_key_violations": 0
+  },
+  "catalog_before": {
+    "schema_version": 3,
+    "sources": 6,
+    "active_source_records": 229644,
+    "canonical_security_records": 228674,
+    "identifiers": 266228,
+    "relationships": 271090,
+    "affected_packages": 233702,
+    "references": 100827,
+    "raw_revision_bytes": 379785473,
+    "portable_database_bytes": 1202384896,
+    "database_bytes_including_local_sidecar": 1202417664
+  },
+  "catalog_after": {
+    "schema_version": 3,
+    "sources": 12,
+    "active_source_records": 263522,
+    "canonical_security_records": 251657,
+    "identifiers": 312781,
+    "relationships": 361765,
+    "affected_packages": 278079,
+    "references": 234806,
+    "raw_revision_bytes": 474452211,
+    "portable_database_bytes": 1491918848,
+    "portable_database_sha256": "3679ef3f51b8fc790546981aac100fd421fcaad267c2e50cb28fafff92adf00f",
+    "database_bytes_including_local_sidecar": 1491951616,
+    "quick_check": "ok",
+    "foreign_key_violations": 0,
+    "search_index_status": "ready"
+  },
+  "measured_delta": {
+    "accepted_source_records": 33878,
+    "canonical_entities": 22983,
+    "exact_alias_reduction": 10895,
+    "portable_database_bytes": 289533952,
+    "active_advisory_records_after": 32203,
+    "active_malicious_package_records_after": 231319
+  },
+  "distribution_measurement": {
+    "profile_policy_version": "secureflow-catalog-profile-policy-v2",
+    "verification": "deep integrity verified with exact external manifest SHA-256 pin",
+    "profiles": [
+      {
+        "profile": "core",
+        "bundle_id": "sf_catalog_bundle_172f7d64f95a117ba8dda3839270dd0c449d945c839abfafd736177f8dac52f9",
+        "manifest_sha256": "1d20847977048d839b33dce87cb1931719fc95ba9feb8458c1cd97037ddb35d7",
+        "compressed_sha256": "edc608fa489cf99174f315ef3a5c7c7e968dc807c4289838e3e20271945b557f",
+        "compressed_bytes": 66142849,
+        "database_sha256": "cd56ddac57ed5476882ad18ec180ddf3c12bf6ac57c60ab2a6a131d831f41ab0",
+        "database_bytes": 309202944,
+        "active_source_records": 32203,
+        "canonical_entities": 20402
+      },
+      {
+        "profile": "malicious",
+        "bundle_id": "sf_catalog_bundle_e6aa9fbf5f61bc2aeeaefbed34cd16057db4de766250484a64738101be753045",
+        "manifest_sha256": "811d5b725c6fa9332cffd8884b151fb2b6132246fc12a1b6ab2af4bcce2bd1a6",
+        "compressed_sha256": "3848559c6d25faf158b2cd357cb0ac90b19baeea67191f952a2ce128e45027eb",
+        "compressed_bytes": 147507376,
+        "database_sha256": "59c0644d234fc065ab0c18e2e37d2bfd99df7b5c168af13609d6fd693d3f8a38",
+        "database_bytes": 1104654336,
+        "active_source_records": 231319,
+        "canonical_entities": 231307
+      },
+      {
+        "profile": "full",
+        "bundle_id": "sf_catalog_bundle_628788a8d49465f346c57530fb3e0934ca347bbe3bf105f07447c1cce1ef60f3",
+        "manifest_sha256": "581c132d08e9f51a0fb72030100a6a957ff37722e7ccab906cc21c1734f20ca7",
+        "compressed_sha256": "54f24d9790ab65ad3e04dca25d9dd132bf40cb82b0e4de30cf8ebbdda93bbdb0",
+        "compressed_bytes": 234613073,
+        "database_sha256": "10bca8ec8f3434004791ae05098357a771e31c57b88ae5c0e6fc9dbdba3c7cdc",
+        "database_bytes": 1491918848,
+        "active_source_records": 263522,
+        "canonical_entities": 251657
+      }
+    ],
+    "application_packaging_decision": "Keep catalogs outside the normal application release. Offer core as the default optional download, malicious as an opt-in research artifact, and full only for reproducibility or offline research."
+  },
+  "claim_boundaries": [
+    "The 263,522 total counts source records, not validated vulnerabilities.",
+    "The catalog contains 231,319 OpenSSF malicious-package reports and 32,203 advisory records; those classes remain separate.",
+    "Exact aliases reduce records to canonical entities, but do not establish semantic equivalence beyond upstream alias declarations.",
+    "Quarantined entries remain retained in snapshot evidence and are not imported.",
+    "The expansion measures ingestion, provenance, deduplication, integrity, and storage; it does not measure scanner precision, recall, or superiority over humans.",
+    "The expanded SQLite database and source ZIPs remain ignored local artifacts and are not embedded in the application release."
+  ]
+}

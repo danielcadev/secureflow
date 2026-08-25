@@ -241,6 +241,11 @@ cargo run -p secureflow -- catalog-import-snapshot \
   --archive /path/to/npm-all.zip
 ```
 
+PyPI snapshots additionally require `--pypa-license-evidence`; Go snapshots
+require `--go-vulnerability-database-license-evidence`. Supply the GitHub and
+OpenSSF evidence flags as well when their identifier families occur in the
+same ecosystem archive. Missing source-specific evidence fails closed.
+
 After a complete snapshot, changes from a per-ecosystem `modified_id.csv` are
 prepared offline and chained to the previous snapshot or delta:
 
@@ -261,6 +266,8 @@ cargo run -p secureflow -- catalog-import-delta \
   --database .secureflow/advisories.sqlite3 \
   --manifest .secureflow/crates-delta/manifest.json
 ```
+
+The same source-specific evidence flags apply to deltas.
 
 A missing or quarantined payload blocks cursor advancement. Absence never
 deactivates a record. Explicit `withdrawn` data is retained as withdrawn, and
@@ -308,6 +315,19 @@ failed malicious-package provenance checks and 2 used unsupported primary IDs.
 Exact evidence:
 [`real-advisory-pilot-2026-08-23.json`](./docs/evidence/real-advisory-pilot-2026-08-23.json).
 
+A later source-expansion pilot added official Go and PyPI ecosystem snapshots
+to a verified copy, not to the retained baseline. It accepted 33,878 of 33,912
+entries and quarantined 34, producing 263,522 active source records and
+251,657 exact-alias canonical entities. The portable SQLite file grew by
+289,533,952 bytes to 1,491,918,848 bytes. Of all active records, 231,319 are
+OpenSSF malicious-package reports and 32,203 are advisory records, so the
+combined total is not presented as a vulnerability count. Exact evidence:
+[`real-advisory-expansion-2026-08-25.json`](./docs/evidence/real-advisory-expansion-2026-08-25.json).
+From that copy, deeply verified policy-v2 bundles measured 66,142,849 bytes for
+`core`, 147,507,376 bytes for `malicious`, and 234,613,073 bytes for `full`.
+Catalogs therefore remain optional artifacts outside the application binary;
+`core` is the practical default download.
+
 A finding is conservatively linked to advisories for a package. V2 evaluates
 exact lists and OSV `SEMVER` ranges; invalid data and `GIT`/`ECOSYSTEM` ranges
 remain `unknown`. Even `affected` asserts neither causality nor validation:
@@ -341,9 +361,10 @@ cargo run -p secureflow -- catalog-backup-verify \
 
 Catalog data stays separate from the application release. A database can be
 distributed as a Zstandard bundle in three verified profiles: `core` contains
-current records classified from stored declarations as GitHub Advisory Database
-or RustSec, `malicious` contains records classified as OpenSSF malicious-package
-reports, and `full` is a logically complete SQLite online-backup snapshot.
+current records classified from stored declarations as GitHub Advisory
+Database, RustSec, PyPA Advisory Database, or Go Vulnerability Database;
+`malicious` contains records classified as OpenSSF malicious-package reports;
+and `full` is a logically complete SQLite online-backup snapshot.
 Projected profiles are rebuilt and canonicalized afresh; an unknown active
 source fails closed. Classification proves internal composition consistency,
 not that an upstream publisher supplied the stored declarations.

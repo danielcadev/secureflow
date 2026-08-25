@@ -17,7 +17,8 @@ use thiserror::Error;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 pub const DELTA_CONTRACT_VERSION: &str = "secureflow-advisory-delta-v1";
-pub const DELTA_POLICY_VERSION: &str = "osv-per-ecosystem-modified-index-v1";
+pub const DELTA_POLICY_VERSION: &str = "osv-per-ecosystem-modified-index-v2";
+const LEGACY_DELTA_POLICY_VERSION: &str = "osv-per-ecosystem-modified-index-v1";
 pub const MAX_DELTA_INDEX_BYTES: u64 = 256 * 1024 * 1024;
 pub const MAX_DELTA_MANIFEST_BYTES: u64 = 256 * 1024 * 1024;
 const MAX_LICENSE_EVIDENCE_BYTES: u64 = 1024 * 1024;
@@ -37,6 +38,8 @@ pub struct DeltaPrepareConfig {
     pub github_license_evidence: Option<PathBuf>,
     pub rustsec_license_evidence: Option<PathBuf>,
     pub openssf_malicious_packages_license_evidence: Option<PathBuf>,
+    pub pypa_license_evidence: Option<PathBuf>,
+    pub go_vulnerability_database_license_evidence: Option<PathBuf>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -216,6 +219,9 @@ pub fn prepare_osv_delta(config: &DeltaPrepareConfig) -> Result<AdvisoryDeltaMan
             .openssf_malicious_packages_license_evidence
             .as_deref(),
     )?;
+    let pypa_evidence = load_optional_evidence(config.pypa_license_evidence.as_deref())?;
+    let go_evidence =
+        load_optional_evidence(config.go_vulnerability_database_license_evidence.as_deref())?;
     let temporary = create_temporary_directory(&config.output)?;
     let result = prepare_into_directory(
         config,
@@ -228,6 +234,8 @@ pub fn prepare_osv_delta(config: &DeltaPrepareConfig) -> Result<AdvisoryDeltaMan
         github_evidence.as_ref(),
         rustsec_evidence.as_ref(),
         openssf_evidence.as_ref(),
+        pypa_evidence.as_ref(),
+        go_evidence.as_ref(),
     );
     match result {
         Ok(manifest) => {
@@ -256,6 +264,8 @@ fn prepare_into_directory(
     github_evidence: Option<&(Vec<u8>, String)>,
     rustsec_evidence: Option<&(Vec<u8>, String)>,
     openssf_evidence: Option<&(Vec<u8>, String)>,
+    pypa_evidence: Option<&(Vec<u8>, String)>,
+    go_evidence: Option<&(Vec<u8>, String)>,
 ) -> Result<AdvisoryDeltaManifest, DeltaError> {
     let mut records = Vec::new();
     let mut quarantined = Vec::new();
@@ -300,6 +310,8 @@ fn prepare_into_directory(
                     github_evidence,
                     rustsec_evidence,
                     openssf_evidence,
+                    pypa_evidence,
+                    go_evidence,
                 )?;
                 let stored_path = format!("records/{}/{}.json", source_slug(&class.name), entry.id);
                 write_private_new(&output.join(&stored_path), &bytes)?;
@@ -356,6 +368,8 @@ fn prepare_into_directory(
             github_evidence,
             rustsec_evidence,
             openssf_evidence,
+            pypa_evidence,
+            go_evidence,
         )?;
         let evidence_path = format!("licenses/{}.txt", evidence.1);
         if !output.join(&evidence_path).exists() {
@@ -405,6 +419,7 @@ fn prepare_into_directory(
         full_snapshot_required_for_absence: true,
     };
     let delta_id = calculate_delta_id(
+        DELTA_POLICY_VERSION,
         &config.acquired_at,
         &config.expected_ecosystem,
         &config.base_snapshot_id,
@@ -553,7 +568,10 @@ fn validate_payload_directory(root: &Path, selected: &[IndexEntry]) -> Result<()
 
 fn validate_manifest(manifest: &AdvisoryDeltaManifest) -> Result<(), DeltaError> {
     if manifest.contract_version != DELTA_CONTRACT_VERSION
-        || manifest.policy_version != DELTA_POLICY_VERSION
+        || !matches!(
+            manifest.policy_version.as_str(),
+            DELTA_POLICY_VERSION | LEGACY_DELTA_POLICY_VERSION
+        )
         || manifest.validation_authority != "human-only"
         || !prefixed_hash(&manifest.delta_id, "sf_delta_")
         || !prefixed_hash(&manifest.base_snapshot_id, "sf_snapshot_")
@@ -720,6 +738,7 @@ fn validate_manifest(manifest: &AdvisoryDeltaManifest) -> Result<(), DeltaError>
         return Err(DeltaError::InvalidManifest("accounting or semantics"));
     }
     let expected = calculate_delta_id(
+        &manifest.policy_version,
         &manifest.acquired_at,
         &manifest.expected_ecosystem,
         &manifest.base_snapshot_id,
@@ -740,6 +759,7 @@ fn validate_manifest(manifest: &AdvisoryDeltaManifest) -> Result<(), DeltaError>
 
 #[allow(clippy::too_many_arguments)]
 fn calculate_delta_id(
+    policy_version: &str,
     acquired_at: &str,
     expected_ecosystem: &str,
     base_snapshot_id: &str,
@@ -755,7 +775,7 @@ fn calculate_delta_id(
     #[derive(Serialize)]
     struct Identity<'a> {
         domain: &'static str,
-        policy_version: &'static str,
+        policy_version: &'a str,
         acquired_at: &'a str,
         expected_ecosystem: &'a str,
         base_snapshot_id: &'a str,
@@ -770,7 +790,7 @@ fn calculate_delta_id(
     }
     let bytes = serde_json::to_vec(&Identity {
         domain: "secureflow-advisory-delta-id-v1",
-        policy_version: DELTA_POLICY_VERSION,
+        policy_version,
         acquired_at,
         expected_ecosystem,
         base_snapshot_id,
@@ -985,6 +1005,8 @@ fn evidence_for<'a>(
     github: Option<&'a (Vec<u8>, String)>,
     rustsec: Option<&'a (Vec<u8>, String)>,
     openssf: Option<&'a (Vec<u8>, String)>,
+    pypa: Option<&'a (Vec<u8>, String)>,
+    go: Option<&'a (Vec<u8>, String)>,
 ) -> Result<&'a (Vec<u8>, String), DeltaError> {
     match kind {
         EvidenceKind::Github => github.ok_or(DeltaError::MissingLicenseEvidence(
@@ -994,6 +1016,12 @@ fn evidence_for<'a>(
         EvidenceKind::OpenssfMaliciousPackages => openssf.ok_or(
             DeltaError::MissingLicenseEvidence("OpenSSF Malicious Packages"),
         ),
+        EvidenceKind::Pypa => {
+            pypa.ok_or(DeltaError::MissingLicenseEvidence("PyPA Advisory Database"))
+        }
+        EvidenceKind::GoVulnerabilityDatabase => go.ok_or(DeltaError::MissingLicenseEvidence(
+            "Go Vulnerability Database",
+        )),
     }
 }
 
@@ -1312,11 +1340,34 @@ mod tests {
             github_license_evidence: Some(root.join("github-license.txt")),
             rustsec_license_evidence: None,
             openssf_malicious_packages_license_evidence: None,
+            pypa_license_evidence: None,
+            go_vulnerability_database_license_evidence: None,
         })
         .unwrap();
         assert_eq!(manifest.accounting.accepted_records, 1);
         assert_eq!(manifest.accounting.withdrawn_records, 1);
         assert!(!manifest.semantics.absence_deactivates_record);
+        load_and_validate_delta(&output.join("manifest.json")).unwrap();
+        let mut legacy = manifest.clone();
+        legacy.policy_version = LEGACY_DELTA_POLICY_VERSION.into();
+        legacy.delta_id = calculate_delta_id(
+            &legacy.policy_version,
+            &legacy.acquired_at,
+            &legacy.expected_ecosystem,
+            &legacy.base_snapshot_id,
+            legacy.previous_delta_id.as_deref(),
+            &legacy.cursor,
+            &legacy.index,
+            &legacy.sources,
+            &legacy.records,
+            &legacy.quarantined,
+            &legacy.accounting,
+            &legacy.semantics,
+        )
+        .unwrap();
+        let mut legacy_bytes = serde_json::to_vec_pretty(&legacy).unwrap();
+        legacy_bytes.push(b'\n');
+        fs::write(output.join("manifest.json"), legacy_bytes).unwrap();
         load_and_validate_delta(&output.join("manifest.json")).unwrap();
         fs::write(output.join(&manifest.records[0].stored_path), b"tampered").unwrap();
         assert!(load_and_validate_delta(&output.join("manifest.json")).is_err());
@@ -1346,6 +1397,8 @@ mod tests {
             github_license_evidence: None,
             rustsec_license_evidence: None,
             openssf_malicious_packages_license_evidence: None,
+            pypa_license_evidence: None,
+            go_vulnerability_database_license_evidence: None,
         })
         .unwrap_err();
         assert!(matches!(error, DeltaError::MissingPayload(_)));
@@ -1394,6 +1447,8 @@ mod tests {
             github_license_evidence: None,
             rustsec_license_evidence: Some(root.join("rustsec-license.txt")),
             openssf_malicious_packages_license_evidence: None,
+            pypa_license_evidence: None,
+            go_vulnerability_database_license_evidence: None,
         })
         .unwrap();
         assert_eq!(manifest.sources.len(), 2);
@@ -1401,6 +1456,52 @@ mod tests {
             manifest.sources[0].license_evidence_path,
             manifest.sources[1].license_evidence_path
         );
+        load_and_validate_delta(&output.join("manifest.json")).unwrap();
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn prepares_pypa_delta_with_source_specific_license_evidence() {
+        let root = temporary_path("pypa");
+        let payloads = root.join("payloads");
+        fs::create_dir_all(&payloads).unwrap();
+        fs::write(
+            root.join("modified_id.csv"),
+            b"2026-08-23T12:00:00Z,PYSEC-2026-1\n",
+        )
+        .unwrap();
+        let bytes = serde_json::to_vec(&serde_json::json!({
+            "id": "PYSEC-2026-1",
+            "modified": "2026-08-23T12:00:00Z",
+            "affected": [{
+                "package": {"ecosystem": "PyPI", "name": "fixture"},
+                "ranges": [{"type": "ECOSYSTEM", "events": [{"introduced": "0"}]}]
+            }]
+        }))
+        .unwrap();
+        fs::write(payloads.join("PYSEC-2026-1.json"), bytes).unwrap();
+        fs::write(root.join("pypa-license.txt"), b"CC-BY-4.0 evidence").unwrap();
+        let output = root.join("prepared");
+        let manifest = prepare_osv_delta(&DeltaPrepareConfig {
+            modified_index: root.join("modified_id.csv"),
+            records: payloads,
+            output: output.clone(),
+            index_locator:
+                "https://osv-vulnerabilities.storage.googleapis.com/PyPI/modified_id.csv".into(),
+            index_revision: "gcs-generation:fixture".into(),
+            expected_ecosystem: "PyPI".into(),
+            acquired_at: "2026-08-23T13:00:00Z".into(),
+            after_modified: "2026-08-23T00:00:00Z".into(),
+            base_snapshot_id: format!("sf_snapshot_{}", "1".repeat(64)),
+            previous_delta_id: None,
+            github_license_evidence: None,
+            rustsec_license_evidence: None,
+            openssf_malicious_packages_license_evidence: None,
+            pypa_license_evidence: Some(root.join("pypa-license.txt")),
+            go_vulnerability_database_license_evidence: None,
+        })
+        .unwrap();
+        assert_eq!(manifest.sources[0].name, "pypa-advisory-database@pypi");
         load_and_validate_delta(&output.join("manifest.json")).unwrap();
         let _ = fs::remove_dir_all(root);
     }

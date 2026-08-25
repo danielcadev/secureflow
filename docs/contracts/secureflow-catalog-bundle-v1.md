@@ -7,11 +7,13 @@ authenticate a publisher, or validate any external record as a vulnerability.
 ## Profiles
 
 The profile name is recomputed from database records rather than trusted as a
-manifest label. `secureflow-catalog-profile-policy-v1` recognizes these stored
+manifest label. `secureflow-catalog-profile-policy-v2` recognizes these stored
 source declarations and primary identifier families:
 
 - `core`: GitHub Advisory Database (`CC-BY-4.0`, `GHSA-*`) and RustSec
-  (`CC0-1.0` or `CC-BY-4.0`, `RUSTSEC-*`);
+  (`CC0-1.0` or `CC-BY-4.0`, `RUSTSEC-*`), PyPA Advisory Database
+  (`CC-BY-4.0`, `PYSEC-*`), and Go Vulnerability Database (`CC-BY-4.0`,
+  `GO-*`);
 - `malicious`: OpenSSF Malicious Packages (`Apache-2.0`, `MAL-*`);
 - `full`: the byte-exact compressed payload of one consistent SQLite
   online-backup artifact, logically complete for that snapshot and including
@@ -23,6 +25,10 @@ creation. It remains visible as `active_unclassified_records` in `full`.
 These checks establish consistency with operator-stored declarations; they do
 not authenticate the named upstream repositories. Authentic acquisition
 manifests, publisher channels and license evidence remain separate obligations.
+
+Profile policy v2 is an intentional classification change. It adds PyPA and Go
+to `core`; it does not change the bundle contract or relabel historical policy-v1
+evidence.
 
 `core` and `malicious` are standalone, current-record-only projections. Each
 is rebuilt from the selected current raw JSON records, canonicalized afresh,

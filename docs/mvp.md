@@ -26,9 +26,10 @@ The MVP answers one question:
    "vulnerabilities," and omit human rationale by default.
 8. Local storage with separate authorities. A **JSONL v2 ledger** stores human
    decisions and a separate **SQLite/FTS5 catalog** stores external records.
-   Capacity was measured with 100k, 500k, and 1M synthetic records and 229,644
-   accepted real source records from crates.io, GitHub Actions, and npm
-   snapshots. These counts are not human-validated vulnerabilities.
+   Capacity was measured with 100k, 500k, and 1M synthetic records. The
+   retained baseline has 229,644 accepted real source records from crates.io,
+   GitHub Actions, and npm; a verified-copy Go/PyPI expansion reached 263,522.
+   These counts are not human-validated vulnerabilities.
 9. Positive fixtures and safe controls. A minimal integration test uses a
    vulnerable Secure Engine fixture. The Secure Bench adapter imports
    `result-v2` with hashes and separate metrics, while a separate script runs

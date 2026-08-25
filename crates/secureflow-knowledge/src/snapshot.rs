@@ -17,8 +17,9 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use zip::ZipArchive;
 
 pub const SNAPSHOT_CONTRACT_VERSION: &str = "secureflow-advisory-snapshot-v1";
-pub const SNAPSHOT_POLICY_VERSION: &str = "osv-ecosystem-source-policy-v2";
-const LEGACY_SNAPSHOT_POLICY_VERSION: &str = "osv-ecosystem-source-policy-v1";
+pub const SNAPSHOT_POLICY_VERSION: &str = "osv-ecosystem-source-policy-v3";
+const LEGACY_SNAPSHOT_POLICY_VERSION_V2: &str = "osv-ecosystem-source-policy-v2";
+const LEGACY_SNAPSHOT_POLICY_VERSION_V1: &str = "osv-ecosystem-source-policy-v1";
 pub const MAX_SNAPSHOT_ARCHIVE_BYTES: u64 = 512 * 1024 * 1024;
 pub const MAX_SNAPSHOT_UNCOMPRESSED_BYTES: u64 = 16 * 1024 * 1024 * 1024;
 pub const MAX_SNAPSHOT_MANIFEST_BYTES: u64 = 256 * 1024 * 1024;
@@ -36,6 +37,8 @@ pub struct SnapshotPrepareConfig {
     pub github_license_evidence: Option<PathBuf>,
     pub rustsec_license_evidence: Option<PathBuf>,
     pub openssf_malicious_packages_license_evidence: Option<PathBuf>,
+    pub pypa_license_evidence: Option<PathBuf>,
+    pub go_vulnerability_database_license_evidence: Option<PathBuf>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -126,6 +129,8 @@ pub(crate) enum EvidenceKind {
     Github,
     Rustsec,
     OpenssfMaliciousPackages,
+    Pypa,
+    GoVulnerabilityDatabase,
 }
 
 #[derive(Debug, Error)]
@@ -186,6 +191,9 @@ pub fn prepare_osv_zip(
             .openssf_malicious_packages_license_evidence
             .as_deref(),
     )?;
+    let pypa_evidence = load_optional_evidence(config.pypa_license_evidence.as_deref())?;
+    let go_evidence =
+        load_optional_evidence(config.go_vulnerability_database_license_evidence.as_deref())?;
     let artifact_name = config
         .archive
         .file_name()
@@ -205,6 +213,8 @@ pub fn prepare_osv_zip(
         github_evidence.as_ref(),
         rustsec_evidence.as_ref(),
         openssf_evidence.as_ref(),
+        pypa_evidence.as_ref(),
+        go_evidence.as_ref(),
     );
     match result {
         Ok(manifest) => {
@@ -231,6 +241,8 @@ fn prepare_into_directory(
     github_evidence: Option<&(Vec<u8>, String)>,
     rustsec_evidence: Option<&(Vec<u8>, String)>,
     openssf_evidence: Option<&(Vec<u8>, String)>,
+    pypa_evidence: Option<&(Vec<u8>, String)>,
+    go_evidence: Option<&(Vec<u8>, String)>,
 ) -> Result<AdvisorySnapshotManifest, SnapshotError> {
     let file = File::open(&config.archive).map_err(|source| SnapshotError::Filesystem {
         path: config.archive.clone(),
@@ -293,6 +305,12 @@ fn prepare_into_directory(
                     EvidenceKind::OpenssfMaliciousPackages => openssf_evidence.ok_or(
                         SnapshotError::MissingLicenseEvidence("OpenSSF Malicious Packages"),
                     )?,
+                    EvidenceKind::Pypa => pypa_evidence.ok_or(
+                        SnapshotError::MissingLicenseEvidence("PyPA Advisory Database"),
+                    )?,
+                    EvidenceKind::GoVulnerabilityDatabase => go_evidence.ok_or(
+                        SnapshotError::MissingLicenseEvidence("Go Vulnerability Database"),
+                    )?,
                 };
                 let source_dir = source_slug(&class.name);
                 let stored_path = format!("records/{source_dir}/{entry_name}");
@@ -347,6 +365,12 @@ fn prepare_into_directory(
             }
             EvidenceKind::OpenssfMaliciousPackages => openssf_evidence.ok_or(
                 SnapshotError::MissingLicenseEvidence("OpenSSF Malicious Packages"),
+            )?,
+            EvidenceKind::Pypa => pypa_evidence.ok_or(SnapshotError::MissingLicenseEvidence(
+                "PyPA Advisory Database",
+            ))?,
+            EvidenceKind::GoVulnerabilityDatabase => go_evidence.ok_or(
+                SnapshotError::MissingLicenseEvidence("Go Vulnerability Database"),
             )?,
         };
         let evidence_path = format!("licenses/{}.txt", evidence.1);
@@ -456,7 +480,9 @@ fn validate_manifest(manifest: &AdvisorySnapshotManifest) -> Result<(), Snapshot
     if manifest.contract_version != SNAPSHOT_CONTRACT_VERSION
         || !matches!(
             manifest.policy_version.as_str(),
-            SNAPSHOT_POLICY_VERSION | LEGACY_SNAPSHOT_POLICY_VERSION
+            SNAPSHOT_POLICY_VERSION
+                | LEGACY_SNAPSHOT_POLICY_VERSION_V2
+                | LEGACY_SNAPSHOT_POLICY_VERSION_V1
         )
         || manifest.validation_authority != "human-only"
     {
@@ -775,6 +801,22 @@ pub(crate) fn classify_record(
             locator: "https://github.com/ossf/malicious-packages",
             license_expression: "Apache-2.0",
             evidence_kind: EvidenceKind::OpenssfMaliciousPackages,
+        }
+    } else if record.id.starts_with("PYSEC-") {
+        SourceClass {
+            name: format!("pypa-advisory-database@{scope}"),
+            kind: "pypa-advisory-database",
+            locator: "https://github.com/pypa/advisory-database",
+            license_expression: "CC-BY-4.0",
+            evidence_kind: EvidenceKind::Pypa,
+        }
+    } else if record.id.starts_with("GO-") {
+        SourceClass {
+            name: format!("go-vulnerability-database@{scope}"),
+            kind: "go-vulnerability-database",
+            locator: "https://github.com/golang/vulndb",
+            license_expression: "CC-BY-4.0",
+            evidence_kind: EvidenceKind::GoVulnerabilityDatabase,
         }
     } else {
         return Err("unsupported-primary-id".to_owned());
@@ -1175,6 +1217,8 @@ mod tests {
             github_license_evidence: Some(evidence.clone()),
             rustsec_license_evidence: Some(evidence),
             openssf_malicious_packages_license_evidence: None,
+            pypa_license_evidence: None,
+            go_vulnerability_database_license_evidence: None,
         }
     }
 
@@ -1234,7 +1278,7 @@ mod tests {
         let mut manifest =
             prepare_osv_zip(&config(archive, output.clone(), evidence)).expect("snapshot");
         let current_id = manifest.snapshot_id.clone();
-        manifest.policy_version = LEGACY_SNAPSHOT_POLICY_VERSION.to_owned();
+        manifest.policy_version = LEGACY_SNAPSHOT_POLICY_VERSION_V2.to_owned();
         manifest.snapshot_id = calculate_snapshot_id(
             &manifest.policy_version,
             &manifest.acquired_at,
@@ -1309,6 +1353,56 @@ mod tests {
         assert_eq!(manifest.accounting.quarantined_records, 0);
         assert_eq!(manifest.sources[0].license_expression, "Apache-2.0");
         fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn attributes_pypa_and_go_records_only_with_source_specific_evidence() {
+        for (label, ecosystem, id, source_name, configure) in [
+            (
+                "pypa",
+                "PyPI",
+                "PYSEC-2026-1",
+                "pypa-advisory-database@pypi",
+                false,
+            ),
+            (
+                "go",
+                "Go",
+                "GO-2026-0001",
+                "go-vulnerability-database@go",
+                true,
+            ),
+        ] {
+            let root = temporary_path(label);
+            fs::create_dir(&root).expect("root");
+            let archive = root.join("source.zip");
+            let evidence = root.join("LICENSE-EVIDENCE");
+            fs::write(&evidence, "CC-BY-4.0 data license evidence").expect("license");
+            write_zip(
+                &archive,
+                &[(format!("{id}.json").as_str(), osv(id, ecosystem, None))],
+            );
+            let output = root.join("snapshot");
+            let mut config = config(archive, output, evidence.clone());
+            config.expected_ecosystem = ecosystem.into();
+            config.github_license_evidence = None;
+            config.rustsec_license_evidence = None;
+            assert!(matches!(
+                prepare_osv_zip(&config),
+                Err(SnapshotError::MissingLicenseEvidence(_))
+            ));
+            assert!(!config.output.exists());
+            if configure {
+                config.go_vulnerability_database_license_evidence = Some(evidence);
+            } else {
+                config.pypa_license_evidence = Some(evidence);
+            }
+            let manifest = prepare_osv_zip(&config).expect("source-specific snapshot");
+            assert_eq!(manifest.accounting.accepted_records, 1);
+            assert_eq!(manifest.sources[0].name, source_name);
+            assert_eq!(manifest.sources[0].license_expression, "CC-BY-4.0");
+            fs::remove_dir_all(root).expect("cleanup");
+        }
     }
 
     #[test]

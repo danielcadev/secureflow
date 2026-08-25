@@ -43,3 +43,10 @@ application release.
 
 Delta distribution, signed metadata, rollback protection, cross-profile query
 federation and reproducible byte-for-byte projections remain future work.
+
+## 2026-08-25 policy revision
+
+`secureflow-catalog-profile-policy-v2` adds exact PyPA Advisory Database and Go
+Vulnerability Database declarations to `core`. OpenSSF records from Go or PyPI
+remain in `malicious`. The change was measured on a verified copy and does not
+alter or relabel the retained policy-v1 bundle evidence.

@@ -7,7 +7,7 @@
   "required": ["contract_version", "policy_version", "delta_id", "acquired_at", "expected_ecosystem", "base_snapshot_id", "cursor", "index", "sources", "records", "quarantined", "accounting", "semantics", "validation_authority"],
   "properties": {
     "contract_version": { "const": "secureflow-advisory-delta-v1" },
-    "policy_version": { "const": "osv-per-ecosystem-modified-index-v1" },
+    "policy_version": { "const": "osv-per-ecosystem-modified-index-v2" },
     "delta_id": { "type": "string", "pattern": "^sf_delta_[0-9a-f]{64}$" },
     "acquired_at": { "type": "string", "format": "date-time" },
     "expected_ecosystem": { "$ref": "#/$defs/text100" },

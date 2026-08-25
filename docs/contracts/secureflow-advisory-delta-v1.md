@@ -75,7 +75,11 @@ barrier and must never present partial state as a valid cursor.
 - V2 catalogs and backups remain verifiable read-only; the first write migrates
   an authorized database or copy.
 - At most 256 MiB per index, 1.1 million rows, and 4 MiB per accepted payload.
-- V1 accepts only the per-ecosystem format, not the prefixed global index.
+- Policy v2 accepts the GHSA, RUSTSEC, MAL, PYSEC, and GO source families. The
+  validator still accepts retained policy-v1 manifests using their original
+  identity domain.
+- The contract accepts only the per-ecosystem format, not the prefixed global
+  index.
 - SecureFlow contains no downloader or automatic polling.
 - `validation_authority=human-only`.
 

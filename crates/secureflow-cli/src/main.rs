@@ -363,6 +363,12 @@ enum Command {
         /// Local OpenSSF Malicious Packages Apache-2.0 license evidence.
         #[arg(long)]
         openssf_malicious_packages_license_evidence: Option<PathBuf>,
+        /// Local PyPA Advisory Database CC-BY-4.0 license evidence.
+        #[arg(long)]
+        pypa_license_evidence: Option<PathBuf>,
+        /// Local Go Vulnerability Database data-license evidence.
+        #[arg(long)]
+        go_vulnerability_database_license_evidence: Option<PathBuf>,
     },
     /// Validate an extracted advisory snapshot and optionally its original ZIP.
     SnapshotValidate {
@@ -415,6 +421,12 @@ enum Command {
         /// Local OpenSSF Malicious Packages Apache-2.0 license evidence.
         #[arg(long)]
         openssf_malicious_packages_license_evidence: Option<PathBuf>,
+        /// Local PyPA Advisory Database CC-BY-4.0 license evidence.
+        #[arg(long)]
+        pypa_license_evidence: Option<PathBuf>,
+        /// Local Go Vulnerability Database data-license evidence.
+        #[arg(long)]
+        go_vulnerability_database_license_evidence: Option<PathBuf>,
     },
     /// Validate an extracted advisory delta and every retained hash.
     DeltaValidate {
@@ -1707,6 +1719,8 @@ fn execute(cli: Cli) -> Result<(), CliError> {
             github_license_evidence,
             rustsec_license_evidence,
             openssf_malicious_packages_license_evidence,
+            pypa_license_evidence,
+            go_vulnerability_database_license_evidence,
         } => {
             ensure_output_distinct(&output, &[&archive])?;
             let manifest = prepare_osv_zip(&SnapshotPrepareConfig {
@@ -1719,6 +1733,8 @@ fn execute(cli: Cli) -> Result<(), CliError> {
                 github_license_evidence,
                 rustsec_license_evidence,
                 openssf_malicious_packages_license_evidence,
+                pypa_license_evidence,
+                go_vulnerability_database_license_evidence,
             })?;
             println!(
                 "snapshot prepared: directory={} snapshot_id={} accepted={} quarantined={} sources={} archive_sha256={} validation_authority=human-only",
@@ -1762,6 +1778,8 @@ fn execute(cli: Cli) -> Result<(), CliError> {
             github_license_evidence,
             rustsec_license_evidence,
             openssf_malicious_packages_license_evidence,
+            pypa_license_evidence,
+            go_vulnerability_database_license_evidence,
         } => {
             ensure_output_distinct(&output, &[&modified_index])?;
             ensure_output_outside_tree(&output, &records)?;
@@ -1779,6 +1797,8 @@ fn execute(cli: Cli) -> Result<(), CliError> {
                 github_license_evidence,
                 rustsec_license_evidence,
                 openssf_malicious_packages_license_evidence,
+                pypa_license_evidence,
+                go_vulnerability_database_license_evidence,
             })?;
             println!(
                 "advisory delta prepared: directory={} delta_id={} selected={} accepted={} quarantined={} withdrawn={} through={} absence_deactivates_record=false validation_authority=human-only",

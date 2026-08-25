@@ -8,8 +8,9 @@ explicit policy and license evidence. Everything else is retained in quarantine
 with a stable reason.
 
 OSV is a transport and aggregation format, not a global license. GitHub
-Advisory Database, RustSec, and OpenSSF Malicious Packages remain distinct
-sources even when they appear in the same ecosystem ZIP.
+Advisory Database, RustSec, OpenSSF Malicious Packages, PyPA Advisory Database,
+and Go Vulnerability Database remain distinct sources even when they appear in
+the same ecosystem ZIP.
 
 ## Consequences
 

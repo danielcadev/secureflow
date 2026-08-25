@@ -28,7 +28,7 @@
     "created_at": { "type": "string", "format": "date-time" },
     "profile": { "enum": ["core", "malicious", "full"] },
     "profile_policy_version": {
-      "const": "secureflow-catalog-profile-policy-v1"
+      "const": "secureflow-catalog-profile-policy-v2"
     },
     "derivation": {
       "description": "byte-exact-online-backup means the payload is byte-exact to the frozen online-backup artifact, not necessarily to the live source main file",
@@ -196,7 +196,7 @@
         "sources"
       ],
       "properties": {
-        "policy_version": { "const": "secureflow-catalog-profile-policy-v1" },
+        "policy_version": { "const": "secureflow-catalog-profile-policy-v2" },
         "active_advisory_records": { "$ref": "#/$defs/count" },
         "active_malicious_package_records": { "$ref": "#/$defs/count" },
         "active_unclassified_records": { "$ref": "#/$defs/count" },

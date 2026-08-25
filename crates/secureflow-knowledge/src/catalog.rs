@@ -22,7 +22,7 @@ pub const CATALOG_APPLICATION_ID: u32 = 0x5346_4b42;
 pub const MAX_OSV_RECORD_BYTES: u64 = 4 * 1024 * 1024;
 pub const MAX_IMPORT_RECORDS: usize = 1_100_000;
 pub const MAX_QUERY_RESULTS: usize = 1_000;
-pub const CATALOG_PROFILE_POLICY_VERSION: &str = "secureflow-catalog-profile-policy-v1";
+pub const CATALOG_PROFILE_POLICY_VERSION: &str = "secureflow-catalog-profile-policy-v2";
 
 const MAX_IDENTIFIERS_PER_RECORD: usize = 1_024;
 const MAX_AFFECTED_PER_RECORD: usize = 4_096;
@@ -423,12 +423,17 @@ enum RecognizedSourceKind {
     GithubAdvisoryDatabase,
     RustsecAdvisoryDatabase,
     OpenssfMaliciousPackages,
+    PypaAdvisoryDatabase,
+    GoVulnerabilityDatabase,
 }
 
 impl RecognizedSourceKind {
     fn profile(self) -> CatalogProfile {
         match self {
-            Self::GithubAdvisoryDatabase | Self::RustsecAdvisoryDatabase => CatalogProfile::Core,
+            Self::GithubAdvisoryDatabase
+            | Self::RustsecAdvisoryDatabase
+            | Self::PypaAdvisoryDatabase
+            | Self::GoVulnerabilityDatabase => CatalogProfile::Core,
             Self::OpenssfMaliciousPackages => CatalogProfile::Malicious,
         }
     }
@@ -438,6 +443,8 @@ impl RecognizedSourceKind {
             Self::GithubAdvisoryDatabase => "GHSA-",
             Self::RustsecAdvisoryDatabase => "RUSTSEC-",
             Self::OpenssfMaliciousPackages => "MAL-",
+            Self::PypaAdvisoryDatabase => "PYSEC-",
+            Self::GoVulnerabilityDatabase => "GO-",
         };
         identifier.starts_with(prefix) && identifier.len() > prefix.len()
     }
@@ -745,7 +752,9 @@ impl Catalog {
                 let identifier = row.get::<_, String>(0)?;
                 match recognized.filter(|value| value.identifier_matches(&identifier)) {
                     Some(RecognizedSourceKind::GithubAdvisoryDatabase)
-                    | Some(RecognizedSourceKind::RustsecAdvisoryDatabase) => {
+                    | Some(RecognizedSourceKind::RustsecAdvisoryDatabase)
+                    | Some(RecognizedSourceKind::PypaAdvisoryDatabase)
+                    | Some(RecognizedSourceKind::GoVulnerabilityDatabase) => {
                         counts.active_advisory_records += 1;
                         composition.active_advisory_records += 1;
                     }
@@ -3732,9 +3741,21 @@ fn recognized_source_profile(source: &CatalogSource) -> Option<RecognizedSourceK
         && source.name.len() > "openssf-malicious-packages@".len()
         && source.license_expression == "Apache-2.0"
         && source.locator == "https://github.com/ossf/malicious-packages";
-    if github || rustsec_cc0 || rustsec_cc_by {
+    let pypa = source.name.starts_with("pypa-advisory-database@")
+        && source.name.len() > "pypa-advisory-database@".len()
+        && source.license_expression == "CC-BY-4.0"
+        && source.locator == "https://github.com/pypa/advisory-database";
+    let go = source.name.starts_with("go-vulnerability-database@")
+        && source.name.len() > "go-vulnerability-database@".len()
+        && source.license_expression == "CC-BY-4.0"
+        && source.locator == "https://github.com/golang/vulndb";
+    if github || rustsec_cc0 || rustsec_cc_by || pypa || go {
         if github {
             Some(RecognizedSourceKind::GithubAdvisoryDatabase)
+        } else if pypa {
+            Some(RecognizedSourceKind::PypaAdvisoryDatabase)
+        } else if go {
+            Some(RecognizedSourceKind::GoVulnerabilityDatabase)
         } else {
             Some(RecognizedSourceKind::RustsecAdvisoryDatabase)
         }
@@ -3857,6 +3878,32 @@ fn secure_file_permissions(_path: &Path) -> Result<(), CatalogError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pypa_and_go_sources_are_core_only_with_exact_declared_provenance() {
+        for source in [
+            CatalogSource {
+                name: "pypa-advisory-database@pypi".into(),
+                license_expression: "CC-BY-4.0".into(),
+                license_evidence_sha256: "a".repeat(64),
+                locator: "https://github.com/pypa/advisory-database".into(),
+            },
+            CatalogSource {
+                name: "go-vulnerability-database@go".into(),
+                license_expression: "CC-BY-4.0".into(),
+                license_evidence_sha256: "b".repeat(64),
+                locator: "https://github.com/golang/vulndb".into(),
+            },
+        ] {
+            assert_eq!(
+                recognized_source_profile(&source).map(RecognizedSourceKind::profile),
+                Some(CatalogProfile::Core)
+            );
+            let mut invalid = source.clone();
+            invalid.license_expression = "unknown".into();
+            assert_eq!(recognized_source_profile(&invalid), None);
+        }
+    }
 
     fn source() -> CatalogSource {
         CatalogSource {

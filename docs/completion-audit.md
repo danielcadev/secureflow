@@ -70,12 +70,25 @@ outperforms a human researcher.
   active source records, 228,674 components through exact aliases,
   `quick_check=ok`, and zero foreign-key violations. Hashed evidence is in
   `docs/evidence/real-advisory-pilot-2026-08-23.json`.
+- A verified-copy expansion accepted 8,893 Go and 24,985 PyPI records and
+  quarantined 34. The copy reached 263,522 active source records and 251,657
+  exact-alias components; 231,319 active records are OpenSSF malicious-package
+  reports. The portable database grew from 1,202,384,896 to 1,491,918,848
+  bytes and retained `quick_check=ok`, zero foreign-key violations, and ready
+  FTS. Evidence is in
+  `docs/evidence/real-advisory-expansion-2026-08-25.json`.
+- Policy-v2 bundles from that copy passed deep verification with externally
+  pinned manifest hashes: `core` 66,142,849 bytes, `malicious` 147,507,376
+  bytes, and `full` 234,613,073 bytes compressed. They remain local evidence,
+  not authenticated or published catalog releases.
 - Two SBOM generator executions produced the same SHA-256. This measures
   inventory determinism for one `Cargo.lock`, not cross-host binary
   reproducibility.
 - The online backup of the real 1.20 GB catalog completed in 45.96 seconds,
   used mode `0600`, and revalidated its hash, `quick_check`, and foreign keys.
-  A full restore at this scale was not executed; a fixture covers round-trip.
+  That 2026-08-23 run did not execute a full-scale restore. The later Go/PyPI
+  expansion verified and restored a fresh 1,202,384,896-byte backup before
+  importing, while preserving the original catalog.
 - The same retained catalog produced locally deep-verified Zstandard bundles:
   `core` 20,242,641 bytes, `malicious` 138,085,256 bytes, and frozen-snapshot
   `full` 178,149,536 bytes. Creation peaked at 230,748 KiB or less after removing a

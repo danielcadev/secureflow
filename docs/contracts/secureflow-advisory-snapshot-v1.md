@@ -21,12 +21,17 @@ hash, and local license evidence.
   license; MAL requires OpenSSF Apache-2.0 evidence and every `affected` object
   must point to the official
   `ossf/malicious-packages/.../osv/malicious/...` path.
+- PYSEC requires PyPA Advisory Database CC-BY-4.0 evidence, and GO requires Go
+  Vulnerability Database `data/LICENSE` CC-BY-4.0 evidence. These source
+  families remain distinct even when OSV distributes them in one ecosystem ZIP.
 - An unknown record or one without accepted provenance remains in quarantine;
   it never disappears or enters the catalog.
 - `validation_authority` is always `human-only`.
 
-Policy v2 adds the OpenSSF-specific check. The validator continues to read
-historical v1 snapshots so retained evidence remains valid.
+Policy v2 added the OpenSSF-specific check. Policy v3 adds PyPA and Go source
+classification with source-specific license evidence. The validator continues
+to read historical v1 and v2 snapshots using each manifest's original identity
+domain so retained evidence remains valid.
 
 ## Catalog lifecycle
 

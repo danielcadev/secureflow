@@ -33,3 +33,8 @@ counts and integrity checks remain available for diagnosis. Committed batches
 may exist physically during recovery but never form a publishable cursor. No
 "abort" operation deletes evidence. Complete ZIPs remain necessary to
 reconcile presence and detect genuine absence.
+
+On 2026-08-25 the delta classification policy advanced to v2 alongside
+snapshot policy v3, adding source-specific PyPA and Go evidence. The manifest
+contract and absence semantics did not change; retained policy-v1 deltas remain
+valid under their original identity domain.
