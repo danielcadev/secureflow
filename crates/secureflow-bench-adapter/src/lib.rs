@@ -5,6 +5,7 @@
 //! claims regardless of the imported measurements.
 
 pub mod prospective;
+pub mod prospective_v2;
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};

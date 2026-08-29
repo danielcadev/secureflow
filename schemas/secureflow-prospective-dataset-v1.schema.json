@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://secureflow.local/schemas/secureflow-prospective-dataset-v1.schema.json",
+  "title": "SecureFlow frozen label-free prospective dataset v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "dataset_id", "frozen_at", "purpose", "authorization", "provenance_sha256", "license_manifest_sha256", "ground_truth_commitment_sha256", "cases", "accounting", "anti_leakage", "claims"],
+  "properties": {
+    "contract_version": { "const": "secureflow-prospective-dataset-v1" },
+    "dataset_id": { "type": "string", "pattern": "^sf_dataset_[0-9a-f]{64}$" },
+    "frozen_at": { "type": "string", "format": "date-time" },
+    "purpose": { "enum": ["synthetic-contract-test", "preregistered-holdout"] },
+    "authorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope_reference_sha256", "reviewer_commitment_sha256", "expires_at"],
+      "properties": {
+        "scope_reference_sha256": { "$ref": "#/$defs/sha256" },
+        "reviewer_commitment_sha256": { "$ref": "#/$defs/sha256" },
+        "expires_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "provenance_sha256": { "$ref": "#/$defs/sha256" },
+    "license_manifest_sha256": { "$ref": "#/$defs/sha256" },
+    "ground_truth_commitment_sha256": { "$ref": "#/$defs/sha256" },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["case_id", "relative_path", "artifact_sha256", "language", "split", "lineage_sha256", "principal_invariant_count"],
+        "properties": {
+          "case_id": { "type": "string", "pattern": "^case-[0-9]{4}$" },
+          "relative_path": { "type": "string", "minLength": 1, "maxLength": 500, "pattern": "^[^/\\\\](?:[^\\\\]*[^/\\\\])?$" },
+          "artifact_sha256": { "$ref": "#/$defs/sha256" },
+          "language": { "type": "string", "minLength": 1, "maxLength": 100 },
+          "split": { "enum": ["development", "validation", "holdout"] },
+          "lineage_sha256": { "$ref": "#/$defs/sha256" },
+          "principal_invariant_count": { "const": 1 }
+        }
+      }
+    },
+    "accounting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total_cases", "development_cases", "validation_cases", "holdout_cases", "vulnerable_cases", "safe_controls", "holdout_vulnerable_cases", "holdout_safe_controls", "label_counts_custodian_declared"],
+      "properties": {
+        "total_cases": { "type": "integer", "minimum": 1, "maximum": 10000 },
+        "development_cases": { "type": "integer", "minimum": 0 },
+        "validation_cases": { "type": "integer", "minimum": 0 },
+        "holdout_cases": { "type": "integer", "minimum": 1 },
+        "vulnerable_cases": { "type": "integer", "minimum": 0 },
+        "safe_controls": { "type": "integer", "minimum": 0 },
+        "holdout_vulnerable_cases": { "type": "integer", "minimum": 0 },
+        "holdout_safe_controls": { "type": "integer", "minimum": 0 },
+        "label_counts_custodian_declared": { "const": true }
+      }
+    },
+    "anti_leakage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["labels_included", "labels_hidden_from_all_lanes", "ground_truth_custodian_separate", "case_order_label_independent", "lineage_disjoint_across_splits", "holdout_known_to_system_authors", "holdout_known_to_participants", "overlap_audit_sha256", "historical_inventory_sha256"],
+      "properties": {
+        "labels_included": { "const": false },
+        "labels_hidden_from_all_lanes": { "const": true },
+        "ground_truth_custodian_separate": { "const": true },
+        "case_order_label_independent": { "const": true },
+        "lineage_disjoint_across_splits": { "const": true },
+        "holdout_known_to_system_authors": { "type": "boolean" },
+        "holdout_known_to_participants": { "type": "boolean" },
+        "overlap_audit_sha256": { "$ref": "#/$defs/sha256" },
+        "historical_inventory_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "claims": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fixture_only", "independent_holdout", "comparison_eligible", "production_evidence"],
+      "properties": {
+        "fixture_only": { "type": "boolean" },
+        "independent_holdout": { "type": "boolean" },
+        "comparison_eligible": { "type": "boolean" },
+        "production_evidence": { "const": false }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  }
+}
