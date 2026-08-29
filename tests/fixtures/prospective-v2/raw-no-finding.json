@@ -1,0 +1,5 @@
+{
+  "artifact_version": "secureflow-synthetic-raw-observation-v1",
+  "private_rationale": "No evidence observed in the bounded development-only review scope.",
+  "reviewed_scope": ["case-0006.ts"]
+}

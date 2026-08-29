@@ -1,0 +1,7 @@
+{
+  "artifact_version": "secureflow-synthetic-lane-v1",
+  "lane": "human-comparator",
+  "secureflow_available": false,
+  "reviewers": 3,
+  "time_limit_seconds_per_case": 600
+}

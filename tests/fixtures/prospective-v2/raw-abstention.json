@@ -1,0 +1,5 @@
+{
+  "artifact_version": "secureflow-synthetic-raw-observation-v1",
+  "private_rationale": "Evidence was insufficient to distinguish the trust boundary.",
+  "reviewed_scope": ["case-0005.ts"]
+}

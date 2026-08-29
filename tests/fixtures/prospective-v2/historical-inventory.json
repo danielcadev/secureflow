@@ -1,0 +1,5 @@
+{
+  "artifact_version": "secureflow-synthetic-historical-inventory-v1",
+  "known_fixture_families": ["filesystem-boundary", "tenant-boundary", "ownership-boundary"],
+  "real_holdout_inventory": false
+}

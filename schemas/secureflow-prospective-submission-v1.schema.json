@@ -4,15 +4,16 @@
   "title": "SecureFlow prospective per-case submission v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["contract_version", "submission_id", "protocol_id", "dataset_id", "lane_id", "case_id", "attempt_ordinal", "recorded_at", "raw_artifact_sha256", "outcome", "metrics", "claims"],
+  "required": ["contract_version", "submission_id", "protocol_id", "dataset_id", "lane_id", "participant_commitment_sha256", "case_id", "attempt_ordinal", "recorded_at", "raw_artifact_sha256", "outcome", "metrics", "claims"],
   "properties": {
     "contract_version": { "const": "secureflow-prospective-submission-v1" },
     "submission_id": { "type": "string", "pattern": "^sf_submission_[0-9a-f]{64}$" },
     "protocol_id": { "type": "string", "pattern": "^sf_protocol_v2_[0-9a-f]{64}$" },
     "dataset_id": { "type": "string", "pattern": "^sf_dataset_[0-9a-f]{64}$" },
     "lane_id": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "participant_commitment_sha256": { "$ref": "#/$defs/sha256" },
     "case_id": { "type": "string", "pattern": "^case-[0-9]{4}$" },
-    "attempt_ordinal": { "type": "integer", "minimum": 0 },
+    "attempt_ordinal": { "const": 0 },
     "recorded_at": { "type": "string", "format": "date-time" },
     "raw_artifact_sha256": { "$ref": "#/$defs/sha256" },
     "outcome": {
@@ -39,6 +40,15 @@
                 }
               }
             }
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["kind", "rationale_sha256", "reviewed_scope_sha256"],
+          "properties": {
+            "kind": { "const": "no-finding" },
+            "rationale_sha256": { "$ref": "#/$defs/sha256" },
+            "reviewed_scope_sha256": { "$ref": "#/$defs/sha256" }
           }
         },
         {

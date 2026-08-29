@@ -19,6 +19,8 @@ pub const MAX_DATASET_BYTES: u64 = 8 * 1024 * 1024;
 pub const MAX_PROTOCOL_BYTES: u64 = 4 * 1024 * 1024;
 pub const MAX_SUBMISSION_BYTES: u64 = 8 * 1024 * 1024;
 pub const MAX_CASE_BYTES: u64 = 8 * 1024 * 1024;
+pub const MAX_CONTROL_ARTIFACT_BYTES: u64 = 8 * 1024 * 1024;
+pub const MAX_RAW_ARTIFACT_BYTES: u64 = 16 * 1024 * 1024;
 const MIN_COMPARATIVE_HOLDOUT_CASES: u64 = 20;
 const MIN_COMPARATIVE_POSITIVE_CASES: u64 = 10;
 const MIN_COMPARATIVE_SAFE_CONTROLS: u64 = 10;
@@ -255,12 +257,12 @@ pub struct BlindingCommitmentV2 {
 pub struct ExecutionCommitmentV2 {
     pub attempt_ordinal_starts_at_zero: bool,
     pub default_attempts_per_case_lane: u64,
-    pub retries_only_for_predeclared_infrastructure_failure: bool,
+    pub retries_permitted: bool,
     pub retry_policy: String,
     pub timeout_is_operational_error: bool,
     pub crash_is_operational_error: bool,
     pub malformed_output_is_operational_error: bool,
-    pub operational_errors_never_count_as_clean: bool,
+    pub operational_errors_never_count_as_no_finding: bool,
     pub raw_artifacts_retained_by_hash: bool,
 }
 
@@ -270,9 +272,10 @@ pub struct OutcomePolicy {
     pub one_atomic_case_per_principal_invariant: bool,
     pub finding_requires_source_evidence_impact_and_repair: bool,
     pub outcome_kinds: Vec<OutcomeKind>,
-    pub findings_abstentions_errors_separate: bool,
+    pub all_outcome_kinds_separate: bool,
+    pub no_finding_is_a_negative_observation_pending_adjudication: bool,
     pub abstentions_are_neither_positive_nor_negative: bool,
-    pub errors_are_neither_findings_nor_clean_controls: bool,
+    pub errors_are_neither_findings_nor_no_findings: bool,
     pub positive_unit: PositiveUnit,
     pub safe_control_unit: SafeControlUnit,
 }
@@ -281,6 +284,7 @@ pub struct OutcomePolicy {
 #[serde(rename_all = "kebab-case")]
 pub enum OutcomeKind {
     Findings,
+    NoFinding,
     Abstention,
     OperationalError,
 }
@@ -303,7 +307,7 @@ pub struct MetricPolicy {
     pub required_metrics: Vec<RequiredMetric>,
     pub report_per_case: bool,
     pub report_per_lane: bool,
-    pub report_findings_abstentions_errors_separately: bool,
+    pub report_all_outcome_kinds_separately: bool,
     pub no_composite_winner_score: bool,
     pub integer_units_only: bool,
 }
@@ -363,6 +367,7 @@ pub struct SubmissionDraft {
     pub protocol_id: String,
     pub dataset_id: String,
     pub lane_id: String,
+    pub participant_commitment_sha256: String,
     pub case_id: String,
     pub attempt_ordinal: u64,
     pub recorded_at: String,
@@ -386,6 +391,10 @@ pub struct ProspectiveSubmission {
 pub enum SubmissionOutcome {
     Findings {
         findings: Vec<SubmissionFinding>,
+    },
+    NoFinding {
+        rationale_sha256: String,
+        reviewed_scope_sha256: String,
     },
     Abstention {
         reason_code: AbstentionReason,
@@ -541,6 +550,9 @@ pub fn bind_protocol_to_dataset(
     dataset: &FrozenDataset,
     dataset_bytes: &[u8],
 ) -> Result<(), ProspectiveV2Error> {
+    validate_document_size(dataset_bytes, MAX_DATASET_BYTES)?;
+    protocol.validate()?;
+    dataset.validate()?;
     let binding = &protocol.draft.dataset;
     let accounting = &dataset.draft.accounting;
     if binding.dataset_id != dataset.dataset_id
@@ -550,8 +562,23 @@ pub fn bind_protocol_to_dataset(
         || binding.holdout_vulnerable_cases != accounting.holdout_vulnerable_cases
         || binding.holdout_safe_controls != accounting.holdout_safe_controls
         || binding.ground_truth_commitment_sha256 != dataset.draft.ground_truth_commitment_sha256
+        || protocol.draft.artifacts.provenance_sha256 != dataset.draft.provenance_sha256
+        || protocol.draft.artifacts.license_manifest_sha256 != dataset.draft.license_manifest_sha256
+        || protocol.draft.artifacts.overlap_audit_sha256
+            != dataset.draft.anti_leakage.overlap_audit_sha256
     {
         return Err(ProspectiveV2Error::InvalidField("dataset binding"));
+    }
+    let frozen_at = OffsetDateTime::parse(&dataset.draft.frozen_at, &Rfc3339)
+        .map_err(|_| ProspectiveV2Error::InvalidField("dataset frozen_at"))?;
+    let sealed_at = OffsetDateTime::parse(&protocol.sealed_at, &Rfc3339)
+        .map_err(|_| ProspectiveV2Error::InvalidField("protocol sealed_at"))?;
+    let expires_at = OffsetDateTime::parse(&dataset.draft.authorization.expires_at, &Rfc3339)
+        .map_err(|_| ProspectiveV2Error::InvalidField("dataset authorization expiry"))?;
+    if frozen_at > sealed_at || sealed_at > expires_at {
+        return Err(ProspectiveV2Error::InvalidField(
+            "dataset/protocol authorization timeline",
+        ));
     }
     match protocol.draft.study_mode {
         StudyMode::SyntheticContractTest => {
@@ -576,6 +603,16 @@ pub fn verify_protocol_artifacts(
     environment: &[u8],
     capabilities: &[u8],
 ) -> Result<(), ProspectiveV2Error> {
+    protocol.validate()?;
+    for bytes in [
+        provenance,
+        licenses,
+        overlap_audit,
+        environment,
+        capabilities,
+    ] {
+        validate_document_size(bytes, MAX_CONTROL_ARTIFACT_BYTES)?;
+    }
     let expected = &protocol.draft.artifacts;
     for (field, actual, retained) in [
         (
@@ -611,10 +648,65 @@ pub fn verify_protocol_artifacts(
     Ok(())
 }
 
+/// Verify the retained randomization plan and both lane configurations.
+///
+/// The caller must retain and supply the exact bytes used at preregistration.
+pub fn verify_protocol_control_artifacts(
+    protocol: &ProspectiveProtocolV2,
+    randomization: &[u8],
+    secureflow_lane_configuration: &[u8],
+    human_lane_configuration: &[u8],
+) -> Result<(), ProspectiveV2Error> {
+    protocol.validate()?;
+    for bytes in [
+        randomization,
+        secureflow_lane_configuration,
+        human_lane_configuration,
+    ] {
+        validate_document_size(bytes, MAX_CONTROL_ARTIFACT_BYTES)?;
+    }
+    if sha256_bytes(randomization) != protocol.draft.blinding.randomization_commitment_sha256 {
+        return Err(ProspectiveV2Error::ArtifactHashMismatch(
+            "blinding.randomization_commitment_sha256",
+        ));
+    }
+    let secureflow = protocol
+        .draft
+        .lanes
+        .iter()
+        .find(|lane| lane.kind == LaneKind::SecureflowAssistedHuman)
+        .ok_or(ProspectiveV2Error::InvalidField("SecureFlow lane"))?;
+    let human = protocol
+        .draft
+        .lanes
+        .iter()
+        .find(|lane| lane.kind == LaneKind::HumanComparator)
+        .ok_or(ProspectiveV2Error::InvalidField("human comparator lane"))?;
+    for (field, bytes, expected) in [
+        (
+            "lanes.secureflow.lane_configuration_sha256",
+            secureflow_lane_configuration,
+            &secureflow.lane_configuration_sha256,
+        ),
+        (
+            "lanes.human.lane_configuration_sha256",
+            human_lane_configuration,
+            &human.lane_configuration_sha256,
+        ),
+    ] {
+        if sha256_bytes(bytes) != *expected {
+            return Err(ProspectiveV2Error::ArtifactHashMismatch(field));
+        }
+    }
+    Ok(())
+}
+
 pub fn seal_submission(
     bytes: &[u8],
     protocol: &ProspectiveProtocolV2,
     dataset: &FrozenDataset,
+    dataset_bytes: &[u8],
+    raw_artifact: &[u8],
 ) -> Result<ProspectiveSubmission, ProspectiveV2Error> {
     validate_document_size(bytes, MAX_SUBMISSION_BYTES)?;
     let draft: SubmissionDraft = serde_json::from_slice(bytes)?;
@@ -624,7 +716,8 @@ pub fn seal_submission(
         draft,
     };
     submission.submission_id = expected_prefixed_id("sf_submission_", &submission.draft);
-    submission.validate(protocol, dataset)?;
+    submission.validate(protocol, dataset, dataset_bytes)?;
+    verify_submission_raw_artifact(&submission, raw_artifact)?;
     Ok(submission)
 }
 
@@ -632,11 +725,99 @@ pub fn parse_submission(
     bytes: &[u8],
     protocol: &ProspectiveProtocolV2,
     dataset: &FrozenDataset,
+    dataset_bytes: &[u8],
+    raw_artifact: &[u8],
 ) -> Result<ProspectiveSubmission, ProspectiveV2Error> {
     validate_document_size(bytes, MAX_SUBMISSION_BYTES)?;
     let submission: ProspectiveSubmission = serde_json::from_slice(bytes)?;
-    submission.validate(protocol, dataset)?;
+    submission.validate(protocol, dataset, dataset_bytes)?;
+    verify_submission_raw_artifact(&submission, raw_artifact)?;
     Ok(submission)
+}
+
+pub fn verify_submission_raw_artifact(
+    submission: &ProspectiveSubmission,
+    raw_artifact: &[u8],
+) -> Result<(), ProspectiveV2Error> {
+    validate_document_size(raw_artifact, MAX_RAW_ARTIFACT_BYTES)?;
+    if sha256_bytes(raw_artifact) != submission.draft.raw_artifact_sha256 {
+        return Err(ProspectiveV2Error::ArtifactHashMismatch(
+            "submission.raw_artifact_sha256",
+        ));
+    }
+    Ok(())
+}
+
+pub fn verify_dataset_case_artifacts(
+    dataset: &FrozenDataset,
+    case_root: &Path,
+) -> Result<(), ProspectiveV2Error> {
+    dataset.validate()?;
+    verify_case_artifacts(case_root, &dataset.draft.cases)
+}
+
+/// Verify every public dataset commitment whose bytes may be opened before execution.
+///
+/// Ground truth is deliberately excluded: only its custodian-declared hash is retained
+/// until the independently controlled label-opening phase.
+pub fn verify_dataset_public_artifacts(
+    dataset: &FrozenDataset,
+    authorization_scope: &[u8],
+    reviewer_commitment: &[u8],
+    provenance: &[u8],
+    licenses: &[u8],
+    overlap_audit: &[u8],
+    historical_inventory: &[u8],
+) -> Result<(), ProspectiveV2Error> {
+    dataset.validate()?;
+    for bytes in [
+        authorization_scope,
+        reviewer_commitment,
+        provenance,
+        licenses,
+        overlap_audit,
+        historical_inventory,
+    ] {
+        validate_document_size(bytes, MAX_CONTROL_ARTIFACT_BYTES)?;
+    }
+    let expected = [
+        (
+            "authorization.scope_reference_sha256",
+            sha256_bytes(authorization_scope),
+            &dataset.draft.authorization.scope_reference_sha256,
+        ),
+        (
+            "authorization.reviewer_commitment_sha256",
+            sha256_bytes(reviewer_commitment),
+            &dataset.draft.authorization.reviewer_commitment_sha256,
+        ),
+        (
+            "provenance_sha256",
+            sha256_bytes(provenance),
+            &dataset.draft.provenance_sha256,
+        ),
+        (
+            "license_manifest_sha256",
+            sha256_bytes(licenses),
+            &dataset.draft.license_manifest_sha256,
+        ),
+        (
+            "anti_leakage.overlap_audit_sha256",
+            sha256_bytes(overlap_audit),
+            &dataset.draft.anti_leakage.overlap_audit_sha256,
+        ),
+        (
+            "anti_leakage.historical_inventory_sha256",
+            sha256_bytes(historical_inventory),
+            &dataset.draft.anti_leakage.historical_inventory_sha256,
+        ),
+    ];
+    for (field, actual, retained) in expected {
+        if actual != *retained {
+            return Err(ProspectiveV2Error::ArtifactHashMismatch(field));
+        }
+    }
+    Ok(())
 }
 
 impl FrozenDataset {
@@ -678,7 +859,14 @@ impl ProspectiveSubmission {
         &self,
         protocol: &ProspectiveProtocolV2,
         dataset: &FrozenDataset,
+        dataset_bytes: &[u8],
     ) -> Result<(), ProspectiveV2Error> {
+        bind_protocol_to_dataset(protocol, dataset, dataset_bytes)?;
+        let case = dataset
+            .draft
+            .cases
+            .iter()
+            .find(|case| case.case_id == self.draft.case_id);
         if self.contract_version != SUBMISSION_VERSION
             || !valid_prefixed_hash(&self.submission_id, "sf_submission_")
             || self.submission_id != expected_prefixed_id("sf_submission_", &self.draft)
@@ -689,15 +877,27 @@ impl ProspectiveSubmission {
                 .lanes
                 .iter()
                 .any(|lane| lane.lane_id == self.draft.lane_id)
-            || !dataset
-                .draft
-                .cases
-                .iter()
-                .any(|case| case.case_id == self.draft.case_id)
+            || !valid_sha256(&self.draft.participant_commitment_sha256)
+            || case.is_none()
+            || (protocol.draft.study_mode == StudyMode::PreregisteredHoldout
+                && case.is_some_and(|case| case.split != DatasetSplit::Holdout))
+            || self.draft.attempt_ordinal != 0
             || OffsetDateTime::parse(&self.draft.recorded_at, &Rfc3339).is_err()
             || !valid_sha256(&self.draft.raw_artifact_sha256)
         {
             return Err(ProspectiveV2Error::InvalidField("submission identity"));
+        }
+        let recorded_at = OffsetDateTime::parse(&self.draft.recorded_at, &Rfc3339)
+            .map_err(|_| ProspectiveV2Error::InvalidField("submission recorded_at"))?;
+        let sealed_at = OffsetDateTime::parse(&protocol.sealed_at, &Rfc3339)
+            .map_err(|_| ProspectiveV2Error::InvalidField("protocol sealed_at"))?;
+        let expires_at =
+            OffsetDateTime::parse(&dataset.draft.authorization.expires_at, &Rfc3339)
+                .map_err(|_| ProspectiveV2Error::InvalidField("dataset authorization expiry"))?;
+        if recorded_at < sealed_at || recorded_at > expires_at {
+            return Err(ProspectiveV2Error::InvalidField(
+                "submission authorization timeline",
+            ));
         }
         validate_submission_outcome(&self.draft.outcome)?;
         let metrics = &self.draft.metrics;
@@ -950,12 +1150,12 @@ fn validate_blinding(blinding: &BlindingCommitmentV2) -> Result<(), ProspectiveV
 fn validate_execution(execution: &ExecutionCommitmentV2) -> Result<(), ProspectiveV2Error> {
     if !execution.attempt_ordinal_starts_at_zero
         || execution.default_attempts_per_case_lane != 1
-        || !execution.retries_only_for_predeclared_infrastructure_failure
+        || execution.retries_permitted
         || !valid_text(&execution.retry_policy, 1_000)
         || !execution.timeout_is_operational_error
         || !execution.crash_is_operational_error
         || !execution.malformed_output_is_operational_error
-        || !execution.operational_errors_never_count_as_clean
+        || !execution.operational_errors_never_count_as_no_finding
         || !execution.raw_artifacts_retained_by_hash
     {
         return Err(ProspectiveV2Error::InvalidField("execution"));
@@ -971,6 +1171,7 @@ fn validate_outcome_policy(outcomes: &OutcomePolicy) -> Result<(), ProspectiveV2
         .collect::<BTreeSet<_>>();
     let required = BTreeSet::from([
         OutcomeKind::Findings,
+        OutcomeKind::NoFinding,
         OutcomeKind::Abstention,
         OutcomeKind::OperationalError,
     ]);
@@ -978,9 +1179,10 @@ fn validate_outcome_policy(outcomes: &OutcomePolicy) -> Result<(), ProspectiveV2
         || !outcomes.finding_requires_source_evidence_impact_and_repair
         || kinds != required
         || kinds.len() != outcomes.outcome_kinds.len()
-        || !outcomes.findings_abstentions_errors_separate
+        || !outcomes.all_outcome_kinds_separate
+        || !outcomes.no_finding_is_a_negative_observation_pending_adjudication
         || !outcomes.abstentions_are_neither_positive_nor_negative
-        || !outcomes.errors_are_neither_findings_nor_clean_controls
+        || !outcomes.errors_are_neither_findings_nor_no_findings
         || outcomes.positive_unit != PositiveUnit::PrincipalInvariant
         || outcomes.safe_control_unit != SafeControlUnit::Case
     {
@@ -1013,7 +1215,7 @@ fn validate_metric_policy(metrics: &MetricPolicy) -> Result<(), ProspectiveV2Err
         || actual.len() != metrics.required_metrics.len()
         || !metrics.report_per_case
         || !metrics.report_per_lane
-        || !metrics.report_findings_abstentions_errors_separately
+        || !metrics.report_all_outcome_kinds_separately
         || !metrics.no_composite_winner_score
         || !metrics.integer_units_only
     {
@@ -1081,6 +1283,14 @@ fn validate_submission_outcome(outcome: &SubmissionOutcome) -> Result<(), Prospe
                 {
                     return Err(ProspectiveV2Error::InvalidField("submission finding"));
                 }
+            }
+        }
+        SubmissionOutcome::NoFinding {
+            rationale_sha256,
+            reviewed_scope_sha256,
+        } => {
+            if !valid_sha256(rationale_sha256) || !valid_sha256(reviewed_scope_sha256) {
+                return Err(ProspectiveV2Error::InvalidField("submission no-finding"));
             }
         }
         SubmissionOutcome::Abstention {
@@ -1354,9 +1564,9 @@ mod tests {
                     .clone(),
             },
             artifacts: StudyArtifacts {
-                provenance_sha256: "b3".repeat(32),
-                license_manifest_sha256: "b4".repeat(32),
-                overlap_audit_sha256: "b5".repeat(32),
+                provenance_sha256: dataset.draft.provenance_sha256.clone(),
+                license_manifest_sha256: dataset.draft.license_manifest_sha256.clone(),
+                overlap_audit_sha256: dataset.draft.anti_leakage.overlap_audit_sha256.clone(),
                 environment_sha256: environment.clone(),
                 shared_capability_manifest_sha256: shared_capabilities.clone(),
             },
@@ -1367,7 +1577,7 @@ mod tests {
                     treatment: LaneTreatment::SecureflowAvailable,
                     equivalent_capability_group: "local-equivalent-v1".into(),
                     cohort_or_version: "three synthetic reviewers with SecureFlow".into(),
-                    lane_configuration_sha256: "b6".repeat(32),
+                    lane_configuration_sha256: sha256_bytes(b"secureflow lane configuration"),
                     shared_capability_manifest_sha256: shared_capabilities.clone(),
                     environment_sha256: environment.clone(),
                     time_limit_seconds_per_case: 600,
@@ -1381,7 +1591,7 @@ mod tests {
                     treatment: LaneTreatment::SecureflowUnavailable,
                     equivalent_capability_group: "local-equivalent-v1".into(),
                     cohort_or_version: "three synthetic reviewers without SecureFlow".into(),
-                    lane_configuration_sha256: "b7".repeat(32),
+                    lane_configuration_sha256: sha256_bytes(b"human lane configuration"),
                     shared_capability_manifest_sha256: shared_capabilities,
                     environment_sha256: environment,
                     time_limit_seconds_per_case: 600,
@@ -1408,7 +1618,7 @@ mod tests {
                 lane_identity_hidden_from_adjudicators: true,
                 submissions_close_before_labels_open: true,
                 randomized_case_order: true,
-                randomization_commitment_sha256: "b8".repeat(32),
+                randomization_commitment_sha256: sha256_bytes(b"randomization commitment"),
                 independent_primary_adjudicators: 2,
                 independent_tie_breaker_required: true,
                 adjudicators_independent_from_corpus_authors: true,
@@ -1419,13 +1629,14 @@ mod tests {
             execution: ExecutionCommitmentV2 {
                 attempt_ordinal_starts_at_zero: true,
                 default_attempts_per_case_lane: 1,
-                retries_only_for_predeclared_infrastructure_failure: true,
-                retry_policy: "No retry except a retained infrastructure failure before case analysis."
-                    .into(),
+                retries_permitted: false,
+                retry_policy:
+                    "No retries; a rerun requires a newly versioned and preregistered protocol."
+                        .into(),
                 timeout_is_operational_error: true,
                 crash_is_operational_error: true,
                 malformed_output_is_operational_error: true,
-                operational_errors_never_count_as_clean: true,
+                operational_errors_never_count_as_no_finding: true,
                 raw_artifacts_retained_by_hash: true,
             },
             outcomes: OutcomePolicy {
@@ -1433,12 +1644,14 @@ mod tests {
                 finding_requires_source_evidence_impact_and_repair: true,
                 outcome_kinds: vec![
                     OutcomeKind::Findings,
+                    OutcomeKind::NoFinding,
                     OutcomeKind::Abstention,
                     OutcomeKind::OperationalError,
                 ],
-                findings_abstentions_errors_separate: true,
+                all_outcome_kinds_separate: true,
+                no_finding_is_a_negative_observation_pending_adjudication: true,
                 abstentions_are_neither_positive_nor_negative: true,
-                errors_are_neither_findings_nor_clean_controls: true,
+                errors_are_neither_findings_nor_no_findings: true,
                 positive_unit: PositiveUnit::PrincipalInvariant,
                 safe_control_unit: SafeControlUnit::Case,
             },
@@ -1459,7 +1672,7 @@ mod tests {
                 ],
                 report_per_case: true,
                 report_per_lane: true,
-                report_findings_abstentions_errors_separately: true,
+                report_all_outcome_kinds_separately: true,
                 no_composite_winner_score: true,
                 integer_units_only: true,
             },
@@ -1520,6 +1733,13 @@ mod tests {
         let bytes = serde_json::to_vec(&protocol_draft(&dataset, &dataset_bytes)).unwrap();
         let mut protocol = seal_protocol(&bytes, Some("2026-08-29T13:00:00Z".into())).unwrap();
         bind_protocol_to_dataset(&protocol, &dataset, &dataset_bytes).unwrap();
+        verify_protocol_control_artifacts(
+            &protocol,
+            b"randomization commitment",
+            b"secureflow lane configuration",
+            b"human lane configuration",
+        )
+        .unwrap();
         assert_eq!(
             protocol.draft.claims.task_bounded_claim_status,
             TaskBoundedClaimStatus::NotEstablished
@@ -1528,6 +1748,64 @@ mod tests {
         protocol.draft.lanes[1].time_limit_seconds_per_case += 1;
         protocol.protocol_id = expected_protocol_id(&protocol);
         assert!(protocol.validate().is_err());
+    }
+
+    #[test]
+    fn protocol_rejects_cross_dataset_and_mutated_control_artifacts() {
+        let (dataset, dataset_bytes) = frozen_dataset();
+        let protocol_bytes = serde_json::to_vec(&protocol_draft(&dataset, &dataset_bytes)).unwrap();
+        let protocol = seal_protocol(&protocol_bytes, Some("2026-08-29T13:00:00Z".into())).unwrap();
+
+        let mut differently_serialized_dataset = dataset_bytes.clone();
+        differently_serialized_dataset.push(b'\n');
+        assert!(
+            bind_protocol_to_dataset(&protocol, &dataset, &differently_serialized_dataset).is_err()
+        );
+
+        let mut other_dataset = dataset.clone();
+        other_dataset.draft.provenance_sha256 = "ef".repeat(32);
+        other_dataset.dataset_id = expected_prefixed_id("sf_dataset_", &other_dataset.draft);
+        let other_dataset_bytes = serde_json::to_vec(&other_dataset).unwrap();
+        assert!(bind_protocol_to_dataset(&protocol, &other_dataset, &other_dataset_bytes).is_err());
+
+        assert!(
+            verify_protocol_artifacts(
+                &protocol,
+                b"mutated provenance",
+                b"license manifest",
+                b"overlap audit",
+                b"execution environment",
+                b"shared capabilities",
+            )
+            .is_err()
+        );
+        assert!(
+            verify_protocol_control_artifacts(
+                &protocol,
+                b"mutated randomization",
+                b"secureflow lane configuration",
+                b"human lane configuration",
+            )
+            .is_err()
+        );
+        assert!(
+            verify_protocol_control_artifacts(
+                &protocol,
+                b"randomization commitment",
+                b"mutated secureflow lane configuration",
+                b"human lane configuration",
+            )
+            .is_err()
+        );
+        assert!(
+            verify_protocol_control_artifacts(
+                &protocol,
+                b"randomization commitment",
+                b"secureflow lane configuration",
+                b"mutated human lane configuration",
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -1549,6 +1827,10 @@ mod tests {
                         SubmissionValidationStatus::PendingIndependentAdjudication,
                 }],
             },
+            SubmissionOutcome::NoFinding {
+                rationale_sha256: "c7".repeat(32),
+                reviewed_scope_sha256: "c5".repeat(32),
+            },
             SubmissionOutcome::Abstention {
                 reason_code: AbstentionReason::InsufficientEvidence,
                 rationale_sha256: "c2".repeat(32),
@@ -1563,10 +1845,11 @@ mod tests {
                 protocol_id: protocol.protocol_id.clone(),
                 dataset_id: dataset.dataset_id.clone(),
                 lane_id: "secureflow-assisted".into(),
+                participant_commitment_sha256: "c6".repeat(32),
                 case_id: "case-0005".into(),
                 attempt_ordinal: 0,
                 recorded_at: "2026-08-29T14:00:00Z".into(),
-                raw_artifact_sha256: "c4".repeat(32),
+                raw_artifact_sha256: sha256_bytes(b"retained raw submission artifact"),
                 outcome,
                 metrics: SubmissionMetrics {
                     analyst_active_time_ns: 1_000,
@@ -1585,7 +1868,86 @@ mod tests {
                 },
             };
             let bytes = serde_json::to_vec(&draft).unwrap();
-            seal_submission(&bytes, &protocol, &dataset).unwrap();
+            seal_submission(
+                &bytes,
+                &protocol,
+                &dataset,
+                &dataset_bytes,
+                b"retained raw submission artifact",
+            )
+            .unwrap();
         }
+    }
+
+    #[test]
+    fn preregistered_submissions_are_holdout_only_and_attempt_zero() {
+        let (mut dataset, _) = frozen_dataset();
+        dataset.draft.purpose = DatasetPurpose::PreregisteredHoldout;
+        dataset.draft.claims.fixture_only = false;
+        dataset.draft.claims.independent_holdout = true;
+        dataset.draft.claims.comparison_eligible = true;
+        dataset.draft.anti_leakage.holdout_known_to_system_authors = false;
+        dataset.draft.anti_leakage.holdout_known_to_participants = false;
+        dataset.dataset_id = expected_prefixed_id("sf_dataset_", &dataset.draft);
+        let dataset_bytes = serde_json::to_vec(&dataset).unwrap();
+        let mut protocol_draft = protocol_draft(&dataset, &dataset_bytes);
+        protocol_draft.study_mode = StudyMode::PreregisteredHoldout;
+        protocol_draft
+            .claims
+            .task_bounded_comparison_eligible_after_adjudication = true;
+        let protocol = seal_protocol(
+            &serde_json::to_vec(&protocol_draft).unwrap(),
+            Some("2026-08-29T13:00:00Z".into()),
+        )
+        .unwrap();
+        let raw = b"retained raw submission artifact";
+        let mut draft = SubmissionDraft {
+            protocol_id: protocol.protocol_id.clone(),
+            dataset_id: dataset.dataset_id.clone(),
+            lane_id: "human-comparator".into(),
+            participant_commitment_sha256: "d1".repeat(32),
+            case_id: "case-0001".into(),
+            attempt_ordinal: 0,
+            recorded_at: "2026-08-29T14:00:00Z".into(),
+            raw_artifact_sha256: sha256_bytes(raw),
+            outcome: SubmissionOutcome::NoFinding {
+                rationale_sha256: "d3".repeat(32),
+                reviewed_scope_sha256: "d2".repeat(32),
+            },
+            metrics: SubmissionMetrics {
+                analyst_active_time_ns: 1,
+                wall_clock_time_ns: 2,
+                cost_microusd: 0,
+                input_tokens: 0,
+                output_tokens: 0,
+                peak_rss_bytes: 1,
+            },
+            claims: SubmissionClaimBoundary {
+                result_is_independently_adjudicated: false,
+                task_bounded_comparative_claim_established: false,
+                global_superiority_claim_allowed: false,
+                human_replacement_claim_allowed: false,
+                production_safety_claim_allowed: false,
+            },
+        };
+        let bytes = serde_json::to_vec(&draft).unwrap();
+        assert!(seal_submission(&bytes, &protocol, &dataset, &dataset_bytes, raw).is_err());
+        draft.case_id = "case-0005".into();
+        draft.attempt_ordinal = 1;
+        let bytes = serde_json::to_vec(&draft).unwrap();
+        assert!(seal_submission(&bytes, &protocol, &dataset, &dataset_bytes, raw).is_err());
+        draft.attempt_ordinal = 0;
+        let bytes = serde_json::to_vec(&draft).unwrap();
+        seal_submission(&bytes, &protocol, &dataset, &dataset_bytes, raw).unwrap();
+        assert!(
+            seal_submission(
+                &bytes,
+                &protocol,
+                &dataset,
+                &dataset_bytes,
+                b"mutated raw submission artifact",
+            )
+            .is_err()
+        );
     }
 }

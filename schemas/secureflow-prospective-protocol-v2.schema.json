@@ -91,41 +91,42 @@
     },
     "execution": {
       "type": "object", "additionalProperties": false,
-      "required": ["attempt_ordinal_starts_at_zero", "default_attempts_per_case_lane", "retries_only_for_predeclared_infrastructure_failure", "retry_policy", "timeout_is_operational_error", "crash_is_operational_error", "malformed_output_is_operational_error", "operational_errors_never_count_as_clean", "raw_artifacts_retained_by_hash"],
+      "required": ["attempt_ordinal_starts_at_zero", "default_attempts_per_case_lane", "retries_permitted", "retry_policy", "timeout_is_operational_error", "crash_is_operational_error", "malformed_output_is_operational_error", "operational_errors_never_count_as_no_finding", "raw_artifacts_retained_by_hash"],
       "properties": {
         "attempt_ordinal_starts_at_zero": { "const": true },
         "default_attempts_per_case_lane": { "const": 1 },
-        "retries_only_for_predeclared_infrastructure_failure": { "const": true },
+        "retries_permitted": { "const": false },
         "retry_policy": { "type": "string", "minLength": 1, "maxLength": 1000 },
         "timeout_is_operational_error": { "const": true },
         "crash_is_operational_error": { "const": true },
         "malformed_output_is_operational_error": { "const": true },
-        "operational_errors_never_count_as_clean": { "const": true },
+        "operational_errors_never_count_as_no_finding": { "const": true },
         "raw_artifacts_retained_by_hash": { "const": true }
       }
     },
     "outcomes": {
       "type": "object", "additionalProperties": false,
-      "required": ["one_atomic_case_per_principal_invariant", "finding_requires_source_evidence_impact_and_repair", "outcome_kinds", "findings_abstentions_errors_separate", "abstentions_are_neither_positive_nor_negative", "errors_are_neither_findings_nor_clean_controls", "positive_unit", "safe_control_unit"],
+      "required": ["one_atomic_case_per_principal_invariant", "finding_requires_source_evidence_impact_and_repair", "outcome_kinds", "all_outcome_kinds_separate", "no_finding_is_a_negative_observation_pending_adjudication", "abstentions_are_neither_positive_nor_negative", "errors_are_neither_findings_nor_no_findings", "positive_unit", "safe_control_unit"],
       "properties": {
         "one_atomic_case_per_principal_invariant": { "const": true },
         "finding_requires_source_evidence_impact_and_repair": { "const": true },
-        "outcome_kinds": { "type": "array", "minItems": 3, "maxItems": 3, "uniqueItems": true, "items": { "enum": ["findings", "abstention", "operational-error"] } },
-        "findings_abstentions_errors_separate": { "const": true },
+        "outcome_kinds": { "type": "array", "minItems": 4, "maxItems": 4, "uniqueItems": true, "items": { "enum": ["findings", "no-finding", "abstention", "operational-error"] } },
+        "all_outcome_kinds_separate": { "const": true },
+        "no_finding_is_a_negative_observation_pending_adjudication": { "const": true },
         "abstentions_are_neither_positive_nor_negative": { "const": true },
-        "errors_are_neither_findings_nor_clean_controls": { "const": true },
+        "errors_are_neither_findings_nor_no_findings": { "const": true },
         "positive_unit": { "const": "principal-invariant" },
         "safe_control_unit": { "const": "case" }
       }
     },
     "metrics": {
       "type": "object", "additionalProperties": false,
-      "required": ["required_metrics", "report_per_case", "report_per_lane", "report_findings_abstentions_errors_separately", "no_composite_winner_score", "integer_units_only"],
+      "required": ["required_metrics", "report_per_case", "report_per_lane", "report_all_outcome_kinds_separately", "no_composite_winner_score", "integer_units_only"],
       "properties": {
         "required_metrics": { "type": "array", "minItems": 12, "maxItems": 12, "uniqueItems": true, "items": { "enum": ["validated-recall", "validated-precision", "false-positive-rate", "false-negative-count", "analyst-active-time-nanoseconds", "wall-clock-time-nanoseconds", "cost-microusd", "input-tokens", "output-tokens", "peak-rss-bytes", "abstention-count", "operational-error-count"] } },
         "report_per_case": { "const": true },
         "report_per_lane": { "const": true },
-        "report_findings_abstentions_errors_separately": { "const": true },
+        "report_all_outcome_kinds_separately": { "const": true },
         "no_composite_winner_score": { "const": true },
         "integer_units_only": { "const": true }
       }

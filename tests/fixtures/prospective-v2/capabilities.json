@@ -1,0 +1,5 @@
+{
+  "artifact_version": "secureflow-synthetic-capabilities-v1",
+  "shared_tools": ["text-editor", "local-source-reader"],
+  "secureflow_is_the_only_treatment": true
+}

@@ -1,0 +1,5 @@
+{
+  "artifact_version": "secureflow-synthetic-raw-observation-v1",
+  "error": "Synthetic timeout before an outcome could be produced.",
+  "stage": "analysis"
+}

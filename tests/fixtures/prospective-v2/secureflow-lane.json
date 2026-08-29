@@ -1,0 +1,7 @@
+{
+  "artifact_version": "secureflow-synthetic-lane-v1",
+  "lane": "secureflow-assisted",
+  "secureflow_available": true,
+  "reviewers": 3,
+  "time_limit_seconds_per_case": 600
+}

@@ -1,0 +1,6 @@
+{
+  "artifact_version": "secureflow-synthetic-authorization-scope-v1",
+  "scope": "Repository-owned development-only contract fixtures",
+  "network_targets": [],
+  "destructive_actions_allowed": false
+}
