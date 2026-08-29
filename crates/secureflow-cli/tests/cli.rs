@@ -89,6 +89,31 @@ fn validates_the_canonical_fixture() {
 }
 
 #[test]
+fn prints_current_and_frozen_run_schemas() {
+    let current = Command::new(binary())
+        .arg("schema")
+        .output()
+        .expect("schema command should start");
+    assert!(current.status.success());
+    let current: serde_json::Value = serde_json::from_slice(&current.stdout).expect("valid JSON");
+    assert_eq!(
+        current["properties"]["contract_version"]["const"],
+        "secureflow-run-v2"
+    );
+
+    let legacy = Command::new(binary())
+        .args(["schema", "--version", "v1"])
+        .output()
+        .expect("legacy schema command should start");
+    assert!(legacy.status.success());
+    let legacy: serde_json::Value = serde_json::from_slice(&legacy.stdout).expect("valid JSON");
+    assert_eq!(
+        legacy["properties"]["contract_version"]["const"],
+        "secureflow-run-v1"
+    );
+}
+
+#[test]
 fn lists_empty_fixture_as_machine_readable_json() {
     let output = Command::new(binary())
         .arg("list-findings")
@@ -1395,7 +1420,7 @@ fn scan_records_explicit_authorization_and_target_revision() {
         .expect("temporary target should be writable");
     std::fs::write(
         &engine,
-        "#!/bin/sh\nprintf '%s\\n' '{\"schema_version\":\"secure-json-v1\",\"engine_version\":\"test\",\"findings\":[]}'\n",
+        "#!/bin/sh\nprintf '%s\\n' '{\"schema_version\":\"secure-json-v1\",\"engine_version\":\"test\",\"document_type\":\"scan-report\",\"findings\":[],\"graph\":{\"scope\":\"finding-evidence\",\"nodes\":[],\"edges\":[],\"total_nodes\":47293,\"total_edges\":83344},\"report_fingerprint\":\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\",\"authorization\":{\"reviewer\":\"engine-must-not-own-scope\"},\"scope\":\"/home/operator/private-target\"}'\n",
     )
     .expect("temporary engine should be writable");
     let mut permissions = std::fs::metadata(&engine)
@@ -1442,8 +1467,20 @@ fn scan_records_explicit_authorization_and_target_revision() {
     );
     assert_eq!(value["target"]["revision"]["kind"], "git");
     assert_eq!(value["target"]["revision"]["value"], revision);
+    assert_eq!(value["engine"]["version"], "test");
+    assert_eq!(
+        value["engine"]["report_fingerprint"],
+        "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    );
+    assert_eq!(value["engine"]["graph"]["scope"], "finding-evidence");
+    assert_eq!(value["engine"]["graph"]["nodes"], 0);
+    assert_eq!(value["engine"]["graph"]["total_nodes"], 47293);
+    let serialized = serde_json::to_string(&value).expect("manifest should serialize");
+    assert!(!serialized.contains("engine-must-not-own-scope"));
+    assert!(!serialized.contains("/home/operator/private-target"));
     assert_ne!(value["created_at"], value["completed_at"]);
-    validate_with_schema("secureflow-run-v1.schema.json", &value);
+    assert_eq!(value["contract_version"], "secureflow-run-v2");
+    validate_with_schema("secureflow-run-v2.schema.json", &value);
 
     std::fs::remove_dir_all(root).expect("temporary target should be removable");
     for path in [&engine, &report, &manifest] {

@@ -130,7 +130,12 @@ outperforms a human researcher.
 
 The current CLI runs an explicitly selected Secure Engine binary, retains its
 `secure-json-v1` output without reserializing it, and generates a
-`secureflow-run-v1` manifest. Authorization acknowledgement is mandatory:
+`secureflow-run-v2` manifest. The manifest preserves the Engine version, report
+fingerprint, compact/full graph accounting, finding and evidence states,
+evidence calibration, deterministic Engine abstentions, source/sink locations,
+and limitations. Engine abstentions remain separate from candidates and human
+abstentions. SecureFlow—not the Engine report—owns the authorization scope and
+human decision. Authorization acknowledgement is mandatory:
 
 ```bash
 cargo run -p secureflow -- scan \
@@ -142,6 +147,28 @@ cargo run -p secureflow -- scan \
   --manifest-output /tmp/secureflow-run.json \
   /path/to/target
 ```
+
+The Engine's default graph projection is retained unchanged. The explicit
+`--full-engine-graph` option requires the selected Engine to return a complete
+graph. SecureFlow first uses the public RC2-compatible invocation; if a newer
+Engine explicitly returns a compact graph, it retries once with the bounded
+full-graph capability. That mode raises the aggregate stdout+stderr allowance
+to 256 MiB and can materially increase storage:
+
+```bash
+cargo run -p secureflow -- scan \
+  --binary /path/to/secure \
+  --authorized \
+  --authorization-reviewer "Daniel" \
+  --full-engine-graph \
+  --output /tmp/secureflow-full-report.json \
+  --manifest-output /tmp/secureflow-full-run.json \
+  /path/to/target
+```
+
+See [`docs/secure-engine-adapter.md`](./docs/secure-engine-adapter.md) for the
+exact contract boundary, compatibility policy, failure semantics, and retained
+evidence.
 
 On Linux, the CLI requires Bubblewrap by default, with a private network and a
 read-only host filesystem. The run retains the hash of `/usr/bin/bwrap`. Only
@@ -516,11 +543,12 @@ recorded authorization expiry. Binaries larger than 1 GiB are rejected. On
 Unix, derived artifacts are created with mode `0600`, and new ledger directories
 use `0700`.
 
-The target uses the `secureflow-target-sha256-v2` fingerprint: it distinguishes
+The target uses the `secureflow-target-sha256-v3` fingerprint: it distinguishes
 files from directories, prefixes lengths to prevent ambiguous serialization,
-excludes `.git`, and rejects symlinks. Hashing fails closed above 250,000 files,
-500,000 entries, 16 GiB total, 2 GiB per file, or 256 directory levels. Non-UTF-8
-paths are also rejected to prevent ambiguous fingerprints.
+excludes `.git` and root or nested `node_modules` trees, and rejects other
+symlinks. Hashing fails closed above 250,000 files, 500,000 entries, 16 GiB
+total, 2 GiB per file, or 256 directory levels. Non-UTF-8 paths are also
+rejected to prevent ambiguous fingerprints.
 
 ## Current architecture
 
@@ -529,7 +557,8 @@ contracts, not physical copies. Secure Engine, Secure Skill, Secure Bench, CMS
 Nova, and Mitiquete remain in their own directories with their histories intact.
 
 The first contract is
-[`secureflow-run-v1`](./docs/contracts/secureflow-run-v1.md).
+[`secureflow-run-v2`](./docs/contracts/secureflow-run-v2.md), while the frozen
+[`secureflow-run-v1`](./docs/contracts/secureflow-run-v1.md) remains readable.
 
 ## Target flow
 
@@ -563,7 +592,9 @@ supported by
 [`docs/demo.md`](./docs/demo.md), and the allowed CV/paper claim matrix is in
 [`docs/evidence-and-claims.md`](./docs/evidence-and-claims.md). The
 requirement-to-evidence matrix and completion audit are in
-[`docs/completion-audit.md`](./docs/completion-audit.md).
+[`docs/completion-audit.md`](./docs/completion-audit.md). SecureFlow's own
+assets, trust boundaries, abuse cases, and residual risks are documented in the
+[`threat model`](./docs/threat-model.md).
 
 ## Implementation status
 

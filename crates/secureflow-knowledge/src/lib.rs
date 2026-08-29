@@ -783,6 +783,7 @@ fn hash_field(hasher: &mut Sha256, value: &str) {
 fn evidence_kind_label(kind: EvidenceKind) -> &'static str {
     match kind {
         EvidenceKind::Source => "source",
+        EvidenceKind::Receiver => "receiver",
         EvidenceKind::Transform => "transform",
         EvidenceKind::Guard => "guard",
         EvidenceKind::Sanitizer => "sanitizer",
@@ -973,6 +974,8 @@ mod tests {
     fn record() -> KnowledgeRecordV2 {
         let location = Location {
             path: "src/app.ts".into(),
+            start_byte: None,
+            end_byte: None,
             start_line: 1,
             start_column: 1,
             end_line: Some(1),

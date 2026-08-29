@@ -1,9 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Keep every compiler invocation and the recorded provenance on the repository's
-# release toolchain, even when the host has a different rustup default.
-export RUSTUP_TOOLCHAIN=1.92.0
+required_toolchain=1.92.0
+
+# `RUSTUP_TOOLCHAIN` has no effect for a distribution Cargo binary. A release
+# therefore requires rustup and invokes the pinned toolchain explicitly.
+if ! command -v rustup >/dev/null 2>&1; then
+  echo "release requires rustup with toolchain ${required_toolchain}; refusing host Cargo" >&2
+  exit 1
+fi
+if ! rustup run "$required_toolchain" rustc --version >/dev/null 2>&1; then
+  echo "release requires installed Rust toolchain ${required_toolchain}" >&2
+  exit 1
+fi
+cargo_cmd=(rustup run "$required_toolchain" cargo)
+rustc_cmd=(rustup run "$required_toolchain" rustc)
+actual_rustc=$("${rustc_cmd[@]}" --version | awk '{print $2}')
+actual_cargo=$("${cargo_cmd[@]}" --version | awk '{print $2}')
+if [[ "$actual_rustc" != "$required_toolchain" || "$actual_cargo" != "$required_toolchain" ]]; then
+  echo "release toolchain mismatch: rustc=$actual_rustc cargo=$actual_cargo expected=$required_toolchain" >&2
+  exit 1
+fi
 
 if [[ $# -ne 1 ]]; then
   echo "usage: $0 OUTPUT_DIRECTORY" >&2
@@ -33,10 +50,10 @@ mkdir -p "$release_parent"
 release_stage=$(mktemp -d "$release_parent/.secureflow-release.XXXXXX")
 trap 'if [[ -n "${release_stage:-}" && -d "$release_stage" ]]; then find "$release_stage" -type f -delete; find "$release_stage" -depth -type d -empty -delete; fi' EXIT
 
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets --locked -- -D warnings
-cargo test --workspace --locked
-cargo build --release --locked -p secureflow
+"${cargo_cmd[@]}" fmt --all -- --check
+"${cargo_cmd[@]}" clippy --workspace --all-targets --locked -- -D warnings
+"${cargo_cmd[@]}" test --workspace --locked
+"${cargo_cmd[@]}" build --release --locked -p secureflow
 
 mkdir -p "$release_stage/$release_name/bin" "$release_stage/$release_name/evidence"
 install -m 0755 target/release/secureflow "$release_stage/$release_name/bin/secureflow"
@@ -46,20 +63,20 @@ python3 scripts/generate-sbom.py --output "$release_stage/$release_name/evidence
 git archive --format=tar --prefix="$release_name/source/" HEAD > "$release_stage/source.tar"
 tar -xf "$release_stage/source.tar" -C "$release_stage"
 
-python3 - "$release_stage/$release_name/evidence/build-provenance.json" "$release_commit" "$release_epoch" <<'PY'
+python3 - "$release_stage/$release_name/evidence/build-provenance.json" "$release_commit" "$release_epoch" "$required_toolchain" <<'PY'
 import json
 import pathlib
 import platform
 import subprocess
 import sys
 
-output, commit, epoch = sys.argv[1:]
+output, commit, epoch, toolchain = sys.argv[1:]
 data = {
     "contract_version": "secureflow-build-provenance-v1",
     "git_commit": commit,
     "source_date_epoch": int(epoch),
-    "rustc": subprocess.check_output(["rustc", "--version", "--verbose"], text=True),
-    "cargo": subprocess.check_output(["cargo", "--version", "--verbose"], text=True),
+    "rustc": subprocess.check_output(["rustup", "run", toolchain, "rustc", "--version", "--verbose"], text=True),
+    "cargo": subprocess.check_output(["rustup", "run", toolchain, "cargo", "--version", "--verbose"], text=True),
     "platform": platform.platform(),
     "network_used_by_secureflow": False,
 }

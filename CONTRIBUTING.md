@@ -8,11 +8,15 @@ authorized-use, human-validation model.
 The repository pins Rust 1.92. Run the same gates as CI:
 
 ```bash
-cargo +1.92.0 fmt --all -- --check
-cargo +1.92.0 clippy --workspace --all-targets --locked -- -D warnings
-cargo +1.92.0 test --workspace --locked
-cargo +1.92.0 audit
+rustup run 1.92.0 cargo fmt --all -- --check
+rustup run 1.92.0 cargo clippy --workspace --all-targets --locked -- -D warnings
+rustup run 1.92.0 cargo test --workspace --locked
+rustup run 1.92.0 cargo audit
 ```
+
+If Rust was installed through a distribution package rather than rustup, use
+the pinned CI container or install the pinned rustup toolchain. The local
+release script fails closed instead of silently using a different compiler.
 
 Changes to JSON contracts must update the corresponding schema, semantic
 validator, positive test, and tamper/negative test. New benchmark data must
@@ -37,7 +41,9 @@ state its split, provenance, license, units, failures, and claim limitations.
 Describe the threat model or invariant affected, tests executed, compatibility
 impact, and any residual risk. Keep external projects and their histories out
 of this repository; integrations should use versioned contracts or explicit
-adapters with compatible licensing.
+adapters with compatible licensing. Update
+[`docs/threat-model.md`](./docs/threat-model.md) when a change adds or alters a
+trust boundary.
 
 Report suspected vulnerabilities privately as described in
 [`SECURITY.md`](./SECURITY.md).

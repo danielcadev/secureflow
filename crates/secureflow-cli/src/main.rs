@@ -2,8 +2,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use secureflow_ai as ai;
 use secureflow_bench_adapter as bench_adapter;
 use secureflow_engine_adapter::{
-    EngineConfig, MAX_ENGINE_TIMEOUT_SECONDS, SandboxMode, project_findings, run, sha256_bytes,
-    sha256_target,
+    EngineConfig, MAX_ENGINE_TIMEOUT_SECONDS, SandboxMode, run, sha256_bytes, sha256_target,
 };
 use secureflow_knowledge::catalog::{
     Catalog, CatalogDelta, CatalogImportResult, CatalogProfile, CatalogSnapshot, CatalogSource,
@@ -55,7 +54,8 @@ use std::time::Duration;
 use thiserror::Error;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
-const RUN_SCHEMA: &str = include_str!("../../../schemas/secureflow-run-v1.schema.json");
+const RUN_SCHEMA_V1: &str = include_str!("../../../schemas/secureflow-run-v1.schema.json");
+const RUN_SCHEMA: &str = include_str!("../../../schemas/secureflow-run-v2.schema.json");
 const KNOWLEDGE_SCHEMA_V1: &str =
     include_str!("../../../schemas/secureflow-knowledge-record-v1.schema.json");
 const KNOWLEDGE_SCHEMA: &str =
@@ -118,7 +118,11 @@ struct Cli {
 #[derive(Debug, Subcommand)]
 enum Command {
     /// Print the normative SecureFlow run schema.
-    Schema,
+    Schema {
+        /// Contract schema to print. v2 is the current output contract.
+        #[arg(long, value_enum, default_value_t = RunSchemaVersion::V2)]
+        version: RunSchemaVersion,
+    },
     /// Print the normative SecureFlow knowledge-record schema.
     KnowledgeSchema {
         /// Contract version to print; v2 is the current write format.
@@ -270,11 +274,11 @@ enum Command {
         #[arg(long)]
         output: PathBuf,
     },
-    /// Validate a local secureflow-run-v1 manifest.
+    /// Validate a local secureflow-run-v1 or secureflow-run-v2 manifest.
     ValidateRun { path: PathBuf },
     /// Export a validated run as a local Markdown report.
     ExportReport {
-        /// Input secureflow-run-v1 manifest.
+        /// Input secureflow-run-v1 or secureflow-run-v2 manifest.
         #[arg(long)]
         manifest: PathBuf,
         /// Markdown output path.
@@ -286,7 +290,7 @@ enum Command {
     },
     /// List findings from a validated run manifest.
     ListFindings {
-        /// Input secureflow-run-v1 manifest.
+        /// Input secureflow-run-v1 or secureflow-run-v2 manifest.
         manifest: PathBuf,
         /// Optional human-decision filter.
         #[arg(long, value_enum)]
@@ -297,14 +301,14 @@ enum Command {
     },
     /// Show one complete canonical finding as JSON.
     ShowFinding {
-        /// Input secureflow-run-v1 manifest.
+        /// Input secureflow-run-v1 or secureflow-run-v2 manifest.
         manifest: PathBuf,
         /// Stable finding ID.
         finding_id: String,
     },
     /// Import reviewed findings into a local append-only JSONL ledger.
     KnowledgeImport {
-        /// Input secureflow-run-v1 manifest.
+        /// Input secureflow-run-v1 or secureflow-run-v2 manifest.
         #[arg(long)]
         manifest: PathBuf,
         /// Local knowledge ledger path.
@@ -824,7 +828,7 @@ enum Command {
     },
     /// Apply one explicit human review decision and write a new manifest.
     ReviewRun {
-        /// Input secureflow-run-v1 manifest.
+        /// Input secureflow-run-v1 or secureflow-run-v2 manifest.
         #[arg(long)]
         manifest: PathBuf,
         /// Stable finding ID to review.
@@ -877,7 +881,7 @@ enum Command {
         /// Raw secure-json-v1 output path.
         #[arg(long)]
         output: PathBuf,
-        /// secureflow-run-v1 manifest output path.
+        /// secureflow-run-v2 manifest output path.
         #[arg(long)]
         manifest_output: PathBuf,
         /// Process timeout in seconds.
@@ -886,6 +890,9 @@ enum Command {
         /// Linux process isolation policy. Required is the secure default.
         #[arg(long, value_enum, default_value_t = ScanSandbox::Required)]
         sandbox: ScanSandbox,
+        /// Require the Engine to return a complete evidence graph.
+        #[arg(long)]
+        full_engine_graph: bool,
     },
 }
 
@@ -923,6 +930,12 @@ enum OutputFormat {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
 enum KnowledgeSchemaVersion {
+    V1,
+    V2,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+enum RunSchemaVersion {
     V1,
     V2,
 }
@@ -1183,8 +1196,14 @@ fn main() -> ExitCode {
 
 fn execute(cli: Cli) -> Result<(), CliError> {
     match cli.command {
-        Command::Schema => {
-            print!("{RUN_SCHEMA}");
+        Command::Schema { version } => {
+            print!(
+                "{}",
+                match version {
+                    RunSchemaVersion::V1 => RUN_SCHEMA_V1,
+                    RunSchemaVersion::V2 => RUN_SCHEMA,
+                }
+            );
             Ok(())
         }
         Command::KnowledgeSchema { version } => {
@@ -1584,8 +1603,8 @@ fn execute(cli: Cli) -> Result<(), CliError> {
             Ok(())
         }
         Command::ValidateRun { path } => {
-            load_manifest(&path)?;
-            println!("valid secureflow-run-v1: {}", path.display());
+            let (_, manifest) = load_manifest(&path)?;
+            println!("valid {}: {}", manifest.contract_version, path.display());
             Ok(())
         }
         Command::ExportReport {
@@ -2857,6 +2876,7 @@ fn execute(cli: Cli) -> Result<(), CliError> {
             manifest_output,
             timeout_seconds,
             sandbox,
+            full_engine_graph,
         } => {
             if !authorized {
                 return Err(CliError::AuthorizationRequired);
@@ -2933,6 +2953,9 @@ fn execute(cli: Cli) -> Result<(), CliError> {
             config.sandbox = sandbox.into();
             config.timeout = Duration::from_secs(timeout_seconds);
             config.max_cpu_seconds = timeout_seconds.saturating_add(1);
+            if full_engine_graph {
+                config.request_full_graph();
+            }
             let created_at = created.format(&Rfc3339)?;
             let target_hash =
                 sha256_target(&config.target).map_err(|source| CliError::TargetHash {
@@ -2963,8 +2986,9 @@ fn execute(cli: Cli) -> Result<(), CliError> {
                 return Err(CliError::AuthorizationExpired);
             }
             let completed_at = completed.format(&Rfc3339)?;
-            let report = result.report_json()?;
-            let mut findings = project_findings(&report)?;
+            let imported_report = result.import_report()?;
+            let mut findings = imported_report.findings;
+            let engine_abstentions = imported_report.abstentions;
             prioritize_findings(&mut findings);
             let duplicate_count = deduplicate_findings(&mut findings);
             let label = config
@@ -2997,14 +3021,12 @@ fn execute(cli: Cli) -> Result<(), CliError> {
                 },
                 engine: EngineProvenance {
                     name: "secure-engine".into(),
-                    version: report
-                        .get("engine_version")
-                        .and_then(serde_json::Value::as_str)
-                        .unwrap_or("unknown")
-                        .into(),
+                    version: imported_report.engine_version,
                     binary_sha256: result.binary_sha256.clone(),
                     report_schema: ENGINE_REPORT_SCHEMA.into(),
                     report_sha256: result.report_sha256(),
+                    report_fingerprint: Some(imported_report.report_fingerprint),
+                    graph: imported_report.graph,
                     sandbox_name: result.sandboxed.then(|| "bubblewrap".into()),
                     sandbox_binary_sha256: result.sandbox_binary_sha256.clone(),
                 },
@@ -3027,6 +3049,7 @@ fn execute(cli: Cli) -> Result<(), CliError> {
                     ai_output_tokens: 0,
                 }),
                 findings,
+                engine_abstentions,
                 evaluation: Some(EvaluationReference {
                     harness: secureflow_model::EvaluationHarness::LocalFixture,
                     harness_version: None,
@@ -3040,10 +3063,11 @@ fn execute(cli: Cli) -> Result<(), CliError> {
             let manifest_bytes = serde_json::to_vec_pretty(&manifest)?;
             write_atomic(&manifest_output, &manifest_bytes)?;
             println!(
-                "run completed: report={} manifest={} candidates={} exit={} timed_out={} binary_sha256={} configuration_sha256={} sandboxed={} sandbox_binary_sha256={}",
+                "run completed: report={} manifest={} candidates={} engine_abstentions={} exit={} timed_out={} binary_sha256={} configuration_sha256={} sandboxed={} sandbox_binary_sha256={}",
                 output.display(),
                 manifest_output.display(),
                 manifest.findings.len(),
+                manifest.engine_abstentions.len(),
                 result.status,
                 result.timed_out,
                 result.binary_sha256,
@@ -3279,6 +3303,23 @@ fn render_markdown_report(manifest: &RunManifest, include_human_rationale: bool)
         "- Raw report SHA-256: `{}`\n\n",
         markdown_code(&manifest.engine.report_sha256)
     ));
+    if let Some(fingerprint) = &manifest.engine.report_fingerprint {
+        output.push_str(&format!(
+            "- Engine report fingerprint: `{}`\n",
+            markdown_code(fingerprint)
+        ));
+    }
+    if let Some(graph) = &manifest.engine.graph {
+        output.push_str(&format!(
+            "- Engine graph: `{}` / {} serialized nodes / {} serialized edges / {} total nodes / {} total edges\n",
+            engine_graph_scope_label(graph.scope),
+            graph.nodes,
+            graph.edges,
+            graph.total_nodes,
+            graph.total_edges
+        ));
+    }
+    output.push('\n');
 
     output.push_str("## Accounting\n\n");
     output.push_str("| Candidates | Validated | Rejected | Abstained | Pending | AI calls | AI input tokens | AI output tokens |\n");
@@ -3318,6 +3359,12 @@ fn render_markdown_report(manifest: &RunManifest, include_human_rationale: bool)
             markdown_code(&location_label(&finding.sink_location)),
             markdown_text(&finding.invariant),
         ));
+        if let Some(state) = &finding.engine_verification_state {
+            output.push_str(&format!(
+                "- Engine evidence state: `{}`\n",
+                markdown_code(state)
+            ));
+        }
         output.push_str(&format!(
             "- AI advisory: `{}`",
             ai_status_label(finding.ai_validation.status)
@@ -3377,6 +3424,13 @@ fn authorization_basis_label(value: AuthorizationBasis) -> &'static str {
     }
 }
 
+fn engine_graph_scope_label(value: secureflow_model::EngineGraphScope) -> &'static str {
+    match value {
+        secureflow_model::EngineGraphScope::Full => "full",
+        secureflow_model::EngineGraphScope::FindingEvidence => "finding-evidence",
+    }
+}
+
 fn scan_authorization_basis_label(value: ScanAuthorizationBasis) -> &'static str {
     match value {
         ScanAuthorizationBasis::RepositoryOwner => "repository-owner",
@@ -3402,6 +3456,7 @@ fn evidence_kind_label(value: secureflow_model::EvidenceKind) -> &'static str {
     use secureflow_model::EvidenceKind;
     match value {
         EvidenceKind::Source => "source",
+        EvidenceKind::Receiver => "receiver",
         EvidenceKind::Transform => "transform",
         EvidenceKind::Guard => "guard",
         EvidenceKind::Sanitizer => "sanitizer",

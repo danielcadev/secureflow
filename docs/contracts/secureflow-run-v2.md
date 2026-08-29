@@ -1,13 +1,8 @@
-# `secureflow-run-v1` contract
-
-> **Frozen compatibility contract.** Existing v1 manifests remain readable,
-> but new scans emit [`secureflow-run-v2`](./secureflow-run-v2.md). V2-only
-> Engine graph, finding, evidence, and byte-location fields are rejected when
-> a manifest declares v1.
+# `secureflow-run-v2` contract
 
 ## Purpose
 
-`secureflow-run-v1` is the local manifest for a SecureFlow run. It joins the
+`secureflow-run-v2` is the local manifest for a SecureFlow run. It joins the
 authorized scope, analysis provenance, produced artifacts, deterministic
 candidates, prioritization, and human decision.
 
@@ -15,7 +10,7 @@ The contract does not contain complete source code. Exported locations are
 repository-relative and artifacts are referenced by hash.
 
 The normative schema is
-[`schemas/secureflow-run-v1.schema.json`](../../schemas/secureflow-run-v1.schema.json).
+[`schemas/secureflow-run-v2.schema.json`](../../schemas/secureflow-run-v2.schema.json).
 
 ## Normative principles
 
@@ -28,9 +23,12 @@ The normative schema is
 6. The human researcher retains superior contextual judgment and final
    authority. SecureFlow cannot replace that authority and must abstain when
    evidence is insufficient.
-7. `rejected` and `abstained` are valid outcomes, not errors.
+7. `rejected`, human `abstained`, and deterministic Engine abstentions are
+   valid outcomes, not errors.
 8. Every material claim points to a location, artifact, or hash.
 9. Exported paths are relative, POSIX, and contain no `..`.
+   When Engine byte offsets are available, locations preserve them together
+   with line/column spans.
 10. A scanner failure, timeout, or invalid report never becomes "clean."
 11. Secure Bench evaluation remains separate from production decisions and
     cannot inject expectations into analysis.
@@ -66,16 +64,23 @@ Its state is auxiliary and never replaces human review.
 
 - `run_id` identifies the run.
 - `target.root_sha256` identifies analyzed tree bytes through
-  `secureflow-target-sha256-v2`. The canonical stream separates type, count,
+  `secureflow-target-sha256-v3`. The canonical stream separates type, count,
   and total bytes, and length-prefixes paths and content so distinct trees do
-  not share the same pre-hash serialization. `.git` is excluded and every
-  symlink fails closed.
+  not share the same pre-hash serialization. `.git` and root or nested
+  `node_modules` trees are excluded; every other symlink fails closed.
 - `target.revision` identifies the commit or snapshot when available.
 - `engine.binary_sha256` identifies the exact binary.
 - `engine.report_sha256` identifies the received report.
+- `engine.report_fingerprint` preserves the Engine's deterministic semantic
+  report identity separately from the byte hash, which includes retained raw
+  serialization details.
+- `engine.graph` records whether the raw report retained a `full` or
+  `finding-evidence` graph, its serialized node/edge counts, and the complete
+  internal totals reported by the Engine.
 - `configuration_sha256` identifies the effective configuration.
-- In the current adapter, that hash binds arguments, timeout, output limit,
-  memory, CPU, and descriptor limits. It does not prove filesystem isolation.
+- In the current adapter, that hash binds arguments, timeout, aggregate output
+  limit, full-graph requirement, memory, CPU, and descriptor limits. It does
+  not prove filesystem isolation.
 - The CLI checks target and binary hashes before and after the process. If
   either changes, it fails without writing the report or manifest. This is
   fail-closed detection, not a transactional snapshot; a change reverted
@@ -99,6 +104,27 @@ supports review; it is neither a risk score nor a human decision. Exact
 duplicates within a run are removed after ordering, and
 `summary.duplicate_count` records how many were dropped. No equivalence across
 different engines is asserted.
+
+Engine finding identifiers, `verification_state`, and the versioned
+`secure-evidence-state-v1` value are retained under `engine_*` fields. They are
+scanner evidence states only. Even `manually-validated`, if received from an
+external report, does not change `human_review.decision`, which begins as
+`pending` and remains SecureFlow-owned.
+
+When supplied by the Engine, `engine_calibration` retains the versioned
+`secure-evidence-calibration-v1` assessment of reachability, attacker control,
+actor identity, trust boundary, security controls, filesystem identity, and
+observable impact. A `proven` field means only that the deterministic evidence
+supports that individual dimension; it does not validate the whole finding.
+
+Top-level `engine_abstentions` preserve deterministic paths for which the
+Engine explicitly declined to emit a finding. They have stable identifiers,
+locations, an evidence path, calibration, limitations, and a fingerprint.
+They never enter `findings`, do not increment `summary.candidate_count`, and do
+not increment the human `summary.abstained_count`. This prevents unresolved
+technical evidence from being silently promoted or confused with a researcher's
+review decision. A finding carrying `disposition = explicit-abstention` is a
+contract violation and fails validation rather than being silently reclassified.
 
 ## Privacy policy
 
@@ -128,7 +154,7 @@ reader maintains strict v1 compatibility without silent migration.
 
 ```json
 {
-  "contract_version": "secureflow-run-v1",
+  "contract_version": "secureflow-run-v2",
   "run_id": "sf_run_01JEXAMPLE0000000000000000",
   "status": "completed",
   "created_at": "2026-08-23T03:00:00Z",
@@ -148,7 +174,15 @@ reader maintains strict v1 compatibility without silent migration.
     "version": "0.1.10-rc2",
     "binary_sha256": "<sha256>",
     "report_schema": "secure-json-v1",
-    "report_sha256": "<sha256>"
+    "report_sha256": "<sha256>",
+    "report_fingerprint": "<sha256>",
+    "graph": {
+      "scope": "finding-evidence",
+      "nodes": 2,
+      "edges": 1,
+      "total_nodes": 47293,
+      "total_edges": 83344
+    }
   },
   "phases": {
     "deterministic": "completed",

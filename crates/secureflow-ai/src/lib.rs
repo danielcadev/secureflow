@@ -820,6 +820,8 @@ mod tests {
     fn manifest() -> RunManifest {
         let location = Location {
             path: "src/handler.ts".into(),
+            start_byte: None,
+            end_byte: None,
             start_line: 10,
             start_column: 2,
             end_line: None,
@@ -849,6 +851,8 @@ mod tests {
                 binary_sha256: "b".repeat(64),
                 report_schema: secureflow_model::ENGINE_REPORT_SCHEMA.into(),
                 report_sha256: "c".repeat(64),
+                report_fingerprint: None,
+                graph: None,
                 sandbox_name: None,
                 sandbox_binary_sha256: None,
             },
@@ -863,6 +867,10 @@ mod tests {
             findings: vec![Finding {
                 finding_id: "sf_finding_1234567890abcdef".into(),
                 engine_fingerprint: None,
+                engine_finding_id: None,
+                engine_verification_state: None,
+                engine_evidence_state: None,
+                engine_calibration: None,
                 title: "Potential command injection".into(),
                 rule_id: "SE1001".into(),
                 taxonomy: None,
@@ -897,6 +905,7 @@ mod tests {
                     assessment: None,
                 },
             }],
+            engine_abstentions: Vec::new(),
             summary: Some(Summary {
                 candidate_count: 1,
                 duplicate_count: 0,
