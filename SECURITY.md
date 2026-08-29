@@ -39,3 +39,6 @@ documented build process. Vulnerabilities in Secure Engine, Secure Skill,
 Secure Bench, upstream advisory feeds, or analyzed applications should be
 reported to their respective maintainers unless the defect is in SecureFlow's
 adapter or handling of those inputs.
+
+The current assets, trust boundaries, abuse cases, controls, and residual risks
+are documented in [`docs/threat-model.md`](./docs/threat-model.md).

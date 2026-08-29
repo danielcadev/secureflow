@@ -4,9 +4,13 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
-pub const CONTRACT_VERSION: &str = "secureflow-run-v1";
+/// The current output contract. Readers retain strict support for the frozen
+/// v1 contract below, but every newly created manifest uses v2.
+pub const CONTRACT_VERSION: &str = "secureflow-run-v2";
+pub const LEGACY_CONTRACT_VERSION: &str = "secureflow-run-v1";
 pub const ENGINE_REPORT_SCHEMA: &str = "secure-json-v1";
 pub const ENGINE_EVIDENCE_STATE_TAXONOMY: &str = "secure-evidence-state-v1";
+pub const ENGINE_CALIBRATION_TAXONOMY: &str = "secure-evidence-calibration-v1";
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -26,6 +30,9 @@ pub struct RunManifest {
     pub artifacts: Vec<Artifact>,
     #[serde(default)]
     pub findings: Vec<Finding>,
+    /// Deterministic Engine abstentions remain separate from human review decisions.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub engine_abstentions: Vec<EngineAnalysisAbstention>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub summary: Option<Summary>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -34,10 +41,15 @@ pub struct RunManifest {
 
 impl RunManifest {
     pub fn validate(&self) -> Result<(), ModelError> {
-        if self.contract_version != CONTRACT_VERSION {
+        if self.contract_version != CONTRACT_VERSION
+            && self.contract_version != LEGACY_CONTRACT_VERSION
+        {
             return Err(ModelError::UnsupportedContract(
                 self.contract_version.clone(),
             ));
+        }
+        if self.contract_version == LEGACY_CONTRACT_VERSION {
+            self.validate_v1_shape()?;
         }
         if !valid_identifier(&self.run_id, "sf_run_", 16, 80) {
             return Err(ModelError::InvalidIdentifier("run_id"));
@@ -83,6 +95,13 @@ impl RunManifest {
                 return Err(ModelError::DuplicateIdentifier("finding_id"));
             }
         }
+        let mut abstention_ids = BTreeSet::new();
+        for abstention in &self.engine_abstentions {
+            abstention.validate()?;
+            if !abstention_ids.insert(&abstention.abstention_id) {
+                return Err(ModelError::DuplicateIdentifier("engine_abstention_id"));
+            }
+        }
         self.phases.validate(&self.findings)?;
         if let Some(summary) = &self.summary {
             summary.validate(&self.findings)?;
@@ -97,6 +116,52 @@ impl RunManifest {
         self.findings
             .iter()
             .filter(|finding| finding.human_review.decision == HumanDecision::Validated)
+    }
+
+    /// v1 is frozen. This permits the current reader to consume historical
+    /// manifests without silently accepting v2-only data under a v1 label.
+    fn validate_v1_shape(&self) -> Result<(), ModelError> {
+        if !self.engine_abstentions.is_empty() {
+            return Err(ModelError::LegacyContractViolation(
+                "engine abstentions require secureflow-run-v2",
+            ));
+        }
+        if self.engine.report_fingerprint.is_some() || self.engine.graph.is_some() {
+            return Err(ModelError::LegacyContractViolation(
+                "engine report fingerprint and graph summary require secureflow-run-v2",
+            ));
+        }
+        for finding in &self.findings {
+            if finding.engine_finding_id.is_some()
+                || finding.engine_verification_state.is_some()
+                || finding.engine_evidence_state.is_some()
+                || finding.engine_calibration.is_some()
+            {
+                return Err(ModelError::LegacyContractViolation(
+                    "engine finding metadata requires secureflow-run-v2",
+                ));
+            }
+            for location in std::iter::once(&finding.source_location)
+                .chain(std::iter::once(&finding.sink_location))
+                .chain(finding.evidence_path.iter().map(|step| &step.location))
+            {
+                if location.start_byte.is_some() || location.end_byte.is_some() {
+                    return Err(ModelError::LegacyContractViolation(
+                        "byte locations require secureflow-run-v2",
+                    ));
+                }
+            }
+            if finding
+                .evidence_path
+                .iter()
+                .any(|step| step.kind == EvidenceKind::Receiver)
+            {
+                return Err(ModelError::LegacyContractViolation(
+                    "receiver evidence requires secureflow-run-v2",
+                ));
+            }
+        }
+        Ok(())
     }
 }
 
@@ -455,6 +520,8 @@ pub struct Finding {
     pub engine_verification_state: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub engine_evidence_state: Option<EngineEvidenceState>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub engine_calibration: Option<EngineEvidenceCalibration>,
     pub title: String,
     pub rule_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -500,6 +567,14 @@ impl Finding {
                 ));
             }
         }
+        if let Some(calibration) = &self.engine_calibration {
+            calibration.validate()?;
+            if calibration.disposition == EngineEvidenceDisposition::ExplicitAbstention {
+                return Err(ModelError::InconsistentState(
+                    "explicit Engine abstentions cannot be represented as findings",
+                ));
+            }
+        }
         validate_bounded_string(&self.title, "finding.title", 300)?;
         validate_bounded_string(&self.rule_id, "finding.rule_id", 100)?;
         validate_bounded_string(&self.invariant, "finding.invariant", 1000)?;
@@ -521,6 +596,143 @@ impl Finding {
         self.human_review.validate()?;
         self.ai_validation.validate()?;
         Ok(())
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum EngineEvidenceDisposition {
+    SecurityPath,
+    BoundedHardening,
+    ExplicitAbstention,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum EngineEvidenceResolution {
+    Proven,
+    Unresolved,
+    EquivalentCapability,
+    NotApplicable,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum EngineFilesystemIdentity {
+    NotApplicable,
+    LexicalPath,
+    CanonicalTarget,
+    OpenedObject,
+    RevalidatedObject,
+    Unresolved,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum EngineSecurityControlKind {
+    None,
+    LexicalContainment,
+    CanonicalContainment,
+    OpenedObjectIdentity,
+    IdentityRevalidation,
+    Authorization,
+    DestinationPolicy,
+    WorkspaceTrust,
+    Unknown,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct EngineSecurityControlEvidence {
+    pub kind: EngineSecurityControlKind,
+    pub scope_binding: EngineEvidenceResolution,
+    pub value_binding: EngineEvidenceResolution,
+    pub time_binding: EngineEvidenceResolution,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct EngineEvidenceCalibration {
+    pub taxonomy_version: String,
+    pub disposition: EngineEvidenceDisposition,
+    pub reachability: EngineEvidenceResolution,
+    pub attacker_control: EngineEvidenceResolution,
+    pub actor_identity: EngineEvidenceResolution,
+    pub trust_boundary: EngineEvidenceResolution,
+    pub security_control: EngineSecurityControlEvidence,
+    pub filesystem_identity: EngineFilesystemIdentity,
+    pub observable_impact: EngineEvidenceResolution,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+impl EngineEvidenceCalibration {
+    fn validate(&self) -> Result<(), ModelError> {
+        if self.taxonomy_version != ENGINE_CALIBRATION_TAXONOMY {
+            return Err(ModelError::InconsistentState(
+                "unsupported engine calibration taxonomy",
+            ));
+        }
+        validate_optional_string(self.reason.as_deref(), "engine_calibration.reason", 200)?;
+        if self.disposition != EngineEvidenceDisposition::SecurityPath && self.reason.is_none() {
+            return Err(ModelError::InconsistentState(
+                "non-security-path engine calibration requires a reason",
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct EngineAnalysisAbstention {
+    pub abstention_id: String,
+    pub rule_id: String,
+    pub reason: String,
+    pub source_location: Location,
+    pub sink_location: Location,
+    #[serde(default)]
+    pub evidence_path: Vec<EvidenceStep>,
+    pub calibration: EngineEvidenceCalibration,
+    #[serde(default)]
+    pub limitations: Vec<String>,
+    pub fingerprint: String,
+}
+
+impl EngineAnalysisAbstention {
+    fn validate(&self) -> Result<(), ModelError> {
+        if !self
+            .abstention_id
+            .strip_prefix("ab_")
+            .is_some_and(|suffix| is_lower_hex_of_length(suffix, 24))
+        {
+            return Err(ModelError::InvalidIdentifier("engine_abstention_id"));
+        }
+        validate_bounded_string(&self.rule_id, "engine_abstention.rule_id", 100)?;
+        validate_bounded_string(&self.reason, "engine_abstention.reason", 200)?;
+        self.source_location.validate()?;
+        self.sink_location.validate()?;
+        if self.evidence_path.is_empty() {
+            return Err(ModelError::EmptyEvidencePath);
+        }
+        for step in &self.evidence_path {
+            step.location.validate()?;
+            validate_bounded_string(
+                &step.description,
+                "engine_abstention.evidence.description",
+                1000,
+            )?;
+        }
+        self.calibration.validate()?;
+        if self.calibration.disposition != EngineEvidenceDisposition::ExplicitAbstention {
+            return Err(ModelError::InconsistentState(
+                "engine abstention requires explicit-abstention calibration",
+            ));
+        }
+        for limitation in &self.limitations {
+            validate_bounded_string(limitation, "engine_abstention.limitations", 500)?;
+        }
+        validate_sha256(&self.fingerprint, "engine_abstention.fingerprint")
     }
 }
 
@@ -1036,6 +1248,7 @@ pub enum ModelError {
     AuthorizationRequired,
     InvalidLocation,
     EmptyEvidencePath,
+    LegacyContractViolation(&'static str),
 }
 
 impl std::fmt::Display for ModelError {
@@ -1060,6 +1273,9 @@ impl std::fmt::Display for ModelError {
             Self::AuthorizationRequired => write!(formatter, "explicit authorization is required"),
             Self::InvalidLocation => write!(formatter, "invalid source location"),
             Self::EmptyEvidencePath => write!(formatter, "evidence path cannot be empty"),
+            Self::LegacyContractViolation(message) => {
+                write!(formatter, "frozen v1 contract violation: {message}")
+            }
         }
     }
 }
@@ -1160,6 +1376,7 @@ mod tests {
             engine_finding_id: None,
             engine_verification_state: None,
             engine_evidence_state: None,
+            engine_calibration: None,
             title: "candidate".into(),
             rule_id: "SE1001".into(),
             taxonomy: None,
@@ -1193,6 +1410,26 @@ mod tests {
                 output_tokens: None,
                 assessment: None,
             },
+        }
+    }
+
+    fn explicit_abstention_calibration() -> EngineEvidenceCalibration {
+        EngineEvidenceCalibration {
+            taxonomy_version: ENGINE_CALIBRATION_TAXONOMY.into(),
+            disposition: EngineEvidenceDisposition::ExplicitAbstention,
+            reachability: EngineEvidenceResolution::Proven,
+            attacker_control: EngineEvidenceResolution::Proven,
+            actor_identity: EngineEvidenceResolution::Unresolved,
+            trust_boundary: EngineEvidenceResolution::Unresolved,
+            security_control: EngineSecurityControlEvidence {
+                kind: EngineSecurityControlKind::LexicalContainment,
+                scope_binding: EngineEvidenceResolution::Proven,
+                value_binding: EngineEvidenceResolution::Proven,
+                time_binding: EngineEvidenceResolution::Unresolved,
+            },
+            filesystem_identity: EngineFilesystemIdentity::LexicalPath,
+            observable_impact: EngineEvidenceResolution::Unresolved,
+            reason: Some("filesystem-object-identity-unresolved".into()),
         }
     }
 
@@ -1235,6 +1472,7 @@ mod tests {
             },
             artifacts: Vec::new(),
             findings: Vec::new(),
+            engine_abstentions: Vec::new(),
             summary: None,
             evaluation: None,
         }
@@ -1261,6 +1499,67 @@ mod tests {
             run.findings[0].human_review.decision,
             HumanDecision::Pending
         );
+    }
+
+    #[test]
+    fn rejects_explicit_engine_abstention_disguised_as_a_finding() {
+        let mut candidate = finding("abstention_000000", Severity::Low, Confidence::Low);
+        candidate.engine_calibration = Some(explicit_abstention_calibration());
+        let mut run = manifest();
+        run.findings.push(candidate);
+
+        assert_eq!(
+            run.validate(),
+            Err(ModelError::InconsistentState(
+                "explicit Engine abstentions cannot be represented as findings"
+            ))
+        );
+    }
+
+    #[test]
+    fn engine_abstention_remains_separate_from_human_summary() {
+        let location = Location {
+            path: "src/path.ts".into(),
+            start_byte: Some(1),
+            end_byte: Some(2),
+            start_line: 1,
+            start_column: 1,
+            end_line: Some(1),
+            end_column: Some(2),
+        };
+        let mut run = manifest();
+        run.engine_abstentions.push(EngineAnalysisAbstention {
+            abstention_id: "ab_0123456789abcdef01234567".into(),
+            rule_id: "SE1003".into(),
+            reason: "filesystem-object-identity-unresolved".into(),
+            source_location: location.clone(),
+            sink_location: location.clone(),
+            evidence_path: vec![EvidenceStep {
+                kind: EvidenceKind::Source,
+                location,
+                description: "source".into(),
+            }],
+            calibration: explicit_abstention_calibration(),
+            limitations: vec!["Runtime object identity requires validation".into()],
+            fingerprint: "d".repeat(64),
+        });
+        run.summary = Some(Summary {
+            candidate_count: 0,
+            duplicate_count: 0,
+            validated_count: 0,
+            rejected_count: 0,
+            abstained_count: 0,
+            ai_calls: 0,
+            ai_input_tokens: 0,
+            ai_output_tokens: 0,
+        });
+
+        assert!(run.validate().is_ok());
+        run.contract_version = LEGACY_CONTRACT_VERSION.into();
+        assert!(matches!(
+            run.validate(),
+            Err(ModelError::LegacyContractViolation(_))
+        ));
     }
 
     #[test]
@@ -1474,5 +1773,19 @@ mod tests {
             ai_output_tokens: 0,
         });
         assert_eq!(value.validate(), Err(ModelError::SummaryMismatch));
+    }
+
+    #[test]
+    fn v1_is_frozen_but_v2_accepts_engine_provenance_extensions() {
+        let mut value = manifest();
+        value.contract_version = LEGACY_CONTRACT_VERSION.into();
+        value.engine.report_fingerprint = Some("d".repeat(64));
+        assert!(matches!(
+            value.validate(),
+            Err(ModelError::LegacyContractViolation(_))
+        ));
+
+        value.contract_version = CONTRACT_VERSION.into();
+        assert!(value.validate().is_ok());
     }
 }

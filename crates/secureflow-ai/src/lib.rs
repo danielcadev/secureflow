@@ -870,6 +870,7 @@ mod tests {
                 engine_finding_id: None,
                 engine_verification_state: None,
                 engine_evidence_state: None,
+                engine_calibration: None,
                 title: "Potential command injection".into(),
                 rule_id: "SE1001".into(),
                 taxonomy: None,
@@ -904,6 +905,7 @@ mod tests {
                     assessment: None,
                 },
             }],
+            engine_abstentions: Vec::new(),
             summary: Some(Summary {
                 candidate_count: 1,
                 duplicate_count: 0,

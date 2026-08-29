@@ -120,7 +120,7 @@ test justify each one.
 - SecureFlow preserves selected Engine provenance and evidence metadata but
   does not reinterpret an Engine evidence state as human validation.
 - SecureFlow alone owns the authorization scope and human-review decision in
-  `secureflow-run-v1`; similarly named Engine report fields cannot override it.
+  `secureflow-run-v2`; similarly named Engine report fields cannot override it.
 - Secure Skill remains installable and usable without SecureFlow.
 - Secure Skill output remains a separate contextual envelope; upstream
   `verified` is not SecureFlow human validation.
@@ -149,3 +149,8 @@ The recon diagnosis and boundaries are documented in
 offline phase already exists as `secureflow-web`. Remote traffic remains
 disabled until an additional ADR, loopback tests, limits, and an independent
 benchmark are approved.
+
+SecureFlow's own assets, trust boundaries, controls, and residual risks are
+maintained in [`threat-model.md`](./threat-model.md). Any new execution or
+network boundary requires that document and the relevant ADR to be reviewed
+before implementation.

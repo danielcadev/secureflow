@@ -54,7 +54,8 @@ use std::time::Duration;
 use thiserror::Error;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
-const RUN_SCHEMA: &str = include_str!("../../../schemas/secureflow-run-v1.schema.json");
+const RUN_SCHEMA_V1: &str = include_str!("../../../schemas/secureflow-run-v1.schema.json");
+const RUN_SCHEMA: &str = include_str!("../../../schemas/secureflow-run-v2.schema.json");
 const KNOWLEDGE_SCHEMA_V1: &str =
     include_str!("../../../schemas/secureflow-knowledge-record-v1.schema.json");
 const KNOWLEDGE_SCHEMA: &str =
@@ -117,7 +118,11 @@ struct Cli {
 #[derive(Debug, Subcommand)]
 enum Command {
     /// Print the normative SecureFlow run schema.
-    Schema,
+    Schema {
+        /// Contract schema to print. v2 is the current output contract.
+        #[arg(long, value_enum, default_value_t = RunSchemaVersion::V2)]
+        version: RunSchemaVersion,
+    },
     /// Print the normative SecureFlow knowledge-record schema.
     KnowledgeSchema {
         /// Contract version to print; v2 is the current write format.
@@ -269,11 +274,11 @@ enum Command {
         #[arg(long)]
         output: PathBuf,
     },
-    /// Validate a local secureflow-run-v1 manifest.
+    /// Validate a local secureflow-run-v1 or secureflow-run-v2 manifest.
     ValidateRun { path: PathBuf },
     /// Export a validated run as a local Markdown report.
     ExportReport {
-        /// Input secureflow-run-v1 manifest.
+        /// Input secureflow-run-v1 or secureflow-run-v2 manifest.
         #[arg(long)]
         manifest: PathBuf,
         /// Markdown output path.
@@ -285,7 +290,7 @@ enum Command {
     },
     /// List findings from a validated run manifest.
     ListFindings {
-        /// Input secureflow-run-v1 manifest.
+        /// Input secureflow-run-v1 or secureflow-run-v2 manifest.
         manifest: PathBuf,
         /// Optional human-decision filter.
         #[arg(long, value_enum)]
@@ -296,14 +301,14 @@ enum Command {
     },
     /// Show one complete canonical finding as JSON.
     ShowFinding {
-        /// Input secureflow-run-v1 manifest.
+        /// Input secureflow-run-v1 or secureflow-run-v2 manifest.
         manifest: PathBuf,
         /// Stable finding ID.
         finding_id: String,
     },
     /// Import reviewed findings into a local append-only JSONL ledger.
     KnowledgeImport {
-        /// Input secureflow-run-v1 manifest.
+        /// Input secureflow-run-v1 or secureflow-run-v2 manifest.
         #[arg(long)]
         manifest: PathBuf,
         /// Local knowledge ledger path.
@@ -823,7 +828,7 @@ enum Command {
     },
     /// Apply one explicit human review decision and write a new manifest.
     ReviewRun {
-        /// Input secureflow-run-v1 manifest.
+        /// Input secureflow-run-v1 or secureflow-run-v2 manifest.
         #[arg(long)]
         manifest: PathBuf,
         /// Stable finding ID to review.
@@ -876,7 +881,7 @@ enum Command {
         /// Raw secure-json-v1 output path.
         #[arg(long)]
         output: PathBuf,
-        /// secureflow-run-v1 manifest output path.
+        /// secureflow-run-v2 manifest output path.
         #[arg(long)]
         manifest_output: PathBuf,
         /// Process timeout in seconds.
@@ -885,7 +890,7 @@ enum Command {
         /// Linux process isolation policy. Required is the secure default.
         #[arg(long, value_enum, default_value_t = ScanSandbox::Required)]
         sandbox: ScanSandbox,
-        /// Explicitly retain the complete Engine evidence graph instead of the compact default.
+        /// Require the Engine to return a complete evidence graph.
         #[arg(long)]
         full_engine_graph: bool,
     },
@@ -925,6 +930,12 @@ enum OutputFormat {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
 enum KnowledgeSchemaVersion {
+    V1,
+    V2,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+enum RunSchemaVersion {
     V1,
     V2,
 }
@@ -1185,8 +1196,14 @@ fn main() -> ExitCode {
 
 fn execute(cli: Cli) -> Result<(), CliError> {
     match cli.command {
-        Command::Schema => {
-            print!("{RUN_SCHEMA}");
+        Command::Schema { version } => {
+            print!(
+                "{}",
+                match version {
+                    RunSchemaVersion::V1 => RUN_SCHEMA_V1,
+                    RunSchemaVersion::V2 => RUN_SCHEMA,
+                }
+            );
             Ok(())
         }
         Command::KnowledgeSchema { version } => {
@@ -1586,8 +1603,8 @@ fn execute(cli: Cli) -> Result<(), CliError> {
             Ok(())
         }
         Command::ValidateRun { path } => {
-            load_manifest(&path)?;
-            println!("valid secureflow-run-v1: {}", path.display());
+            let (_, manifest) = load_manifest(&path)?;
+            println!("valid {}: {}", manifest.contract_version, path.display());
             Ok(())
         }
         Command::ExportReport {
@@ -2971,6 +2988,7 @@ fn execute(cli: Cli) -> Result<(), CliError> {
             let completed_at = completed.format(&Rfc3339)?;
             let imported_report = result.import_report()?;
             let mut findings = imported_report.findings;
+            let engine_abstentions = imported_report.abstentions;
             prioritize_findings(&mut findings);
             let duplicate_count = deduplicate_findings(&mut findings);
             let label = config
@@ -3031,6 +3049,7 @@ fn execute(cli: Cli) -> Result<(), CliError> {
                     ai_output_tokens: 0,
                 }),
                 findings,
+                engine_abstentions,
                 evaluation: Some(EvaluationReference {
                     harness: secureflow_model::EvaluationHarness::LocalFixture,
                     harness_version: None,
@@ -3044,10 +3063,11 @@ fn execute(cli: Cli) -> Result<(), CliError> {
             let manifest_bytes = serde_json::to_vec_pretty(&manifest)?;
             write_atomic(&manifest_output, &manifest_bytes)?;
             println!(
-                "run completed: report={} manifest={} candidates={} exit={} timed_out={} binary_sha256={} configuration_sha256={} sandboxed={} sandbox_binary_sha256={}",
+                "run completed: report={} manifest={} candidates={} engine_abstentions={} exit={} timed_out={} binary_sha256={} configuration_sha256={} sandboxed={} sandbox_binary_sha256={}",
                 output.display(),
                 manifest_output.display(),
                 manifest.findings.len(),
+                manifest.engine_abstentions.len(),
                 result.status,
                 result.timed_out,
                 result.binary_sha256,

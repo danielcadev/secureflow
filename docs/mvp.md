@@ -14,7 +14,7 @@ The MVP answers one question:
 2. External-process Secure Engine adapter. **Implemented with time and output
    limits.**
 3. `secure-json-v1` validation. **Implemented.**
-4. `secureflow-run-v1` manifest. **Implemented; it preserves hashes and leaves
+4. `secureflow-run-v2` manifest. **Implemented; it preserves hashes and leaves
    the human decision `pending`.**
 5. Deterministic prioritization and deduplication. Exact ordering and
    within-engine deduplication are implemented; cross-engine equivalence remains

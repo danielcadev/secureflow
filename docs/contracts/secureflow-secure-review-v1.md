@@ -4,7 +4,7 @@
 
 This contract imports a Secure Skill `review-contract` 1.1 JSON output as a
 local contextual assessment and binds it to an already authorized
-`secureflow-run-v1`. It does not turn its findings into confirmed
+`secureflow-run-v1` or `secureflow-run-v2`. It does not turn its findings into confirmed
 vulnerabilities.
 
 The normative schema is

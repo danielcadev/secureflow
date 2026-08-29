@@ -1,6 +1,6 @@
 # MVP completion audit
 
-Observed state: August 24, 2026.
+Observed state: August 29, 2026.
 
 This matrix separates demonstrable functionality, evidence, and later work. A
 technical check is not a claim that SecureFlow finds every vulnerability or
@@ -13,8 +13,8 @@ outperforms a human researcher.
 | Independent Rust workspace | Nine packages under `crates/`; source repositories are consumed through processes or contracts | Complete for the MVP; the original projects were not physically copied |
 | Authorized deterministic analysis | `secureflow scan` requires `--authorized`, runs an explicit binary without a shell, and validates `secure-json-v1` | Complete for local targets; identity and authorization are operator declarations, not verifiable signatures |
 | Stable provenance | SHA-256 of target, binary, configuration, and report; domain- and length-prefixed tree fingerprint; target and binary checked before and after execution | Complete with fail-closed limits; not a transactional snapshot, so a change reverted between measurements might escape observation |
-| Process boundary | Clean environment, null stdin, separate bounded stdout/stderr, 1–3,600 s timeout capped by authorization expiry, 1 GiB binary maximum, process group, Linux rlimits, and Bubblewrap required by default | Complete for the Linux MVP; Bubblewrap provides a read-only host root and private network namespace, but does not replace a VM or protect against a compromised kernel |
-| Strict canonical contract | `secureflow-run-v1`, structs that reject unknown fields, and semantic validation | Complete; Secure Engine retains ownership of its external contract |
+| Process boundary | Clean environment, null stdin, separately captured stdout/stderr under one aggregate budget, 1–3,600 s timeout capped by authorization expiry, 1 GiB binary maximum, process group, Linux rlimits, and Bubblewrap required by default | Complete for the Linux MVP; Bubblewrap provides a read-only host root and private network namespace, but does not replace a VM or protect against a compromised kernel |
+| Strict canonical contract | frozen `secureflow-run-v1`, current `secureflow-run-v2`, schemas, structs that reject unknown fields, and semantic validation | Complete; v1 remains readable and rejects v2-only fields under its label; calibration and deterministic Engine abstentions are structural, while Secure Engine retains ownership of its external contract |
 | Prioritization and deduplication | Deterministic ordering and exact deduplication by fingerprint, rule, and locations | Complete for one execution/engine; no semantic reconciliation across engines |
 | Human workflow | `list-findings`, `show-finding`, `review-run`, an `abstained` decision, and a Markdown report | Complete; only a human decision can mark a finding `validated` |
 | Input immutability | Derived commands reject output identical to an input, including Unix hardlinks; `scan` rejects outputs inside the target; new artifacts use `0600` and ledger directories use `0700` | Complete with tests; a local TOCTOU window remains between checking and writing |
@@ -29,19 +29,37 @@ outperforms a human researcher.
 | Operational backups | SQLite Online Backup API, hashed manifest, `quick_check`, foreign keys, no-overwrite creation, and restore to a new destination | Complete with round-trip and concurrency tests; external retention, encryption, and disaster-recovery policies are missing |
 | Modular catalog distribution | Database-derived `core`, `malicious`, and `full` profiles; bounded Zstandard; strict manifest; deep verify/install; manifest-hash pin required for installation by default | Implemented locally; stored source declarations do not authenticate publishers, projected profiles are standalone current-record catalogs, publisher signatures and incremental bundle updates are not implemented, and no advisory data ships in the app release |
 | Local-first AI | Redacted preparation disabled by default, consent, budget, Luna default, model/prompt/token accounting, and advisory response | Complete as an offline contract; no network client or real provider quality/cost measurement exists |
-| CV/paper evidence | Demo, separate evaluation, schemas, ADRs, and a matrix of allowed/prohibited claims | Complete for describing an engineering prototype; does not support superiority, production readiness, or general effectiveness |
+| CV/paper evidence | Demo, separate evaluation, schemas, ADRs, threat model, and a matrix of allowed/prohibited claims | Complete for describing an engineering prototype; does not support superiority, production readiness, or general effectiveness |
 | Preservation of originals | Demo and evaluation write under `/tmp`; subsequent Git verification | Complete in this work: source repositories remained outside SecureFlow, and pre-existing changes in other worktrees were not modified |
 | Reproducible publication | Public `danielcadev/secureflow` repository, pinned Rust 1.92, commit-pinned CI actions, fmt/clippy/test/audit/build, deterministic CycloneDX SBOM, and a hashed bundle from clean Git | Remote CI passed; release `v0.1.0` uses an annotated tag and checksums, but the initial tag has no cryptographic signature |
 
 ## Executed evidence
 
-- `cargo fmt --all -- --check`: passed in the pinned Rust 1.92.0 container.
+- `cargo fmt --all -- --check`: passed with the pinned Rust 1.92.0 toolchain.
 - `cargo clippy --workspace --all-targets --locked -- -D warnings`: passed in
-  the pinned Rust 1.92.0 container.
-- `cargo test --workspace --locked`: 162 tests passed, 0 failed in the pinned
-  Rust 1.92.0 container.
-- `cargo audit`: 173 dependencies checked against 1,225 advisories with no
+  the pinned Rust 1.92.0 toolchain.
+- `cargo test --workspace --locked`: 178 tests passed, 0 failed in the pinned
+  Rust 1.92.0 toolchain.
+- `cargo audit`: 173 dependencies checked against 1,226 advisories with no
   reported vulnerabilities.
+- The public Secure Engine `0.1.10-rc2` qualification binary with SHA-256
+  `1094f6640d690586da00a5e169e5b5d172580f90b25ff471811ad1c1fbf6fb91`
+  completed both a default and a full-graph-required compatibility run on the
+  tracked local fixture. Both manifests validated as `secureflow-run-v2` and
+  reported an empty full graph. The compatibility run explicitly disabled
+  Bubblewrap, so it supports contract compatibility only; zero candidates is
+  not security evidence.
+- Corrected Secure Engine commit `c5c67cd` (binary SHA-256
+  `74caae8462bf80f8be45787262d7addf685c7711db4b6c70353487be9723b96f`)
+  completed compact and negotiated-full runs through SecureFlow on the neutral
+  calibration fixture. Both retained 14 pending candidates and 7 deterministic
+  Engine abstentions; full mode retained 688 nodes and 1,247 edges.
+- The same binary analyzed the authorized, clean npm CLI checkout at
+  `b888cc9a9ff34a8b023ff47b784692396635397b`. SecureFlow retained 0 candidates
+  and 3 explicit Engine abstentions, not a clean verdict. The compact Engine
+  report represented 208,157 internal nodes and 368,627 edges in 2,507,778
+  bytes. End-to-end execution took 25.33 seconds and peaked at 987,332 KiB on
+  this host. No target code or network request was executed.
 - `scripts/demo-local.sh`: 6 deterministic candidates, all `pending`; a Luna
   request with an 899-byte payload and `transmitted=false`; valid Secure Skill
   and historical benchmark imports. The synthetic catalog imported 2 source

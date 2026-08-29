@@ -2,8 +2,22 @@
 
 All notable changes to SecureFlow are documented here.
 
-## Unreleased
+## 0.2.0 — Unreleased
 
+- freeze `secureflow-run-v1`, add `secureflow-run-v2` for Engine graph,
+  fingerprint, byte-location, and evidence-state provenance, and retain a
+  strict v1 reader;
+- make `--full-engine-graph` preserve public RC2 compatibility while retrying
+  once, within the original bounds, when a newer Engine explicitly declares a
+  compact graph and supports the full-graph capability;
+- preserve versioned Engine evidence calibration and deterministic abstentions
+  without promoting them to findings or human review decisions;
+- make local releases fail closed unless rustup executes the pinned Rust 1.92.0
+  toolchain and records that exact toolchain in provenance;
+- exclude root and nested `node_modules` trees explicitly from Engine scans and
+  from the matching target fingerprint without excluding project-owned tests;
+- add a repository threat model covering assets, actors, trust boundaries,
+  abuse cases, validation evidence, and explicit residual risks;
 - preserve Secure Engine report fingerprints, compact/full graph accounting,
   finding/evidence states, locations, and limitations through a strict local
   `secure-json-v1` adapter boundary;

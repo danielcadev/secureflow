@@ -8,9 +8,12 @@
 //! closed rather than silently falling back.
 
 use secureflow_model::{
-    AiValidation, Confidence, ENGINE_EVIDENCE_STATE_TAXONOMY, EngineEvidenceState,
-    EngineEvidenceStateKind, EngineGraphScope, EngineGraphSummary, EvidenceKind, EvidenceStep,
-    Finding, HumanDecision, HumanReview, Location, Severity, TaxonomyCoordinates,
+    AiValidation, Confidence, ENGINE_CALIBRATION_TAXONOMY, ENGINE_EVIDENCE_STATE_TAXONOMY,
+    EngineAnalysisAbstention, EngineEvidenceCalibration, EngineEvidenceDisposition,
+    EngineEvidenceResolution, EngineEvidenceState, EngineEvidenceStateKind,
+    EngineFilesystemIdentity, EngineGraphScope, EngineGraphSummary, EngineSecurityControlEvidence,
+    EngineSecurityControlKind, EvidenceKind, EvidenceStep, Finding, HumanDecision, HumanReview,
+    Location, Severity, TaxonomyCoordinates,
 };
 use sha2::{Digest, Sha256};
 use std::io::{self, Read};
@@ -18,12 +21,17 @@ use std::io::{self, Read};
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+};
 use std::thread;
 use std::time::{Duration, Instant};
 use thiserror::Error;
 
 pub const SECURE_JSON_SCHEMA: &str = "secure-json-v1";
-pub const TARGET_FINGERPRINT_SCHEME: &str = "secureflow-target-sha256-v2";
+pub const TARGET_FINGERPRINT_SCHEME: &str = "secureflow-target-sha256-v3";
+pub const DEFAULT_ENGINE_EXCLUDES: &[&str] = &["node_modules/**", "**/node_modules/**"];
 pub const DEFAULT_MAX_TARGET_FILES: u64 = 250_000;
 pub const DEFAULT_MAX_TARGET_ENTRIES: u64 = 500_000;
 pub const DEFAULT_MAX_TARGET_BYTES: u64 = 16 * 1024 * 1024 * 1024;
@@ -68,7 +76,11 @@ pub struct EngineConfig {
     pub target: PathBuf,
     pub arguments: Vec<String>,
     pub timeout: Duration,
+    /// Aggregate retained-output budget for stdout and stderr combined.
     pub max_output_bytes: usize,
+    /// Require a complete graph, negotiating once when a compatible Engine
+    /// explicitly returns a compact graph to the portable first invocation.
+    pub require_full_graph: bool,
     pub max_memory_bytes: u64,
     pub max_cpu_seconds: u64,
     pub max_open_files: u64,
@@ -86,9 +98,14 @@ impl EngineConfig {
                 SECURE_JSON_SCHEMA.into(),
                 "--no-cache".into(),
                 "--quiet".into(),
+                "--exclude".into(),
+                DEFAULT_ENGINE_EXCLUDES[0].into(),
+                "--exclude".into(),
+                DEFAULT_ENGINE_EXCLUDES[1].into(),
             ],
             timeout: Duration::from_secs(120),
             max_output_bytes: 32 * 1024 * 1024,
+            require_full_graph: false,
             max_memory_bytes: 2 * 1024 * 1024 * 1024,
             max_cpu_seconds: 121,
             max_open_files: 256,
@@ -104,6 +121,14 @@ impl EngineConfig {
         }
         hash_field(&mut hasher, &self.timeout.as_millis().to_string());
         hash_field(&mut hasher, &self.max_output_bytes.to_string());
+        hash_field(
+            &mut hasher,
+            if self.require_full_graph {
+                "full-engine-graph-required-v1"
+            } else {
+                "engine-default-graph-v1"
+            },
+        );
         hash_field(&mut hasher, &self.max_memory_bytes.to_string());
         hash_field(&mut hasher, &self.max_cpu_seconds.to_string());
         hash_field(&mut hasher, &self.max_open_files.to_string());
@@ -117,12 +142,12 @@ impl EngineConfig {
         hex_digest(hasher.finalize().as_slice())
     }
 
-    /// Requests the Engine's complete evidence graph and raises only the
-    /// retained-output bound needed for that explicit, non-default mode.
+    /// Requires a complete graph in the received Engine report and raises the
+    /// aggregate retained-output budget. Capability negotiation starts with
+    /// the portable RC2 invocation and retries only when an Engine explicitly
+    /// identifies its first response as a compact finding-evidence graph.
     pub fn request_full_graph(&mut self) {
-        if !self.arguments.iter().any(|value| value == "--full-graph") {
-            self.arguments.push("--full-graph".into());
-        }
+        self.require_full_graph = true;
         self.max_output_bytes = self.max_output_bytes.max(FULL_GRAPH_MAX_OUTPUT_BYTES);
     }
 }
@@ -137,6 +162,7 @@ pub struct EngineOutput {
     pub argv: Vec<String>,
     pub sandboxed: bool,
     pub sandbox_binary_sha256: Option<String>,
+    require_full_graph: bool,
 }
 
 impl EngineOutput {
@@ -147,7 +173,16 @@ impl EngineOutput {
         if !matches!(self.status.code(), Some(0 | 1)) || self.stdout.is_empty() {
             return Err(AdapterError::ProcessFailed(self.status.to_string()));
         }
-        import_secure_json_report(&self.stdout)
+        let report = import_secure_json_report(&self.stdout)?;
+        if self.require_full_graph
+            && report
+                .graph
+                .as_ref()
+                .is_none_or(|graph| graph.scope != EngineGraphScope::Full)
+        {
+            return Err(AdapterError::RequiredFullGraphUnavailable);
+        }
+        Ok(report)
     }
 
     pub fn report_json(&self) -> Result<serde_json::Value, AdapterError> {
@@ -166,6 +201,7 @@ pub struct ImportedEngineReport {
     pub report_fingerprint: String,
     pub graph: Option<EngineGraphSummary>,
     pub findings: Vec<Finding>,
+    pub abstentions: Vec<EngineAnalysisAbstention>,
 }
 
 #[derive(Debug, Error)]
@@ -192,6 +228,8 @@ pub enum AdapterError {
     OutputRead(#[source] io::Error),
     #[error("engine output reader panicked")]
     OutputReaderPanicked,
+    #[error("engine did not return the required complete evidence graph")]
+    RequiredFullGraphUnavailable,
     #[error("engine report is not valid JSON: {0}")]
     InvalidJson(#[source] serde_json::Error),
     #[error("engine report does not declare secure-json-v1")]
@@ -207,11 +245,65 @@ pub enum AdapterError {
 pub fn run(config: &EngineConfig) -> Result<EngineOutput, AdapterError> {
     validate_config(config)?;
     let resolved_binary = resolve_engine_binary(&config.binary)?;
-    let binary_sha256 = hash_engine_binary(&resolved_binary)?;
     let mut argv = config.arguments.clone();
     argv.push(config.target.display().to_string());
+    let started = Instant::now();
+    let first = run_with_argv(config, &resolved_binary, argv)?;
+    if !config.require_full_graph || !explicitly_compact_graph(&first) {
+        return Ok(first);
+    }
 
-    let (mut command, sandbox_binary_sha256) = command_for(config, &resolved_binary, &argv)?;
+    let remaining = config
+        .timeout
+        .checked_sub(started.elapsed())
+        .ok_or(AdapterError::TimedOut)?;
+    if remaining.is_zero() {
+        return Err(AdapterError::TimedOut);
+    }
+    let mut retry_config = config.clone();
+    retry_config.timeout = remaining;
+    retry_config.max_cpu_seconds = retry_config
+        .max_cpu_seconds
+        .min(remaining.as_secs().saturating_add(1));
+    let mut retry_argv = config.arguments.clone();
+    retry_argv.extend([
+        "--full-graph".into(),
+        "--max-output-bytes".into(),
+        FULL_GRAPH_MAX_OUTPUT_BYTES.to_string(),
+    ]);
+    retry_argv.push(config.target.display().to_string());
+    let retried = run_with_argv(&retry_config, &resolved_binary, retry_argv)?;
+    if retried.binary_sha256 != first.binary_sha256 {
+        return Err(AdapterError::BinaryChangedDuringRun);
+    }
+    Ok(retried)
+}
+
+fn explicitly_compact_graph(output: &EngineOutput) -> bool {
+    if output.timed_out || !matches!(output.status.code(), Some(0 | 1)) || output.stdout.is_empty()
+    {
+        return false;
+    }
+    serde_json::from_slice::<serde_json::Value>(&output.stdout)
+        .ok()
+        .and_then(|document| {
+            document
+                .get("graph")?
+                .get("scope")?
+                .as_str()
+                .map(|scope| scope == "finding-evidence")
+        })
+        .unwrap_or(false)
+}
+
+fn run_with_argv(
+    config: &EngineConfig,
+    resolved_binary: &Path,
+    argv: Vec<String>,
+) -> Result<EngineOutput, AdapterError> {
+    let binary_sha256 = hash_engine_binary(resolved_binary)?;
+
+    let (mut command, sandbox_binary_sha256) = command_for(config, resolved_binary, &argv)?;
     command
         .env_clear()
         .stdin(Stdio::null())
@@ -227,9 +319,11 @@ pub fn run(config: &EngineConfig) -> Result<EngineOutput, AdapterError> {
         .stderr
         .take()
         .ok_or(AdapterError::OutputReaderPanicked)?;
-    let max_output = config.max_output_bytes;
-    let stdout_thread = thread::spawn(move || read_bounded(stdout, max_output));
-    let stderr_thread = thread::spawn(move || read_bounded(stderr, max_output));
+    let remaining_output = Arc::new(AtomicUsize::new(config.max_output_bytes));
+    let stdout_budget = Arc::clone(&remaining_output);
+    let stderr_budget = Arc::clone(&remaining_output);
+    let stdout_thread = thread::spawn(move || read_bounded(stdout, stdout_budget));
+    let stderr_thread = thread::spawn(move || read_bounded(stderr, stderr_budget));
 
     let deadline =
         Instant::now()
@@ -251,11 +345,15 @@ pub fn run(config: &EngineConfig) -> Result<EngineOutput, AdapterError> {
 
     let stdout = join_output(stdout_thread)?;
     let stderr = join_output(stderr_thread)?;
-    let completed_binary_sha256 = hash_engine_binary(&resolved_binary)?;
+    let completed_binary_sha256 = hash_engine_binary(resolved_binary)?;
     if completed_binary_sha256 != binary_sha256 {
         return Err(AdapterError::BinaryChangedDuringRun);
     }
-    if stdout.len() > max_output || stderr.len() > max_output {
+    let (stdout, stderr) = match (stdout, stderr) {
+        (BoundedRead::Complete(stdout), BoundedRead::Complete(stderr)) => (stdout, stderr),
+        _ => return Err(AdapterError::OutputLimit),
+    };
+    if stdout.len().saturating_add(stderr.len()) > config.max_output_bytes {
         return Err(AdapterError::OutputLimit);
     }
 
@@ -268,6 +366,7 @@ pub fn run(config: &EngineConfig) -> Result<EngineOutput, AdapterError> {
         argv,
         sandboxed: config.sandbox == SandboxMode::RequiredLinuxBubblewrap,
         sandbox_binary_sha256,
+        require_full_graph: config.require_full_graph,
     })
 }
 
@@ -693,6 +792,15 @@ fn project_finding(index: usize, value: &serde_json::Value) -> Result<Finding, A
         engine_verification_state,
         index,
     )?;
+    let engine_calibration = project_calibration(object.get("calibration"), index)?;
+    if engine_calibration.as_ref().is_some_and(|calibration| {
+        calibration.disposition == EngineEvidenceDisposition::ExplicitAbstention
+    }) {
+        return Err(invalid_finding(
+            index,
+            "explicit abstention cannot be imported from the findings collection",
+        ));
+    }
     let evidence_path = project_evidence_path(object.get("evidence_path"), index)?;
     let taxonomy = project_taxonomy(object.get("taxonomy"), index)?;
 
@@ -702,6 +810,7 @@ fn project_finding(index: usize, value: &serde_json::Value) -> Result<Finding, A
         engine_finding_id: Some(engine_finding_id.into()),
         engine_verification_state: Some(engine_verification_state.into()),
         engine_evidence_state,
+        engine_calibration,
         title: title.into(),
         rule_id: rule_id.into(),
         taxonomy,
@@ -732,6 +841,125 @@ fn project_finding(index: usize, value: &serde_json::Value) -> Result<Finding, A
             assessment: None,
         },
     })
+}
+
+fn project_calibration(
+    value: Option<&serde_json::Value>,
+    index: usize,
+) -> Result<Option<EngineEvidenceCalibration>, AdapterError> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    let object = value
+        .as_object()
+        .ok_or_else(|| invalid_finding(index, "calibration must be an object"))?;
+    let taxonomy_version = required_string(object, "taxonomy_version", index)?;
+    if taxonomy_version != ENGINE_CALIBRATION_TAXONOMY {
+        return Err(invalid_finding(
+            index,
+            "calibration taxonomy is unsupported",
+        ));
+    }
+    let control = object
+        .get("security_control")
+        .and_then(serde_json::Value::as_object)
+        .ok_or_else(|| invalid_finding(index, "calibration.security_control must be an object"))?;
+    Ok(Some(EngineEvidenceCalibration {
+        taxonomy_version: taxonomy_version.into(),
+        disposition: parse_disposition(required_string(object, "disposition", index)?, index)?,
+        reachability: parse_resolution(required_string(object, "reachability", index)?, index)?,
+        attacker_control: parse_resolution(
+            required_string(object, "attacker_control", index)?,
+            index,
+        )?,
+        actor_identity: parse_resolution(required_string(object, "actor_identity", index)?, index)?,
+        trust_boundary: parse_resolution(required_string(object, "trust_boundary", index)?, index)?,
+        security_control: EngineSecurityControlEvidence {
+            kind: parse_control_kind(required_string(control, "kind", index)?, index)?,
+            scope_binding: parse_resolution(
+                required_string(control, "scope_binding", index)?,
+                index,
+            )?,
+            value_binding: parse_resolution(
+                required_string(control, "value_binding", index)?,
+                index,
+            )?,
+            time_binding: parse_resolution(
+                required_string(control, "time_binding", index)?,
+                index,
+            )?,
+        },
+        filesystem_identity: parse_filesystem_identity(
+            required_string(object, "filesystem_identity", index)?,
+            index,
+        )?,
+        observable_impact: parse_resolution(
+            required_string(object, "observable_impact", index)?,
+            index,
+        )?,
+        reason: optional_string(object.get("reason"), index, "calibration.reason")?,
+    }))
+}
+
+fn parse_disposition(value: &str, index: usize) -> Result<EngineEvidenceDisposition, AdapterError> {
+    match value {
+        "security-path" => Ok(EngineEvidenceDisposition::SecurityPath),
+        "bounded-hardening" => Ok(EngineEvidenceDisposition::BoundedHardening),
+        "explicit-abstention" => Ok(EngineEvidenceDisposition::ExplicitAbstention),
+        _ => Err(invalid_finding(
+            index,
+            "calibration disposition is unsupported",
+        )),
+    }
+}
+
+fn parse_resolution(value: &str, index: usize) -> Result<EngineEvidenceResolution, AdapterError> {
+    match value {
+        "proven" => Ok(EngineEvidenceResolution::Proven),
+        "unresolved" => Ok(EngineEvidenceResolution::Unresolved),
+        "equivalent-capability" => Ok(EngineEvidenceResolution::EquivalentCapability),
+        "not-applicable" => Ok(EngineEvidenceResolution::NotApplicable),
+        _ => Err(invalid_finding(
+            index,
+            "calibration resolution is unsupported",
+        )),
+    }
+}
+
+fn parse_control_kind(
+    value: &str,
+    index: usize,
+) -> Result<EngineSecurityControlKind, AdapterError> {
+    match value {
+        "none" => Ok(EngineSecurityControlKind::None),
+        "lexical-containment" => Ok(EngineSecurityControlKind::LexicalContainment),
+        "canonical-containment" => Ok(EngineSecurityControlKind::CanonicalContainment),
+        "opened-object-identity" => Ok(EngineSecurityControlKind::OpenedObjectIdentity),
+        "identity-revalidation" => Ok(EngineSecurityControlKind::IdentityRevalidation),
+        "authorization" => Ok(EngineSecurityControlKind::Authorization),
+        "destination-policy" => Ok(EngineSecurityControlKind::DestinationPolicy),
+        "workspace-trust" => Ok(EngineSecurityControlKind::WorkspaceTrust),
+        "unknown" => Ok(EngineSecurityControlKind::Unknown),
+        _ => Err(invalid_finding(
+            index,
+            "security control kind is unsupported",
+        )),
+    }
+}
+
+fn parse_filesystem_identity(
+    value: &str,
+    index: usize,
+) -> Result<EngineFilesystemIdentity, AdapterError> {
+    match value {
+        "not-applicable" => Ok(EngineFilesystemIdentity::NotApplicable),
+        "lexical-path" => Ok(EngineFilesystemIdentity::LexicalPath),
+        "canonical-target" => Ok(EngineFilesystemIdentity::CanonicalTarget),
+        "opened-object" => Ok(EngineFilesystemIdentity::OpenedObject),
+        "revalidated-object" => Ok(EngineFilesystemIdentity::RevalidatedObject),
+        "unresolved" => Ok(EngineFilesystemIdentity::Unresolved),
+        _ => Err(invalid_finding(index, "filesystem identity is unsupported")),
+    }
 }
 
 fn project_evidence_state(
@@ -879,6 +1107,23 @@ fn required_string<'a>(
         .ok_or_else(|| invalid_finding(index, format!("{key} must be a non-empty string")))
 }
 
+fn optional_string(
+    value: Option<&serde_json::Value>,
+    index: usize,
+    field: &str,
+) -> Result<Option<String>, AdapterError> {
+    match value {
+        None | Some(serde_json::Value::Null) => Ok(None),
+        Some(value) => value
+            .as_str()
+            .filter(|value| !value.is_empty() && value.len() <= 200)
+            .map(|value| Some(value.to_owned()))
+            .ok_or_else(|| {
+                invalid_finding(index, format!("{field} must be a non-empty bounded string"))
+            }),
+    }
+}
+
 fn number(
     object: &serde_json::Map<String, serde_json::Value>,
     key: &str,
@@ -922,6 +1167,58 @@ fn string_array(
             item.as_str()
                 .map(str::to_owned)
                 .ok_or_else(|| invalid_finding(index, format!("{field} must contain strings")))
+        })
+        .collect()
+}
+
+fn project_abstentions(
+    report: &serde_json::Value,
+) -> Result<Vec<EngineAnalysisAbstention>, AdapterError> {
+    let Some(value) = report.get("abstentions") else {
+        return Ok(Vec::new());
+    };
+    let values = value.as_array().ok_or(AdapterError::IncompatibleReport(
+        "abstentions must be an array",
+    ))?;
+    values
+        .iter()
+        .enumerate()
+        .map(|(index, value)| {
+            let object = value
+                .as_object()
+                .ok_or_else(|| invalid_finding(index, "abstention must be an object"))?;
+            let abstention_id = required_string(object, "abstention_id", index)?;
+            if !abstention_id.strip_prefix("ab_").is_some_and(|suffix| {
+                suffix.len() == 24
+                    && suffix
+                        .bytes()
+                        .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+            }) {
+                return Err(invalid_finding(index, "abstention_id is invalid"));
+            }
+            let fingerprint = required_string(object, "fingerprint", index)?;
+            if !is_lower_sha256(fingerprint) {
+                return Err(invalid_finding(index, "abstention fingerprint is invalid"));
+            }
+            let calibration = project_calibration(object.get("calibration"), index)?
+                .ok_or_else(|| invalid_finding(index, "abstention calibration is required"))?;
+            if calibration.disposition != EngineEvidenceDisposition::ExplicitAbstention {
+                return Err(invalid_finding(
+                    index,
+                    "abstention calibration disposition must be explicit-abstention",
+                ));
+            }
+            Ok(EngineAnalysisAbstention {
+                abstention_id: abstention_id.into(),
+                rule_id: required_string(object, "rule_id", index)?.into(),
+                reason: required_string(object, "reason", index)?.into(),
+                source_location: project_location(object.get("source"), index, "source")?,
+                sink_location: project_location(object.get("sink"), index, "sink")?,
+                evidence_path: project_evidence_path(object.get("evidence_path"), index)?,
+                calibration,
+                limitations: string_array(object.get("limitations"), index, "limitations")?,
+                fingerprint: fingerprint.into(),
+            })
         })
         .collect()
 }
@@ -1022,6 +1319,10 @@ fn collect_regular_files(
     let mut entries = Vec::new();
     for entry in std::fs::read_dir(current)? {
         let entry = entry?;
+        let name = entry.file_name();
+        if name == ".git" || name == "node_modules" {
+            continue;
+        }
         *visited_entries = visited_entries
             .checked_add(1)
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "target entry overflow"))?;
@@ -1039,10 +1340,6 @@ fn collect_regular_files(
     entries.sort_by_key(std::fs::DirEntry::file_name);
     for entry in entries {
         let path = entry.path();
-        let name = entry.file_name();
-        if name == ".git" {
-            continue;
-        }
         let metadata = std::fs::symlink_metadata(&path)?;
         if metadata.file_type().is_symlink() {
             return Err(io::Error::new(
@@ -1132,12 +1429,14 @@ pub fn import_secure_json_report(bytes: &[u8]) -> Result<ImportedEngineReport, A
         .to_owned();
     let graph = project_graph(&document)?;
     let findings = project_findings(&document)?;
+    let abstentions = project_abstentions(&document)?;
     Ok(ImportedEngineReport {
         document,
         engine_version,
         report_fingerprint,
         graph,
         findings,
+        abstentions,
     })
 }
 
@@ -1145,22 +1444,43 @@ pub fn validate_secure_json_report(bytes: &[u8]) -> Result<serde_json::Value, Ad
     import_secure_json_report(bytes).map(|report| report.document)
 }
 
-fn read_bounded<R: Read>(mut reader: R, max_output: usize) -> io::Result<Vec<u8>> {
+enum BoundedRead {
+    Complete(Vec<u8>),
+    LimitExceeded,
+}
+
+fn read_bounded<R: Read>(mut reader: R, remaining: Arc<AtomicUsize>) -> io::Result<BoundedRead> {
     let mut output = Vec::new();
     let mut buffer = [0_u8; 8192];
+    let mut limit_exceeded = false;
     loop {
         let read = reader.read(&mut buffer)?;
         if read == 0 {
-            return Ok(output);
+            return Ok(if limit_exceeded {
+                BoundedRead::LimitExceeded
+            } else {
+                BoundedRead::Complete(output)
+            });
         }
-        if output.len().saturating_add(read) > max_output {
-            return Ok(vec![0; max_output.saturating_add(1)]);
+        if limit_exceeded
+            || remaining
+                .fetch_update(Ordering::AcqRel, Ordering::Acquire, |available| {
+                    available.checked_sub(read)
+                })
+                .is_err()
+        {
+            // Continue draining after a limit breach so an untrusted child
+            // cannot block forever on a full pipe.
+            limit_exceeded = true;
+            continue;
         }
         output.extend_from_slice(&buffer[..read]);
     }
 }
 
-fn join_output(handle: thread::JoinHandle<io::Result<Vec<u8>>>) -> Result<Vec<u8>, AdapterError> {
+fn join_output(
+    handle: thread::JoinHandle<io::Result<BoundedRead>>,
+) -> Result<BoundedRead, AdapterError> {
     handle
         .join()
         .map_err(|_| AdapterError::OutputReaderPanicked)?
@@ -1224,7 +1544,11 @@ mod tests {
                 "--format",
                 "secure-json-v1",
                 "--no-cache",
-                "--quiet"
+                "--quiet",
+                "--exclude",
+                "node_modules/**",
+                "--exclude",
+                "**/node_modules/**"
             ]
         );
         assert_eq!(config.target, PathBuf::from("/tmp/fixture"));
@@ -1235,24 +1559,130 @@ mod tests {
     }
 
     #[test]
-    fn full_graph_is_explicit_and_raises_the_bounded_output_limit() {
+    fn full_graph_requirement_is_explicit_and_raises_the_aggregate_output_limit() {
         let mut config = EngineConfig::default_scan("/bin/secure", "/tmp/fixture");
         let compact_hash = config.configuration_sha256();
+        assert!(!config.require_full_graph);
+
+        config.request_full_graph();
+        config.request_full_graph();
+
+        assert!(config.require_full_graph);
         assert!(!config.arguments.iter().any(|value| value == "--full-graph"));
-
-        config.request_full_graph();
-        config.request_full_graph();
-
-        assert_eq!(
-            config
-                .arguments
-                .iter()
-                .filter(|value| value.as_str() == "--full-graph")
-                .count(),
-            1
-        );
         assert_eq!(config.max_output_bytes, FULL_GRAPH_MAX_OUTPUT_BYTES);
         assert_ne!(config.configuration_sha256(), compact_hash);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn full_graph_requirement_is_enforced_by_the_adapter_boundary() {
+        let mut config = EngineConfig::default_scan("/bin/sh", "/tmp/ignored");
+        config.arguments = vec!["-c".into(), format!("printf '%s\\n' '{}'", EMPTY_REPORT)];
+        config.request_full_graph();
+
+        let output = run(&config).expect("process execution should complete");
+        assert!(
+            output
+                .argv
+                .iter()
+                .any(|argument| argument == "--full-graph")
+        );
+        assert!(matches!(
+            output.import_report(),
+            Err(AdapterError::RequiredFullGraphUnavailable)
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn legacy_full_graph_contract_does_not_trigger_capability_retry() {
+        let mut legacy: serde_json::Value =
+            serde_json::from_str(EMPTY_REPORT).expect("empty fixture");
+        legacy["graph"]
+            .as_object_mut()
+            .expect("graph object")
+            .remove("scope");
+        let serialized = serde_json::to_string(&legacy).expect("legacy fixture");
+        let mut config = EngineConfig::default_scan("/bin/sh", "/tmp/ignored");
+        config.arguments = vec!["-c".into(), format!("printf '%s\\n' '{serialized}'")];
+        config.request_full_graph();
+
+        let output = run(&config).expect("legacy execution should complete");
+        assert!(
+            !output
+                .argv
+                .iter()
+                .any(|argument| argument == "--full-graph")
+        );
+        assert_eq!(
+            output
+                .import_report()
+                .expect("legacy report should import")
+                .graph
+                .expect("graph")
+                .scope,
+            EngineGraphScope::Full
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn compact_graph_negotiates_one_bounded_full_graph_retry() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let path = std::env::temp_dir().join(format!(
+            "secureflow-negotiating-engine-{}.sh",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        let full_report = EMPTY_REPORT.replace("finding-evidence", "full");
+        std::fs::write(
+            &path,
+            format!(
+                "#!/bin/sh\nfor argument in \"$@\"; do\n  if test \"$argument\" = --full-graph; then\n    printf '%s\\n' '{full_report}'\n    exit 0\n  fi\ndone\nprintf '%s\\n' '{EMPTY_REPORT}'\n"
+            ),
+        )
+        .expect("temporary engine should be writable");
+        let mut permissions = std::fs::metadata(&path)
+            .expect("temporary engine metadata")
+            .permissions();
+        permissions.set_mode(0o700);
+        std::fs::set_permissions(&path, permissions)
+            .expect("temporary engine should be executable");
+
+        let mut config = EngineConfig::default_scan(&path, "/tmp/ignored");
+        config.request_full_graph();
+        let output = run(&config).expect("capability negotiation should complete");
+        assert!(
+            output
+                .argv
+                .iter()
+                .any(|argument| argument == "--full-graph")
+        );
+        assert_eq!(
+            output
+                .import_report()
+                .expect("negotiated full report should import")
+                .graph
+                .expect("graph")
+                .scope,
+            EngineGraphScope::Full
+        );
+        std::fs::remove_file(path).expect("temporary engine should be removable");
+    }
+
+    #[test]
+    fn output_budget_is_shared_across_streams() {
+        let budget = Arc::new(AtomicUsize::new(6));
+        assert!(matches!(
+            read_bounded(std::io::Cursor::new(b"abcd"), Arc::clone(&budget))
+                .expect("stdout should be readable"),
+            BoundedRead::Complete(_)
+        ));
+        assert!(matches!(
+            read_bounded(std::io::Cursor::new(b"efgh"), budget).expect("stderr should be readable"),
+            BoundedRead::LimitExceeded
+        ));
     }
 
     #[test]
@@ -1515,6 +1945,61 @@ mod tests {
     }
 
     #[test]
+    fn target_fingerprint_excludes_root_and_nested_node_modules() {
+        let root = std::env::temp_dir().join(format!(
+            "secureflow-target-node-modules-exclusion-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("node_modules/root-dependency"))
+            .expect("root dependency directory");
+        std::fs::create_dir_all(root.join("packages/app/node_modules/nested-dependency"))
+            .expect("nested dependency directory");
+        std::fs::create_dir_all(root.join("packages/app/src")).expect("source directory");
+        std::fs::write(root.join("source.ts"), b"export const root = true;\n")
+            .expect("root source");
+        std::fs::write(
+            root.join("packages/app/src/index.ts"),
+            b"export const nested = true;\n",
+        )
+        .expect("nested source");
+        std::fs::write(
+            root.join("node_modules/root-dependency/index.js"),
+            b"module.exports = 1;\n",
+        )
+        .expect("root dependency");
+        std::fs::write(
+            root.join("packages/app/node_modules/nested-dependency/index.js"),
+            b"module.exports = 1;\n",
+        )
+        .expect("nested dependency");
+
+        let baseline = sha256_target(&root).expect("baseline fingerprint");
+        std::fs::write(
+            root.join("node_modules/root-dependency/index.js"),
+            b"module.exports = 2;\n",
+        )
+        .expect("changed root dependency");
+        std::fs::write(
+            root.join("packages/app/node_modules/nested-dependency/index.js"),
+            b"module.exports = 2;\n",
+        )
+        .expect("changed nested dependency");
+        assert_eq!(
+            sha256_target(&root).expect("dependency-only fingerprint"),
+            baseline
+        );
+
+        std::fs::write(root.join("source.ts"), b"export const root = false;\n")
+            .expect("changed source");
+        assert_ne!(
+            sha256_target(&root).expect("source-change fingerprint"),
+            baseline
+        );
+        std::fs::remove_dir_all(root).expect("temporary target should be removable");
+    }
+
+    #[test]
     fn imports_compact_contract_deterministically_without_copying_unknown_engine_fields() {
         let report = serde_json::json!({
             "schema_version": "secure-json-v1",
@@ -1533,6 +2018,22 @@ mod tests {
                 "evidence_state": {
                     "taxonomy_version": "secure-evidence-state-v1",
                     "state": "syntactic-lead"
+                },
+                "calibration": {
+                    "taxonomy_version": "secure-evidence-calibration-v1",
+                    "disposition": "security-path",
+                    "reachability": "proven",
+                    "attacker_control": "proven",
+                    "actor_identity": "unresolved",
+                    "trust_boundary": "unresolved",
+                    "security_control": {
+                        "kind": "unknown",
+                        "scope_binding": "unresolved",
+                        "value_binding": "unresolved",
+                        "time_binding": "unresolved"
+                    },
+                    "filesystem_identity": "not-applicable",
+                    "observable_impact": "unresolved"
                 },
                 "source": {
                     "path": "src/main.ts",
@@ -1573,6 +2074,51 @@ mod tests {
                 }],
                 "limitations": ["Static reachability and firewall behavior require validation"],
                 "source_excerpt": "DO_NOT_COPY_SECRET_TOKEN"
+            }],
+            "abstentions": [{
+                "abstention_id": "ab_0123456789abcdef01234567",
+                "rule_id": "SE1003",
+                "reason": "filesystem-object-identity-unresolved",
+                "source": {
+                    "path": "src/path.ts",
+                    "span": {"start_byte": 1, "end_byte": 2, "start_line": 1, "start_column": 1, "end_line": 1, "end_column": 2}
+                },
+                "sink": {
+                    "path": "src/path.ts",
+                    "span": {"start_byte": 3, "end_byte": 4, "start_line": 2, "start_column": 1, "end_line": 2, "end_column": 2}
+                },
+                "evidence_path": [{
+                    "kind": "source",
+                    "location": {
+                        "path": "src/path.ts",
+                        "span": {"start_byte": 1, "end_byte": 2, "start_line": 1, "start_column": 1, "end_line": 1, "end_column": 2}
+                    }
+                }, {
+                    "kind": "sink",
+                    "location": {
+                        "path": "src/path.ts",
+                        "span": {"start_byte": 3, "end_byte": 4, "start_line": 2, "start_column": 1, "end_line": 2, "end_column": 2}
+                    }
+                }],
+                "calibration": {
+                    "taxonomy_version": "secure-evidence-calibration-v1",
+                    "disposition": "explicit-abstention",
+                    "reachability": "proven",
+                    "attacker_control": "proven",
+                    "actor_identity": "unresolved",
+                    "trust_boundary": "unresolved",
+                    "security_control": {
+                        "kind": "lexical-containment",
+                        "scope_binding": "proven",
+                        "value_binding": "proven",
+                        "time_binding": "unresolved"
+                    },
+                    "filesystem_identity": "lexical-path",
+                    "observable_impact": "unresolved",
+                    "reason": "filesystem-object-identity-unresolved"
+                },
+                "limitations": ["Object identity requires runtime validation"],
+                "fingerprint": "c".repeat(64)
             }],
             "graph": {
                 "scope": "finding-evidence",
@@ -1630,10 +2176,34 @@ mod tests {
             ["Static reachability and firewall behavior require validation"]
         );
         assert_eq!(finding.human_review.decision, HumanDecision::Pending);
+        assert_eq!(
+            finding
+                .engine_calibration
+                .as_ref()
+                .map(|calibration| calibration.disposition),
+            Some(EngineEvidenceDisposition::SecurityPath)
+        );
+        assert_eq!(imported.abstentions.len(), 1);
+        assert_eq!(
+            imported.abstentions[0].calibration.disposition,
+            EngineEvidenceDisposition::ExplicitAbstention
+        );
         let normalized = serde_json::to_string(&imported.findings)
             .expect("normalized findings should serialize");
         assert!(!normalized.contains("DO_NOT_COPY_SECRET_TOKEN"));
         assert!(!normalized.contains("/home/operator/private-target"));
+
+        let mut disguised_abstention = report;
+        disguised_abstention["findings"][0]["calibration"]["disposition"] =
+            serde_json::Value::String("explicit-abstention".into());
+        disguised_abstention["findings"][0]["calibration"]["reason"] =
+            serde_json::Value::String("attacker-control-unresolved".into());
+        assert!(matches!(
+            import_secure_json_report(
+                &serde_json::to_vec(&disguised_abstention).expect("fixture bytes")
+            ),
+            Err(AdapterError::InvalidFinding { .. })
+        ));
     }
 
     #[test]

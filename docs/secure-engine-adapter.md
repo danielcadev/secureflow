@@ -4,7 +4,7 @@
 
 `secureflow-engine-adapter` invokes an explicitly selected local Secure Engine
 binary and imports the stable subset of `secure-json-v1` needed by
-`secureflow-run-v1`. It does not link the Engine crate, copy Engine extraction
+`secureflow-run-v2`. It does not link the Engine crate, copy Engine extraction
 logic, or reproduce the complete Engine schema.
 
 Secure Engine owns deterministic analysis, its report fingerprint, evidence
@@ -28,9 +28,11 @@ the operator-supplied SecureFlow scope. No Engine or AI state can set
 | Finding `finding_id` / `fingerprint` | `engine_finding_id` / `engine_fingerprint` |
 | Finding `verification_state` | `engine_verification_state` |
 | Finding `evidence_state` | `engine_evidence_state` |
+| Finding `calibration` | `engine_calibration` |
 | Finding `source` / `sink` | repository-relative `source_location` / `sink_location`, including byte and line/column spans |
 | Finding `evidence_path` | kind, relative location, and a local generic description |
 | Finding `limitations` | `limitations` |
+| Top-level Engine `abstentions` | top-level `engine_abstentions`, separate from findings and human decisions |
 
 Unknown Engine evidence fields are retained only in the raw local report. They
 are not copied into the normalized manifest, which prevents incidental source
@@ -53,6 +55,14 @@ state must be one of `syntactic-lead`, `semantic-path`, `guard-aware-lead`, or
 is preserved as scanner metadata only and never grants SecureFlow human
 validation.
 
+`secure-evidence-calibration-v1` is also additive and optional for historical
+reports. When present, its bounded taxonomy is imported structurally rather
+than flattened into a confidence score. Engine abstentions require calibration
+with `disposition = explicit-abstention`; malformed abstentions fail the import.
+An item under `findings` with that disposition also fails the import: the Engine
+must express the distinction structurally. Neither calibration nor abstention
+can set a SecureFlow human decision.
+
 Malformed JSON, another schema/document type, invalid fingerprints,
 unsupported graph scopes, totals smaller than serialized counts, mismatched
 evidence states, absolute/parent/backslash evidence paths, timeouts, signals,
@@ -68,7 +78,7 @@ isolation.
 
 ## Commands and graph mode
 
-The normal command requests the Engine's compact report:
+The normal command retains the Engine's default report projection:
 
 ```bash
 cargo run -p secureflow -- scan \
@@ -80,7 +90,13 @@ cargo run -p secureflow -- scan \
   /path/to/authorized-target
 ```
 
-The full graph is non-default and explicit:
+SecureFlow always passes explicit exclusions for root and nested
+`node_modules` trees. The target fingerprint applies the same directory
+exclusion, so vendored JavaScript dependencies neither consume scan capacity
+nor cause a run to fail because an excluded dependency changed. Source files,
+tests, fixtures, and other project-owned content remain in scope.
+
+The full graph requirement is non-default and explicit:
 
 ```bash
 cargo run -p secureflow -- scan \
@@ -93,8 +109,14 @@ cargo run -p secureflow -- scan \
   /path/to/authorized-target
 ```
 
-Full mode raises the retained-output bound from 32 MiB to 256 MiB. The normal
-compact mode remains appropriate for portable finding review.
+Full mode raises the aggregate retained-output bound (stdout plus stderr) from
+32 MiB to 256 MiB. SecureFlow first performs the portable invocation understood
+by the public RC2. If the response explicitly declares
+`graph.scope = finding-evidence`, the adapter uses bounded capability
+negotiation: it retries once with `--full-graph` and an explicit 256 MiB Engine
+output ceiling, within the original overall timeout. Historical reports that
+already contain a full graph are not retried. The command succeeds only if the
+final report is full; otherwise it fails without writing a run manifest.
 
 ## Measured evidence
 
@@ -105,29 +127,15 @@ accounting, path rejection, and omission of unknown secret/path fields from the
 normalized projection. These are contract tests, not vulnerability or coverage
 evidence.
 
-A local integration run used Secure Engine commit `e6001c0` and release binary
-SHA-256 `ae93a4d156e53d6af90daf8a06541ea76e9c4cb4e41de11c41ce6bd621a7e88a`
-against the Engine-owned `lead-quality-vscode-go` regression fixture. Engine
-exit 1 was accepted as a completed scan with three deliberately planted
-candidates: two SE1010 positive controls and one bounded SE1011 syntactic lead.
-All three entered SecureFlow with `human_review.decision = pending`.
-
-The compact raw report was 106,137 bytes and the normalized manifest was 11,005
-bytes. The imported Engine report fingerprint was
-`3a8707b2d0e36779339249f14a8b0b43224a9ba488ed185ca931a3e6d608dbf2`.
-The manifest retained 12 serialized nodes, 13 serialized edges, 203 total
-nodes, and 332 total edges. The first run completed in 0.60 seconds with 14,900
-KiB peak RSS on the local host. A second independent invocation produced the
-same Engine version, report fingerprint, graph summary, ordered findings,
-locations, evidence states, limitations, and human states. Volatile run IDs,
-timestamps, and raw report byte hashes are not semantic determinism inputs.
-An explicit `--full-engine-graph` run retained all 203 nodes and 332 edges in a
-523,300-byte raw report, confirming that compact/full selection is deliberate
-and separately reflected in the configuration hash.
-
-This fixture run demonstrates adapter compatibility and reproducibility only.
-It is not a holdout, vulnerability result, coverage measurement, or comparison
-with human researchers.
+A local compatibility smoke used the public Secure Engine `0.1.10-rc2`
+qualification binary with SHA-256
+`1094f6640d690586da00a5e169e5b5d172580f90b25ff471811ad1c1fbf6fb91`.
+Default and full-graph-required runs on the tracked fixture both completed,
+validated as `secureflow-run-v2`, and retained an empty full graph. The smoke
+explicitly disabled Bubblewrap and its temporary artifacts are not published,
+so it demonstrates contract compatibility only. It is not a holdout,
+vulnerability result, coverage measurement, sandbox result, or comparison with
+human researchers.
 
 ## Verification gates
 
@@ -135,13 +143,25 @@ with human researchers.
 - `cargo check --workspace --all-targets --locked`: pass.
 - strict workspace Clippy with all targets, the lockfile, and `-D warnings`:
   pass with no warning exemption.
-- `cargo test --workspace --locked`: 169 tests passed, 0 failed.
+- `cargo test --workspace --locked`: 178 passed, 0 failed with pinned Rust
+  1.92.0.
 - local `cargo-audit --no-fetch`: 173 locked dependencies checked against
-  1,225 available advisories with no reported vulnerability.
-- two independent compact imports: identical Engine version, report
-  fingerprint, graph summary, findings, byte/line locations, states, and
-  limitations.
+  1,226 retained advisories, with no reported vulnerability.
 - normalized-manifest absolute-path/obvious-secret check: pass.
 
 No network transport, model call, target-code execution, vulnerability
 validation, or comparative human-performance claim is part of this adapter.
+
+A second local integration used corrected Secure Engine commit `c5c67cd` and
+binary SHA-256
+`74caae8462bf80f8be45787262d7addf685c7711db4b6c70353487be9723b96f`.
+On the neutral calibration fixture, compact and negotiated-full SecureFlow runs
+both retained 14 pending candidates and 7 deterministic Engine abstentions; the
+full run retained all 688 nodes and 1,247 edges. On the authorized, clean npm
+CLI checkout at commit `b888cc9a9ff34a8b023ff47b784692396635397b`, the
+compact run retained 0 candidates and 3 explicit Engine abstentions (SE1001,
+SE1004, and SE1013), with internal totals of 208,157 nodes and 368,627 edges.
+The end-to-end npm run took 25.33 seconds and peaked at 987,332 KiB under GNU
+time; its raw report was 2,507,778 bytes. These are single-host engineering
+measurements, not benchmark results. Zero candidates is not a clean verdict,
+and the three abstentions are neither vulnerabilities nor human decisions.
