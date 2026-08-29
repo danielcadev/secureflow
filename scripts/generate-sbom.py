@@ -38,11 +38,39 @@ def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def read_regular_bounded(path: pathlib.Path, maximum: int, label: str) -> bytes:
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_NONBLOCK", 0)
+    )
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as error:
+        raise EvidenceError(f"cannot open {label} {path}: {error}") from error
+    with os.fdopen(descriptor, "rb") as stream:
+        initial = os.fstat(stream.fileno())
+        if not stat.S_ISREG(initial.st_mode):
+            raise EvidenceError(f"{label} is not a regular file: {path}")
+        if initial.st_size <= 0 or initial.st_size > maximum:
+            raise EvidenceError(f"{label} is outside the {maximum}-byte limit: {path}")
+        data = stream.read(maximum + 1)
+        final = os.fstat(stream.fileno())
+        if (
+            len(data) != initial.st_size
+            or len(data) > maximum
+            or final.st_size != initial.st_size
+        ):
+            raise EvidenceError(f"{label} changed while it was being read: {path}")
+        return data
+
+
 def read_toml(path: pathlib.Path) -> tuple[dict[str, Any], bytes]:
     try:
-        raw = path.read_bytes()
+        raw = read_regular_bounded(path, MAX_MANIFEST_BYTES, "TOML manifest")
         return tomllib.loads(raw.decode("utf-8")), raw
-    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as error:
+    except (UnicodeDecodeError, tomllib.TOMLDecodeError) as error:
         raise EvidenceError(f"cannot read TOML {path}: {error}") from error
 
 
@@ -102,6 +130,17 @@ def safe_relative_path(value: str, label: str) -> pathlib.PurePosixPath:
     if any(part in {"", ".", ".."} for part in candidate.parts):
         raise EvidenceError(f"{label} contains an unsafe path segment")
     return candidate
+
+
+def reject_symlink_components(root: pathlib.Path, relative: pathlib.PurePosixPath) -> None:
+    current = root
+    for part in relative.parts:
+        current /= part
+        try:
+            if current.is_symlink():
+                raise EvidenceError(f"symlinked workspace path is not trusted: {current}")
+        except OSError as error:
+            raise EvidenceError(f"cannot inspect workspace path {current}: {error}") from error
 
 
 def bounded_members(archive: tarfile.TarFile) -> list[tarfile.TarInfo]:
@@ -376,6 +415,7 @@ def local_member_evidence(
         if any(character in member for character in "*?["):
             raise EvidenceError(f"workspace member globs are unsupported: {member}")
         relative = safe_relative_path(member, "workspace member")
+        reject_symlink_components(root, relative)
         member_directory = (root / pathlib.Path(*relative.parts)).resolve()
         try:
             member_directory.relative_to(root)
@@ -404,13 +444,16 @@ def local_member_evidence(
                 declaration, f"workspace package {name} license-file"
             )
             license_base = root if inherited else member_directory
+            reject_symlink_components(license_base, license_relative)
             license_path = (license_base / pathlib.Path(*license_relative.parts)).resolve()
             try:
                 license_path.relative_to(root)
-                if license_path.stat().st_size > MAX_LICENSE_BYTES:
-                    raise EvidenceError(f"workspace license file is too large: {declaration}")
-                license_hash = digest(license_path.read_bytes())
-            except (OSError, ValueError) as error:
+                license_hash = digest(
+                    read_regular_bounded(
+                        license_path, MAX_LICENSE_BYTES, "workspace license file"
+                    )
+                )
+            except ValueError as error:
                 raise EvidenceError(f"cannot verify workspace license file {declaration}: {error}") from error
         properties = [
             property_value("secureflow:cargo-source", "workspace"),

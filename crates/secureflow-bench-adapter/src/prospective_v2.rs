@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
+use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 use thiserror::Error;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
@@ -493,6 +494,8 @@ pub enum ProspectiveV2Error {
     CaseTooLarge { path: PathBuf, bytes: u64 },
     #[error("case artifact hash mismatch: {0}")]
     CaseHashMismatch(String),
+    #[error("case artifact changed while it was being read: {0}")]
+    CaseChanged(PathBuf),
     #[error("prospective artifact hash mismatch: {0}")]
     ArtifactHashMismatch(&'static str),
     #[error("could not format timestamp: {0}")]
@@ -982,9 +985,14 @@ fn validate_dataset_draft(draft: &DatasetDraft) -> Result<(), ProspectiveV2Error
                 .get(&DatasetSplit::Holdout)
                 .copied()
                 .unwrap_or(0)
-        || accounting.vulnerable_cases + accounting.safe_controls != accounting.total_cases
-        || accounting.holdout_vulnerable_cases + accounting.holdout_safe_controls
-            != accounting.holdout_cases
+        || accounting
+            .vulnerable_cases
+            .checked_add(accounting.safe_controls)
+            != Some(accounting.total_cases)
+        || accounting
+            .holdout_vulnerable_cases
+            .checked_add(accounting.holdout_safe_controls)
+            != Some(accounting.holdout_cases)
         || !accounting.label_counts_custodian_declared
     {
         return Err(ProspectiveV2Error::InvalidField("dataset accounting"));
@@ -1035,7 +1043,10 @@ fn validate_dataset_binding(binding: &DatasetBinding) -> Result<(), ProspectiveV
         || !valid_sha256(&binding.dataset_sha256)
         || binding.total_cases == 0
         || binding.holdout_cases == 0
-        || binding.holdout_vulnerable_cases + binding.holdout_safe_controls != binding.holdout_cases
+        || binding
+            .holdout_vulnerable_cases
+            .checked_add(binding.holdout_safe_controls)
+            != Some(binding.holdout_cases)
         || !valid_sha256(&binding.ground_truth_commitment_sha256)
     {
         return Err(ProspectiveV2Error::InvalidField("dataset binding"));
@@ -1363,10 +1374,51 @@ fn verify_case_artifacts(
                 bytes: metadata.len(),
             });
         }
-        let bytes = fs::read(&canonical).map_err(|source| ProspectiveV2Error::ReadCase {
-            path: canonical,
-            source,
-        })?;
+        let mut file =
+            fs::File::open(&canonical).map_err(|source| ProspectiveV2Error::ReadCase {
+                path: canonical.clone(),
+                source,
+            })?;
+        let opened_metadata = file
+            .metadata()
+            .map_err(|source| ProspectiveV2Error::ReadCase {
+                path: canonical.clone(),
+                source,
+            })?;
+        if !opened_metadata.is_file() {
+            return Err(ProspectiveV2Error::NotAFile(canonical));
+        }
+        if opened_metadata.len() == 0 || opened_metadata.len() > MAX_CASE_BYTES {
+            return Err(ProspectiveV2Error::CaseTooLarge {
+                path: canonical,
+                bytes: opened_metadata.len(),
+            });
+        }
+        let mut bytes = Vec::with_capacity(opened_metadata.len() as usize);
+        (&mut file)
+            .take(MAX_CASE_BYTES + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|source| ProspectiveV2Error::ReadCase {
+                path: canonical.clone(),
+                source,
+            })?;
+        let final_metadata = file
+            .metadata()
+            .map_err(|source| ProspectiveV2Error::ReadCase {
+                path: canonical.clone(),
+                source,
+            })?;
+        if bytes.is_empty() || bytes.len() as u64 > MAX_CASE_BYTES {
+            return Err(ProspectiveV2Error::CaseTooLarge {
+                path: canonical,
+                bytes: bytes.len() as u64,
+            });
+        }
+        if final_metadata.len() != opened_metadata.len()
+            || bytes.len() as u64 != opened_metadata.len()
+        {
+            return Err(ProspectiveV2Error::CaseChanged(canonical));
+        }
         if sha256_bytes(&bytes) != case.artifact_sha256 {
             return Err(ProspectiveV2Error::CaseHashMismatch(case.case_id.clone()));
         }
@@ -1724,6 +1776,10 @@ mod tests {
         draft.anti_leakage.holdout_known_to_participants = false;
         validate_dataset_draft(&draft).unwrap();
         draft.accounting.holdout_safe_controls = 9;
+        assert!(validate_dataset_draft(&draft).is_err());
+
+        draft.accounting.vulnerable_cases = u64::MAX;
+        draft.accounting.safe_controls = 1;
         assert!(validate_dataset_draft(&draft).is_err());
     }
 

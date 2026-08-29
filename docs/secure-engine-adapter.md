@@ -143,7 +143,7 @@ human researchers.
 - `cargo check --workspace --all-targets --locked`: pass.
 - strict workspace Clippy with all targets, the lockfile, and `-D warnings`:
   pass with no warning exemption.
-- `cargo test --workspace --locked`: 178 passed, 0 failed with pinned Rust
+- `cargo test --workspace --locked`: 185 passed, 0 failed with pinned Rust
   1.92.0.
 - local `cargo-audit --no-fetch`: 173 locked dependencies checked against
   1,226 retained advisories, with no reported vulnerability.
@@ -165,3 +165,19 @@ The end-to-end npm run took 25.33 seconds and peaked at 987,332 KiB under GNU
 time; its raw report was 2,507,778 bytes. These are single-host engineering
 measurements, not benchmark results. Zero candidates is not a clean verdict,
 and the three abstentions are neither vulnerabilities nor human decisions.
+
+A later general compact-path optimization at Secure Engine commit
+`4eee7eeaf34856416f8acc5719d296efbeffd251` preserved the npm report fingerprint
+`0c76afa4aa89f99d7c48bc08edc37f8e7e375a46ebb00aa43149f78bd3635b82`
+and every finding, abstention, fact, and conceptual graph total. Two local
+release samples reduced mean peak RSS from 987,470 KiB to 737,420 KiB, about
+25.3%; wall time was not claimed as a speedup. Full-graph mode remained opt-in
+and retained all 57,748 facts in a 539,259,886-byte report. These measurements
+are traceable local evidence, not independently reproduced resource guarantees.
+
+Human source triage found no complete supported actor/control/boundary/impact
+chain for the three npm abstentions. The test-only process mock, same-authority
+CI URL/token pair, and documented owner-managed workspace exception remain
+scanner-learning cases rather than vulnerabilities. Exact dispositions and
+claim limits are retained in
+[`npm-cli-engine-triage-2026-08-29.json`](./evidence/npm-cli-engine-triage-2026-08-29.json).

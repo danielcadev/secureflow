@@ -17,6 +17,13 @@ All notable changes to SecureFlow are documented here.
 - bind Cargo license declarations to checksum-verified local `.crate` archives,
   emit them in the deterministic CycloneDX SBOM, and include a human-readable
   declaration inventory without claiming legal completeness;
+- add fail-closed label-free dataset, protocol-v2, and per-case submission
+  contracts for a future blinded SecureFlow-assisted-human versus
+  human-comparator study, while keeping all comparison claims unestablished;
+- add verified-copy Go and PyPI advisory ingestion evidence without presenting
+  security records or malicious-package reports as validated vulnerabilities;
+- add a 400-scenario paired synthetic API-risk corpus and guarded authorized
+  pilot plan without implementing remote production transport;
 - exclude root and nested `node_modules` trees explicitly from Engine scans and
   from the matching target fingerprint without excluding project-owned tests;
 - add a repository threat model covering assets, actors, trust boundaries,

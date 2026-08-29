@@ -42,6 +42,22 @@ if [[ "${GITHUB_REF_TYPE:-}" == "tag" && "${GITHUB_REF_NAME:-}" != "v${release_v
   echo "release tag ${GITHUB_REF_NAME:-<missing>} does not match package version v${release_version}" >&2
   exit 1
 fi
+if [[ "${GITHUB_REF_TYPE:-}" == "tag" ]]; then
+  citation_version=$(sed -n 's/^version: "\([^"]*\)"/\1/p' CITATION.cff | head -n 1)
+  if [[ "$citation_version" != "$release_version" ]]; then
+    echo "CITATION.cff version ${citation_version:-<missing>} does not match package version ${release_version}" >&2
+    exit 1
+  fi
+  if grep -Fq "## ${release_version} — Unreleased" CHANGELOG.md; then
+    echo "CHANGELOG still marks ${release_version} as Unreleased" >&2
+    exit 1
+  fi
+  notes_file="docs/releases/${GITHUB_REF_NAME}.md"
+  if [[ ! -s "$notes_file" ]]; then
+    echo "missing tracked release notes: $notes_file" >&2
+    exit 1
+  fi
+fi
 release_commit=$(git rev-parse --verify HEAD)
 release_epoch=$(git show -s --format=%ct HEAD)
 release_name="secureflow-${release_version}-${release_commit:0:12}"

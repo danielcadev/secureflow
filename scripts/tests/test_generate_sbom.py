@@ -262,6 +262,17 @@ version = "0.2.0"
                     stream.seek(0)
                     stream.write(bytes([original[0] ^ 0x01]))
 
+    def test_symlinked_workspace_manifest_is_rejected(self) -> None:
+        _, checksum = self.make_crate('license = "MIT"\n')
+        self.write_lock(checksum)
+        manifest = self.root / "crates" / "secureflow" / "Cargo.toml"
+        retained = self.root / "untrusted-workspace-manifest.toml"
+        manifest.rename(retained)
+        manifest.symlink_to(retained)
+        result, output, attribution = self.run_generator()
+        self.assert_failed_without_outputs(result, output, attribution)
+        self.assertIn("cannot open TOML manifest", result.stderr)
+
     def test_existing_output_is_never_overwritten(self) -> None:
         _, checksum = self.make_crate('license = "MIT"\n')
         self.write_lock(checksum)

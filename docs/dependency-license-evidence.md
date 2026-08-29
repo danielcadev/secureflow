@@ -28,7 +28,9 @@ guessing a license identifier from its contents.
 
 Source-less lockfile entries must match explicit workspace members. Workspace
 version and license inheritance are resolved from `[workspace.package]`; the
-member manifest and any declared license file are hashed. Git dependencies,
+member manifest and any declared license file are bounded, opened without
+following their final symlink, and hashed from the opened regular file.
+Symlinked workspace path components are rejected. Git dependencies,
 unknown registries, workspace globs, missing archives, checksum mismatches,
 missing declarations, conflicting declarations, missing license files, unsafe
 paths, and pre-existing outputs all fail closed.

@@ -3652,20 +3652,20 @@ fn execute(cli: Cli) -> Result<(), CliError> {
     }
 }
 
-fn load_manifest(path: &PathBuf) -> Result<(Vec<u8>, RunManifest), CliError> {
+fn load_manifest(path: &Path) -> Result<(Vec<u8>, RunManifest), CliError> {
     let bytes = read_bounded_file(path, MAX_MANIFEST_BYTES)?;
     let manifest: RunManifest = serde_json::from_slice(&bytes)?;
     manifest.validate()?;
     Ok((bytes, manifest))
 }
 
-fn ensure_catalog_database_outside_input(database: &Path, input: &PathBuf) -> Result<(), CliError> {
+fn ensure_catalog_database_outside_input(database: &Path, input: &Path) -> Result<(), CliError> {
     let metadata = fs::symlink_metadata(input).map_err(|source| CliError::Read {
-        path: input.clone(),
+        path: input.to_path_buf(),
         source,
     })?;
     if metadata.file_type().is_symlink() {
-        return Err(CliError::CatalogInputSymlink(input.clone()));
+        return Err(CliError::CatalogInputSymlink(input.to_path_buf()));
     }
     if metadata.is_dir() {
         ensure_output_outside_tree(database, input)
@@ -3674,24 +3674,24 @@ fn ensure_catalog_database_outside_input(database: &Path, input: &PathBuf) -> Re
     }
 }
 
-fn collect_osv_files(input: &PathBuf) -> Result<Vec<PathBuf>, CliError> {
+fn collect_osv_files(input: &Path) -> Result<Vec<PathBuf>, CliError> {
     let metadata = fs::symlink_metadata(input).map_err(|source| CliError::Read {
-        path: input.clone(),
+        path: input.to_path_buf(),
         source,
     })?;
     if metadata.file_type().is_symlink() {
-        return Err(CliError::CatalogInputSymlink(input.clone()));
+        return Err(CliError::CatalogInputSymlink(input.to_path_buf()));
     }
     let mut files = Vec::new();
     if metadata.is_file() {
-        files.push(input.clone());
+        files.push(input.to_path_buf());
     } else if metadata.is_dir() {
         collect_osv_directory(input, 0, &mut files)?;
     } else {
-        return Err(CliError::NotAFile(input.clone()));
+        return Err(CliError::NotAFile(input.to_path_buf()));
     }
     if files.is_empty() {
-        return Err(CliError::EmptyCatalogInput(input.clone()));
+        return Err(CliError::EmptyCatalogInput(input.to_path_buf()));
     }
     Ok(files)
 }
@@ -4402,7 +4402,7 @@ fn ensure_output_outside_tree(output: &Path, root: &Path) -> Result<(), CliError
     Ok(())
 }
 
-fn write_atomic(path: &PathBuf, bytes: &[u8]) -> Result<(), CliError> {
+fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), CliError> {
     let parent = path.parent().unwrap_or_else(|| std::path::Path::new("."));
     let name = path
         .file_name()
@@ -4429,7 +4429,7 @@ fn write_atomic(path: &PathBuf, bytes: &[u8]) -> Result<(), CliError> {
                 if let Err(source) = write_result {
                     let _ = fs::remove_file(&candidate);
                     return Err(CliError::Write {
-                        path: path.clone(),
+                        path: path.to_path_buf(),
                         source,
                     });
                 }
@@ -4439,14 +4439,14 @@ fn write_atomic(path: &PathBuf, bytes: &[u8]) -> Result<(), CliError> {
             Err(source) if source.kind() == std::io::ErrorKind::AlreadyExists => continue,
             Err(source) => {
                 return Err(CliError::Write {
-                    path: path.clone(),
+                    path: path.to_path_buf(),
                     source,
                 });
             }
         }
     }
     let temporary = temporary.ok_or_else(|| CliError::Write {
-        path: path.clone(),
+        path: path.to_path_buf(),
         source: std::io::Error::new(
             std::io::ErrorKind::AlreadyExists,
             "could not allocate a unique temporary output file",
@@ -4455,7 +4455,7 @@ fn write_atomic(path: &PathBuf, bytes: &[u8]) -> Result<(), CliError> {
     if let Err(source) = fs::rename(&temporary, path) {
         let _ = fs::remove_file(&temporary);
         return Err(CliError::Write {
-            path: path.clone(),
+            path: path.to_path_buf(),
             source,
         });
     }

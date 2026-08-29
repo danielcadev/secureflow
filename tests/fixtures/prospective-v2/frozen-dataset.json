@@ -1,4 +1,6 @@
 {
+  "contract_version": "secureflow-prospective-dataset-v1",
+  "dataset_id": "sf_dataset_18609eb48b788934bd4e6aa5522eefa551471338cb1526bb2e5a0d7d605bf3c6",
   "frozen_at": "2026-08-29T12:00:00Z",
   "purpose": "synthetic-contract-test",
   "authorization": {
