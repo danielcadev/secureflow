@@ -614,6 +614,17 @@ assessment, a 400-scenario paired API risk corpus, and a blocked-by-construction
 production pilot plan. Remote recon, DNS/CT, and HTTP transport remain
 unimplemented.
 
+## Release evidence
+
+The local release bundle includes a deterministic CycloneDX 1.5 inventory and
+a human-readable Cargo dependency license-declaration inventory. Registry
+metadata is extracted offline from local `.crate` archives only after their
+SHA-256 matches `Cargo.lock`; missing or ambiguous evidence stops the release.
+This records package-manager declarations and does not establish legal
+completeness, license compatibility, compliance, or cross-host binary
+reproducibility. See
+[`docs/dependency-license-evidence.md`](./docs/dependency-license-evidence.md).
+
 ## Security and contributions
 
 See [`SECURITY.md`](./SECURITY.md) for private vulnerability reporting and

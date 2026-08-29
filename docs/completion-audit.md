@@ -31,7 +31,7 @@ outperforms a human researcher.
 | Local-first AI | Redacted preparation disabled by default, consent, budget, Luna default, model/prompt/token accounting, and advisory response | Complete as an offline contract; no network client or real provider quality/cost measurement exists |
 | CV/paper evidence | Demo, separate evaluation, schemas, ADRs, threat model, and a matrix of allowed/prohibited claims | Complete for describing an engineering prototype; does not support superiority, production readiness, or general effectiveness |
 | Preservation of originals | Demo and evaluation write under `/tmp`; subsequent Git verification | Complete in this work: source repositories remained outside SecureFlow, and pre-existing changes in other worktrees were not modified |
-| Reproducible publication | Public `danielcadev/secureflow` repository, pinned Rust 1.92, commit-pinned CI actions, fmt/clippy/test/audit/build, deterministic CycloneDX SBOM, and a hashed bundle from clean Git | Remote CI passed; release `v0.1.0` uses an annotated tag and checksums, but the initial tag has no cryptographic signature |
+| Reproducible publication | Public `danielcadev/secureflow` repository, pinned Rust 1.92, commit-pinned CI actions, fmt/clippy/test/audit/build, deterministic CycloneDX SBOM, checksum-bound Cargo license declarations, and a hashed bundle from clean Git | The 0.2.0 release path fails closed on missing or ambiguous Cargo evidence and adds a human-readable declaration inventory; this is not legal completeness or cross-host binary reproducibility. Release `v0.1.0` uses an annotated tag and checksums, but the initial tag has no cryptographic signature |
 
 ## Executed evidence
 
@@ -99,9 +99,10 @@ outperforms a human researcher.
   pinned manifest hashes: `core` 66,142,849 bytes, `malicious` 147,507,376
   bytes, and `full` 234,613,073 bytes compressed. They remain local evidence,
   not authenticated or published catalog releases.
-- Two SBOM generator executions produced the same SHA-256. This measures
-  inventory determinism for one `Cargo.lock`, not cross-host binary
-  reproducibility.
+- Focused generator tests produce byte-identical paired SBOM and attribution
+  artifacts from the same synthetic `Cargo.lock`, workspace manifests, and
+  checksum-verified `.crate` bytes. This measures local evidence determinism,
+  not legal completeness or cross-host binary reproducibility.
 - The online backup of the real 1.20 GB catalog completed in 45.96 seconds,
   used mode `0600`, and revalidated its hash, `quick_check`, and foreign keys.
   That 2026-08-23 run did not execute a full-scale restore. The later Go/PyPI

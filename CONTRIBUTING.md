@@ -12,11 +12,15 @@ rustup run 1.92.0 cargo fmt --all -- --check
 rustup run 1.92.0 cargo clippy --workspace --all-targets --locked -- -D warnings
 rustup run 1.92.0 cargo test --workspace --locked
 rustup run 1.92.0 cargo audit
+python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 ```
 
 If Rust was installed through a distribution package rather than rustup, use
 the pinned CI container or install the pinned rustup toolchain. The local
 release script fails closed instead of silently using a different compiler.
+Dependency-license evidence changes must also preserve the offline,
+checksum-bound behavior and limitations documented in
+[`docs/dependency-license-evidence.md`](./docs/dependency-license-evidence.md).
 
 Changes to JSON contracts must update the corresponding schema, semantic
 validator, positive test, and tamper/negative test. New benchmark data must

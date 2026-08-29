@@ -14,6 +14,9 @@ All notable changes to SecureFlow are documented here.
   without promoting them to findings or human review decisions;
 - make local releases fail closed unless rustup executes the pinned Rust 1.92.0
   toolchain and records that exact toolchain in provenance;
+- bind Cargo license declarations to checksum-verified local `.crate` archives,
+  emit them in the deterministic CycloneDX SBOM, and include a human-readable
+  declaration inventory without claiming legal completeness;
 - exclude root and nested `node_modules` trees explicitly from Engine scans and
   from the matching target fingerprint without excluding project-owned tests;
 - add a repository threat model covering assets, actors, trust boundaries,
