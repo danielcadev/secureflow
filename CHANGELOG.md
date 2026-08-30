@@ -2,7 +2,7 @@
 
 All notable changes to SecureFlow are documented here.
 
-## 0.2.0 — Unreleased
+## 0.2.0 — 2026-08-30
 
 - freeze `secureflow-run-v1`, add `secureflow-run-v2` for Engine graph,
   fingerprint, byte-location, and evidence-state provenance, and retain a
