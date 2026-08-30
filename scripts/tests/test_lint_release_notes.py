@@ -50,6 +50,29 @@ is allowed inside a fence
 """
         self.assertEqual(LINTER.lint_text(text), [])
 
+    def test_release_state_requires_one_marker(self) -> None:
+        self.assertTrue(LINTER.release_state_errors("# Missing\n"))
+        duplicated = """# Release
+
+<!-- secureflow-release-state: draft -->
+<!-- secureflow-release-state: final -->
+"""
+        self.assertTrue(LINTER.release_state_errors(duplicated))
+        fenced = """# Release
+
+```text
+<!-- secureflow-release-state: final -->
+```
+"""
+        self.assertTrue(LINTER.release_state_errors(fenced))
+
+    def test_draft_is_allowed_in_ci_but_rejected_for_tag_publication(self) -> None:
+        draft = "# Release\n\n<!-- secureflow-release-state: draft -->\n"
+        self.assertEqual(LINTER.release_state_errors(draft), [])
+        self.assertTrue(LINTER.release_state_errors(draft, require_final=True))
+        final = "# Release\n\n<!-- secureflow-release-state: final -->\n"
+        self.assertEqual(LINTER.release_state_errors(final, require_final=True), [])
+
 
 if __name__ == "__main__":
     unittest.main()

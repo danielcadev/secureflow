@@ -58,6 +58,7 @@ if [[ "${GITHUB_REF_TYPE:-}" == "tag" ]]; then
     echo "missing tracked release notes: $notes_file" >&2
     exit 1
   fi
+  python3 scripts/lint_release_notes.py --require-final "$notes_file"
 fi
 release_commit=$(git rev-parse --verify HEAD)
 release_epoch=$(git show -s --format=%ct HEAD)

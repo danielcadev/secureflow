@@ -29,6 +29,22 @@
     "binary_sha256": "14ddca249a22a324ef6fa206268cf7089216cc400d3617c9fb750f40ccc2de3c",
     "report_contract": "secure-json-v1",
     "engine_version": "0.1.10",
+    "rules_evaluated": 13,
+    "rule_ids": [
+      "SE1001",
+      "SE1002",
+      "SE1003",
+      "SE1004",
+      "SE1005",
+      "SE1006",
+      "SE1007",
+      "SE1008",
+      "SE1009",
+      "SE1010",
+      "SE1011",
+      "SE1012",
+      "SE1013"
+    ],
     "mode": "compact",
     "parse_cache_enabled": false,
     "full_graph_requested": false
@@ -61,7 +77,7 @@
     "parser_diagnostics": 0,
     "scan_errors": 0,
     "truncated": false,
-    "complete": true
+    "scan_completed": true
   },
   "disposition_counts": {
     "validated_vulnerabilities": 0,

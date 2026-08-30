@@ -23,7 +23,7 @@ If the exact target revision, Engine binary hash, exclusions, limits, or authori
 
 ## Historical triage baseline
 
-The retained compact run reported zero candidates and three deterministic Engine abstentions. Manual source review did not establish all five exploitability gates for any of them:
+The retained compact run reported zero findings and three deterministic Engine abstentions. Manual source review did not establish all five exploitability gates for any of them:
 
 1. A test-only fixed process expectation lacked production reachability, lower-privilege input control, and reproducible impact.
 2. The GitHub Actions OIDC URL and token came from the same CI authority; no separate lower-privilege destination controller or privilege gain was established.

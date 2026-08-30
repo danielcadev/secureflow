@@ -5,7 +5,7 @@ Future SecureFlow releases publish two deliberately different archives for one e
 - `secureflow-<version>-<commit>-source.tar.gz` contains only files tracked by Git at the release commit. It is created from the exact 40-character commit ID with a fixed gzip header and stable top-level prefix.
 - `secureflow-<version>-<commit>.tar.gz` is the host-specific Linux bundle. It contains the compiled binary, a copy of the source, documentation, an SBOM, dependency license declarations, build provenance, and internal `SHA256SUMS`.
 
-Each archive has an adjacent `.sha256` file. The tag workflow also creates a GitHub artifact attestation for each archive before a separate, contents-write-only job publishes the same retained files. Release-note prose and list items must each occupy one physical Markdown source line; CI and the release script enforce that presentation rule with `scripts/lint_release_notes.py`.
+Each archive has an adjacent `.sha256` file. The tag workflow also creates a GitHub artifact attestation for each archive before a separate, contents-write-only job publishes the same retained files. Release-note prose and list items must each occupy one physical Markdown source line; CI and the release script enforce that presentation rule with `scripts/lint_release_notes.py`. Every release-note file also declares exactly one hidden `secureflow-release-state` marker, and tag-mode packaging rejects any selected note that is not explicitly `final`.
 
 ## Verify a published release
 

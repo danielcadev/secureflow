@@ -69,6 +69,11 @@ class M03ResearchEvidenceTests(unittest.TestCase):
             evidence["engine"]["binary_sha256"],
             "14ddca249a22a324ef6fa206268cf7089216cc400d3617c9fb750f40ccc2de3c",
         )
+        self.assertEqual(evidence["engine"]["rules_evaluated"], 13)
+        self.assertEqual(
+            evidence["engine"]["rule_ids"],
+            [f"SE{number}" for number in range(1001, 1014)],
+        )
         self.assertEqual(
             evidence["report"]["raw_report_sha256"],
             "2557f2ba0a0705e4cf9ee18a00c6201bb35fa82e8d40cb0db9017fe4c2a36e7d",
@@ -98,7 +103,7 @@ class M03ResearchEvidenceTests(unittest.TestCase):
                 "parser_diagnostics": 0,
                 "scan_errors": 0,
                 "truncated": False,
-                "complete": True,
+                "scan_completed": True,
             },
         )
         resources = evidence["resource_observation"]

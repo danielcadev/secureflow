@@ -1,6 +1,6 @@
 # SecureFlow threat model
 
-Status: current design baseline for the `0.2.0` development line.
+Status: current design baseline for the unpublished `0.3.0` development line.
 
 This document models threats to SecureFlow itself. It does not claim that
 SecureFlow proves an analyzed target secure, and it does not authorize testing
@@ -139,11 +139,14 @@ evidence.
 ## Validation evidence
 
 Controls are expected to be backed by repository-native tests or retained
-artifacts. The current evidence map is maintained in
-[`completion-audit.md`](./completion-audit.md), while publishable and prohibited
-claims are separated in [`evidence-and-claims.md`](./evidence-and-claims.md).
+artifacts. The historical MVP evidence map is preserved in
+[`completion-audit.md`](./completion-audit.md), the current unpublished line is
+tracked in [`m0.3-milestone-status.md`](./m0.3-milestone-status.md), and
+publishable and prohibited claims are separated in
+[`evidence-and-claims.md`](./evidence-and-claims.md).
 Changes that alter a trust boundary must update this model, the relevant
-contract or ADR, positive and negative tests, and the completion audit.
+contract or ADR, positive and negative tests, and the applicable versioned
+evidence status.
 
 ## Explicit non-goals for the current line
 

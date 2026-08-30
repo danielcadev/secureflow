@@ -25,8 +25,11 @@ checksum-bound behavior and limitations documented in
 
 Release-note paragraphs and list items must each use one physical source line;
 this lets GitHub use the full rendered content width instead of preserving an
-editor's hard wrap. A release from a clean commit creates a host-specific Linux
-bundle and a separate deterministic source-only archive:
+editor's hard wrap. Each release-note file also has exactly one hidden
+`secureflow-release-state` marker. Normal CI permits `draft`, but a tag build
+fails unless its selected note is marked `final`. A release from a clean commit
+creates a host-specific Linux bundle and a separate deterministic source-only
+archive:
 
 ```bash
 bash scripts/release-local.sh /tmp/secureflow-release

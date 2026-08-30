@@ -10,7 +10,6 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
-      artifact-metadata: write
       attestations: write
       contents: read
       id-token: write
@@ -27,6 +26,7 @@ jobs:
           test -f "${notes_file}"
           test -s "${notes_file}"
           python3 scripts/lint_release_notes.py docs/releases
+          python3 scripts/lint_release_notes.py --require-final "${notes_file}"
 
       - name: Install pinned Rust toolchain
         run: rustup toolchain install 1.92.0 --profile minimal --component clippy,rustfmt

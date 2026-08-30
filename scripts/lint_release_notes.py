@@ -14,6 +14,9 @@ HEADING = re.compile(r"^#{1,6}(?:\s|$)")
 FENCE = re.compile(r"^\s*(```|~~~)")
 TABLE_ROW = re.compile(r"^\s*\|.*\|\s*$")
 TABLE_DIVIDER = re.compile(r"^\s*:?-{3,}:?(?:\s*\|\s*:?-{3,}:?)+\s*$")
+RELEASE_STATE = re.compile(
+    r"^<!-- secureflow-release-state: (draft|final) -->$", re.MULTILINE
+)
 
 
 def release_note_files(paths: list[pathlib.Path]) -> list[pathlib.Path]:
@@ -88,6 +91,28 @@ def lint_file(path: pathlib.Path) -> list[tuple[int, str]]:
     return lint_text(path.read_text(encoding="utf-8"))
 
 
+def release_state_errors(text: str, require_final: bool = False) -> list[tuple[int, str]]:
+    matches = list(RELEASE_STATE.finditer(text))
+    lines = text.splitlines()
+    if len(matches) != 1 or len(lines) < 3 or not RELEASE_STATE.fullmatch(lines[2]):
+        return [
+            (
+                3,
+                "release notes require exactly one secureflow-release-state marker on line 3",
+            )
+        ]
+    state = RELEASE_STATE.fullmatch(lines[2]).group(1)
+    if require_final and state != "final":
+        line_number = text.count("\n", 0, matches[0].start()) + 1
+        return [
+            (
+                line_number,
+                "tag publication requires secureflow-release-state: final",
+            )
+        ]
+    return []
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Require one physical source line per release-note paragraph and list item."
@@ -98,6 +123,11 @@ def main() -> int:
         type=pathlib.Path,
         default=[pathlib.Path("docs/releases")],
         help="Markdown file or directory of Markdown release notes",
+    )
+    parser.add_argument(
+        "--require-final",
+        action="store_true",
+        help="reject release notes whose explicit state marker is not final",
     )
     args = parser.parse_args()
 
@@ -112,7 +142,9 @@ def main() -> int:
 
     failed = False
     for path in files:
-        for line_number, message in lint_file(path):
+        text = path.read_text(encoding="utf-8")
+        errors = lint_text(text) + release_state_errors(text, args.require_final)
+        for line_number, message in errors:
             print(f"{path}:{line_number}: {message}", file=sys.stderr)
             failed = True
     if failed:
