@@ -93,7 +93,7 @@ outperforms a human researcher.
   or other local-user permissions.
 - `catalog_bench` on NVMe/Btrfs: 100k/500k/1M synthetic source records; 1M
   produced 900k canonical entities, 2,072,891,392 bytes, 104,736.081 ms total
-  load time, 66.451 μs exact lookup, 843.406 ms worst-case FTS, and 450.295 μs
+  load time, 66.451 μs exact lookup, 843.406 ms for the declared broad FTS scenario, and 450.295 μs
   exact package lookup. The CSV is retained at
   `docs/evidence/catalog-benchmark-2026-08-23.csv`.
 - The real pilot accepted 2,730 crates.io, 55 GitHub Actions, and 226,859 npm

@@ -58,7 +58,7 @@
     "records_per_second_at_100k_min": 3000,
     "exact_identifier_median_us_at_100k_max": 5000,
     "exact_package_median_us_at_100k_max": 5000,
-    "worst_case_fts_median_us_at_100k_max": 1000000
+    "broad_fts_median_us_at_100k_max": 1000000
   },
   "measurements": [
     {
@@ -73,7 +73,7 @@
       "total_ingest_ms": 4444.944,
       "records_per_second": 11248.7,
       "exact_identifier_median_us": 130.512,
-      "worst_case_fts_median_us": 81813.926,
+      "broad_fts_median_us": 81813.926,
       "exact_package_median_us": 271.903,
       "quick_check": "ok",
       "foreign_key_violations": 0,
@@ -93,7 +93,7 @@
       "total_ingest_ms": 6869.974,
       "records_per_second": 14556.1,
       "exact_identifier_median_us": 68.7,
-      "worst_case_fts_median_us": 78584.637,
+      "broad_fts_median_us": 78584.637,
       "exact_package_median_us": 156.142,
       "quick_check": "ok",
       "foreign_key_violations": 0,

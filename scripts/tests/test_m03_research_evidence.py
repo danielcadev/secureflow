@@ -278,8 +278,8 @@ class M03ResearchEvidenceTests(unittest.TestCase):
             gates["exact_package_median_us_at_100k_max"],
         )
         self.assertLessEqual(
-            at_100k["worst_case_fts_median_us"],
-            gates["worst_case_fts_median_us_at_100k_max"],
+            at_100k["broad_fts_median_us"],
+            gates["broad_fts_median_us_at_100k_max"],
         )
         self.assertEqual(evidence["gate_result"], "passed")
         self.assertFalse(evidence["real_source_reference_lane"]["rerun_as_part_of_this_gate"])

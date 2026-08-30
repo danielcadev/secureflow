@@ -74,7 +74,7 @@ the checkpoint.
 | 500,000 | 450,000 | 1,036,513,280 B | 30.192 s | 10.157 s | 40.348 s | 12,392.2 |
 | 1,000,000 | 900,000 | 2,072,891,392 B | 80.797 s | 23.939 s | 104.736 s | 9,547.8 |
 
-| Source records | Exact alias | Worst-case FTS | Exact package |
+| Source records | Exact alias | Broad FTS scenario | Exact package |
 | ---: | ---: | ---: | ---: |
 | 100,000 | 46.680 μs | 70.584 ms | 112.841 μs |
 | 500,000 | 68.291 μs | 408.601 ms | 260.053 μs |
