@@ -25,8 +25,9 @@
     ]
   },
   "engine": {
-    "source_commit": "0959cc6d9fe06fb92369497caab78af31cbf98d5",
-    "binary_sha256": "14ddca249a22a324ef6fa206268cf7089216cc400d3617c9fb750f40ccc2de3c",
+    "source_commit": "c3aa5f7ee54139eac2e0398d6e4bc09969488cef",
+    "evidence_binding_commit": "adf92157366251538946d4707de643ba05700c05",
+    "binary_sha256": "eb1bdc4c0b79855d85cc39feabba1ac79b43ba8bab3687e95103ef670cbb3913",
     "report_contract": "secure-json-v1",
     "engine_version": "0.1.10",
     "rules_evaluated": 13,
@@ -50,15 +51,15 @@
     "full_graph_requested": false
   },
   "report": {
-    "raw_report_sha256": "2557f2ba0a0705e4cf9ee18a00c6201bb35fa82e8d40cb0db9017fe4c2a36e7d",
+    "raw_report_sha256": "5f13488477fb859bab640875e3482fc87f85bf5c6a691c613e95c596b086084f",
     "semantic_fingerprint": "91b75fdacd4caecb2610d86afdcd855cc9dc5446060ec61aea9ae33fd3159a89",
-    "bytes": 2508213,
+    "bytes": 2508211,
     "raw_report_published": false,
     "raw_report_retention": "local temporary evidence only"
   },
   "resource_observation": {
-    "wall_seconds": 19.17,
-    "peak_rss_kib": 737564,
+    "wall_seconds": 13.03,
+    "peak_rss_kib": 737204,
     "performance_claim_allowed": false,
     "limitation": "This is one local run without controlled cache state, run order, or filesystem contention; its timing and memory values are descriptive observations, not comparative performance evidence."
   },

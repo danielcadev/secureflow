@@ -63,11 +63,15 @@ class M03ResearchEvidenceTests(unittest.TestCase):
         )
         self.assertEqual(
             evidence["engine"]["source_commit"],
-            "0959cc6d9fe06fb92369497caab78af31cbf98d5",
+            "c3aa5f7ee54139eac2e0398d6e4bc09969488cef",
+        )
+        self.assertEqual(
+            evidence["engine"]["evidence_binding_commit"],
+            "adf92157366251538946d4707de643ba05700c05",
         )
         self.assertEqual(
             evidence["engine"]["binary_sha256"],
-            "14ddca249a22a324ef6fa206268cf7089216cc400d3617c9fb750f40ccc2de3c",
+            "eb1bdc4c0b79855d85cc39feabba1ac79b43ba8bab3687e95103ef670cbb3913",
         )
         self.assertEqual(evidence["engine"]["rules_evaluated"], 13)
         self.assertEqual(
@@ -76,13 +80,13 @@ class M03ResearchEvidenceTests(unittest.TestCase):
         )
         self.assertEqual(
             evidence["report"]["raw_report_sha256"],
-            "2557f2ba0a0705e4cf9ee18a00c6201bb35fa82e8d40cb0db9017fe4c2a36e7d",
+            "5f13488477fb859bab640875e3482fc87f85bf5c6a691c613e95c596b086084f",
         )
         self.assertEqual(
             evidence["report"]["semantic_fingerprint"],
             "91b75fdacd4caecb2610d86afdcd855cc9dc5446060ec61aea9ae33fd3159a89",
         )
-        self.assertEqual(evidence["report"]["bytes"], 2_508_213)
+        self.assertEqual(evidence["report"]["bytes"], 2_508_211)
         self.assertFalse(evidence["report"]["raw_report_published"])
 
         accounting = evidence["exact_accounting"]
@@ -107,8 +111,8 @@ class M03ResearchEvidenceTests(unittest.TestCase):
             },
         )
         resources = evidence["resource_observation"]
-        self.assertEqual(resources["wall_seconds"], 19.17)
-        self.assertEqual(resources["peak_rss_kib"], 737_564)
+        self.assertEqual(resources["wall_seconds"], 13.03)
+        self.assertEqual(resources["peak_rss_kib"], 737_204)
         self.assertFalse(resources["performance_claim_allowed"])
 
         expected_dispositions = [

@@ -33,11 +33,11 @@ Their state is `abstained-after-source-review`, not `validated`, `rejected`, or 
 
 ## Fresh Engine observation
 
-The fresh compact run binds Engine commit `0959cc6d9fe06fb92369497caab78af31cbf98d5` and binary SHA-256 `14ddca249a22a324ef6fa206268cf7089216cc400d3617c9fb750f40ccc2de3c`. It scanned 4,847 of 4,859 candidate files, extracted 57,748 facts, and evaluated three candidate paths. It retained 14 facts and a seven-node/four-edge evidence graph, producing zero findings, three explicit abstentions, zero diagnostics, zero errors, and no truncation.
+The fresh compact run binds evaluated Engine source commit `c3aa5f7ee54139eac2e0398d6e4bc09969488cef`, evidence commit `adf92157366251538946d4707de643ba05700c05`, and binary SHA-256 `eb1bdc4c0b79855d85cc39feabba1ac79b43ba8bab3687e95103ef670cbb3913`. It scanned 4,847 of 4,859 candidate files, extracted 57,748 facts, and evaluated three candidate paths. It retained 14 facts and a seven-node/four-edge evidence graph, producing zero findings, three explicit abstentions, zero diagnostics, zero errors, and no truncation.
 
 The three dispositions remain source-reviewed abstentions. SE1004 records `actor-authority-equivalence`; SE1013 records `independent-policy-bypass`; and the test-only SE1001 evidence records `test-context-reachability-unresolved`. No disposition is a validated vulnerability, rejected finding, false negative, or safe control. Zero findings is not a clean verdict.
 
-The 19.17-second wall time and 737,564 KiB peak RSS are descriptive values from one local execution. Cache state, run order, and filesystem contention were not controlled, so these values cannot support a performance or superiority claim.
+The 13.03-second wall time and 737,204 KiB peak RSS are descriptive values from one local execution. Cache state, run order, and filesystem contention were not controlled, so these values cannot support a performance or superiority claim.
 
 ## Completion gate
 
