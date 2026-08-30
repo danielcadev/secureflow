@@ -631,6 +631,8 @@ establish source safety, legal completeness, license compatibility, compliance,
 or cross-host binary reproducibility. See the exact
 [`release-verification procedure`](./docs/release-verification.md) and
 [`dependency-license evidence boundary`](./docs/dependency-license-evidence.md).
+The unpublished M0.3 workstreams and their claim gates are tracked in the
+[`M0.3 milestone status`](./docs/m0.3-milestone-status.md).
 
 ## Security and contributions
 

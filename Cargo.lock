@@ -940,7 +940,7 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
 name = "secureflow"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "clap",
  "jsonschema",
@@ -959,7 +959,7 @@ dependencies = [
 
 [[package]]
 name = "secureflow-ai"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "secureflow-model",
  "serde",
@@ -971,7 +971,7 @@ dependencies = [
 
 [[package]]
 name = "secureflow-bench-adapter"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "jsonschema",
  "serde",
@@ -984,7 +984,7 @@ dependencies = [
 
 [[package]]
 name = "secureflow-engine-adapter"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "libc",
  "secureflow-model",
@@ -995,7 +995,7 @@ dependencies = [
 
 [[package]]
 name = "secureflow-knowledge"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "rusqlite",
  "secureflow-model",
@@ -1011,7 +1011,7 @@ dependencies = [
 
 [[package]]
 name = "secureflow-model"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1020,7 +1020,7 @@ dependencies = [
 
 [[package]]
 name = "secureflow-orchestrator"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "secureflow-model",
  "serde",
@@ -1032,7 +1032,7 @@ dependencies = [
 
 [[package]]
 name = "secureflow-secure-adapter"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1043,7 +1043,7 @@ dependencies = [
 
 [[package]]
 name = "secureflow-web"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "jsonschema",
  "serde",

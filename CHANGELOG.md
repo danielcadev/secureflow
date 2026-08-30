@@ -2,6 +2,14 @@
 
 All notable changes to SecureFlow are documented here.
 
+## 0.3.0 — Unreleased
+
+- prepare a deterministic source-only archive alongside the explicitly host-specific Linux bundle, with adjacent checksums and documented verification boundaries;
+- split release construction and attestation from publication, use commit-pinned GitHub Actions with least-privilege job permissions, and attest the exact retained archives before publication;
+- require every release-note paragraph and list item to occupy one physical Markdown source line so GitHub renders the full content area consistently;
+- stage the workspace crates at version `0.3.0` while deliberately retaining the published `0.2.0` citation metadata until a separately approved release finalization;
+- record the M0.3 evidence boundary: the fresh npm rerun is pending integration, Mitiquete evidence is offline inventory only, the human-comparator study has not started, and 50,000/100,000-record knowledge measurements are synthetic capacity and quality gates rather than validated-vulnerability counts.
+
 ## 0.2.0 — 2026-08-30
 
 - freeze `secureflow-run-v1`, add `secureflow-run-v2` for Engine graph,
