@@ -36,6 +36,7 @@ if [[ -n "$(git status --porcelain=v1 --untracked-files=all)" ]]; then
   echo "release requires a clean Git worktree and index" >&2
   exit 1
 fi
+python3 scripts/lint_release_notes.py docs/releases
 
 release_version=$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)
 if [[ "${GITHUB_REF_TYPE:-}" == "tag" && "${GITHUB_REF_NAME:-}" != "v${release_version}" ]]; then
@@ -61,6 +62,7 @@ fi
 release_commit=$(git rev-parse --verify HEAD)
 release_epoch=$(git show -s --format=%ct HEAD)
 release_name="secureflow-${release_version}-${release_commit:0:12}"
+source_name="${release_name}-source"
 release_parent=$(dirname "$release_output")
 mkdir -p "$release_parent"
 release_stage=$(mktemp -d "$release_parent/.secureflow-release.XXXXXX")
@@ -110,9 +112,17 @@ PY
 mkdir "$release_output"
 tar --sort=name --mtime="@$release_epoch" --owner=0 --group=0 --numeric-owner \
   -C "$release_stage" -cf - "$release_name" | gzip -n > "$release_output/$release_name.tar.gz"
+python3 scripts/create_source_archive.py \
+  --repository . \
+  --revision "$release_commit" \
+  --prefix "$source_name" \
+  --output "$release_output/$source_name.tar.gz"
 (
   cd "$release_output"
   sha256sum "$release_name.tar.gz" > "$release_name.tar.gz.sha256"
+  sha256sum "$source_name.tar.gz" > "$source_name.tar.gz.sha256"
 )
 printf 'release bundle: %s\n' "$release_output/$release_name.tar.gz"
 printf 'release checksum: %s\n' "$release_output/$release_name.tar.gz.sha256"
+printf 'source archive: %s\n' "$release_output/$source_name.tar.gz"
+printf 'source checksum: %s\n' "$release_output/$source_name.tar.gz.sha256"

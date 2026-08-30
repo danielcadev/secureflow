@@ -617,14 +617,20 @@ unimplemented.
 
 ## Release evidence
 
-The local release bundle includes a deterministic CycloneDX 1.5 inventory and
-a human-readable Cargo dependency license-declaration inventory. Registry
-metadata is extracted offline from local `.crate` archives only after their
-SHA-256 matches `Cargo.lock`; missing or ambiguous evidence stops the release.
-This records package-manager declarations and does not establish legal
-completeness, license compatibility, compliance, or cross-host binary
-reproducibility. See
-[`docs/dependency-license-evidence.md`](./docs/dependency-license-evidence.md).
+The release path creates a deterministic source-only archive beside the
+host-specific Linux bundle and gives each archive an adjacent SHA-256 file.
+The tag workflow creates GitHub/Sigstore artifact attestations before a
+separate publication job receives `contents: write`. The Linux bundle includes
+a deterministic CycloneDX 1.5 inventory and a human-readable Cargo dependency
+license-declaration inventory. Registry metadata is extracted offline from
+local `.crate` archives only after its SHA-256 matches `Cargo.lock`; missing or
+ambiguous evidence stops the release.
+
+These controls bind artifacts to inputs and workflow identity. They do not
+establish source safety, legal completeness, license compatibility, compliance,
+or cross-host binary reproducibility. See the exact
+[`release-verification procedure`](./docs/release-verification.md) and
+[`dependency-license evidence boundary`](./docs/dependency-license-evidence.md).
 
 ## Security and contributions
 
