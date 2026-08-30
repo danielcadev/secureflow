@@ -1,0 +1,166 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://secureflow.local/schemas/secureflow-prospective-protocol-v2.schema.json",
+  "title": "SecureFlow sealed prospective human-comparison protocol v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "protocol_id", "sealed_at", "study_mode", "research_question", "dataset", "artifacts", "lanes", "equivalence", "blinding", "execution", "outcomes", "metrics", "success", "claims"],
+  "properties": {
+    "contract_version": { "const": "secureflow-prospective-protocol-v2" },
+    "protocol_id": { "type": "string", "pattern": "^sf_protocol_v2_[0-9a-f]{64}$" },
+    "sealed_at": { "type": "string", "format": "date-time" },
+    "study_mode": { "enum": ["synthetic-contract-test", "preregistered-holdout"] },
+    "research_question": { "type": "string", "minLength": 1, "maxLength": 1000 },
+    "dataset": {
+      "type": "object", "additionalProperties": false,
+      "required": ["dataset_id", "dataset_sha256", "total_cases", "holdout_cases", "holdout_vulnerable_cases", "holdout_safe_controls", "ground_truth_commitment_sha256"],
+      "properties": {
+        "dataset_id": { "type": "string", "pattern": "^sf_dataset_[0-9a-f]{64}$" },
+        "dataset_sha256": { "$ref": "#/$defs/sha256" },
+        "total_cases": { "type": "integer", "minimum": 1 },
+        "holdout_cases": { "type": "integer", "minimum": 1 },
+        "holdout_vulnerable_cases": { "type": "integer", "minimum": 0 },
+        "holdout_safe_controls": { "type": "integer", "minimum": 0 },
+        "ground_truth_commitment_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "artifacts": {
+      "type": "object", "additionalProperties": false,
+      "required": ["provenance_sha256", "license_manifest_sha256", "overlap_audit_sha256", "environment_sha256", "shared_capability_manifest_sha256"],
+      "properties": {
+        "provenance_sha256": { "$ref": "#/$defs/sha256" },
+        "license_manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "overlap_audit_sha256": { "$ref": "#/$defs/sha256" },
+        "environment_sha256": { "$ref": "#/$defs/sha256" },
+        "shared_capability_manifest_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "lanes": {
+      "type": "array", "minItems": 2, "maxItems": 2,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["lane_id", "kind", "treatment", "equivalent_capability_group", "cohort_or_version", "lane_configuration_sha256", "shared_capability_manifest_sha256", "environment_sha256", "time_limit_seconds_per_case", "network_policy", "case_access_policy", "human_reviewer_count"],
+        "properties": {
+          "lane_id": { "type": "string", "minLength": 1, "maxLength": 100 },
+          "kind": { "enum": ["secureflow-assisted-human", "human-comparator"] },
+          "treatment": { "enum": ["secureflow-available", "secureflow-unavailable"] },
+          "equivalent_capability_group": { "type": "string", "minLength": 1, "maxLength": 100 },
+          "cohort_or_version": { "type": "string", "minLength": 1, "maxLength": 300 },
+          "lane_configuration_sha256": { "$ref": "#/$defs/sha256" },
+          "shared_capability_manifest_sha256": { "$ref": "#/$defs/sha256" },
+          "environment_sha256": { "$ref": "#/$defs/sha256" },
+          "time_limit_seconds_per_case": { "type": "integer", "minimum": 1, "maximum": 86400 },
+          "network_policy": { "enum": ["disabled", "recorded-required"] },
+          "case_access_policy": { "const": "opaque-case-only" },
+          "human_reviewer_count": { "type": "integer", "minimum": 3 }
+        }
+      }
+    },
+    "equivalence": {
+      "type": "object", "additionalProperties": false,
+      "required": ["group_id", "secureflow_lane_id", "human_lane_id", "same_case_inputs", "same_time_limit", "same_network_policy", "same_environment_class", "same_non_treatment_tools", "treatment_is_only_planned_difference", "native_and_equivalent_lanes_reported_separately"],
+      "properties": {
+        "group_id": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "secureflow_lane_id": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "human_lane_id": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "same_case_inputs": { "const": true },
+        "same_time_limit": { "const": true },
+        "same_network_policy": { "const": true },
+        "same_environment_class": { "const": true },
+        "same_non_treatment_tools": { "const": true },
+        "treatment_is_only_planned_difference": { "const": true },
+        "native_and_equivalent_lanes_reported_separately": { "const": true }
+      }
+    },
+    "blinding": {
+      "type": "object", "additionalProperties": false,
+      "required": ["participant_ground_truth_hidden", "system_ground_truth_hidden", "lane_identity_hidden_from_adjudicators", "submissions_close_before_labels_open", "randomized_case_order", "randomization_commitment_sha256", "independent_primary_adjudicators", "independent_tie_breaker_required", "adjudicators_independent_from_corpus_authors", "adjudicators_independent_from_system_developers", "disagreement_resolution"],
+      "properties": {
+        "participant_ground_truth_hidden": { "const": true },
+        "system_ground_truth_hidden": { "const": true },
+        "lane_identity_hidden_from_adjudicators": { "const": true },
+        "submissions_close_before_labels_open": { "const": true },
+        "randomized_case_order": { "const": true },
+        "randomization_commitment_sha256": { "$ref": "#/$defs/sha256" },
+        "independent_primary_adjudicators": { "type": "integer", "minimum": 2 },
+        "independent_tie_breaker_required": { "const": true },
+        "adjudicators_independent_from_corpus_authors": { "const": true },
+        "adjudicators_independent_from_system_developers": { "const": true },
+        "disagreement_resolution": { "type": "string", "minLength": 1, "maxLength": 1000 }
+      }
+    },
+    "execution": {
+      "type": "object", "additionalProperties": false,
+      "required": ["attempt_ordinal_starts_at_zero", "default_attempts_per_case_lane", "retries_permitted", "retry_policy", "timeout_is_operational_error", "crash_is_operational_error", "malformed_output_is_operational_error", "operational_errors_never_count_as_no_finding", "raw_artifacts_retained_by_hash"],
+      "properties": {
+        "attempt_ordinal_starts_at_zero": { "const": true },
+        "default_attempts_per_case_lane": { "const": 1 },
+        "retries_permitted": { "const": false },
+        "retry_policy": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "timeout_is_operational_error": { "const": true },
+        "crash_is_operational_error": { "const": true },
+        "malformed_output_is_operational_error": { "const": true },
+        "operational_errors_never_count_as_no_finding": { "const": true },
+        "raw_artifacts_retained_by_hash": { "const": true }
+      }
+    },
+    "outcomes": {
+      "type": "object", "additionalProperties": false,
+      "required": ["one_atomic_case_per_principal_invariant", "finding_requires_source_evidence_impact_and_repair", "outcome_kinds", "all_outcome_kinds_separate", "no_finding_is_a_negative_observation_pending_adjudication", "abstentions_are_neither_positive_nor_negative", "errors_are_neither_findings_nor_no_findings", "positive_unit", "safe_control_unit"],
+      "properties": {
+        "one_atomic_case_per_principal_invariant": { "const": true },
+        "finding_requires_source_evidence_impact_and_repair": { "const": true },
+        "outcome_kinds": { "type": "array", "minItems": 4, "maxItems": 4, "uniqueItems": true, "items": { "enum": ["findings", "no-finding", "abstention", "operational-error"] } },
+        "all_outcome_kinds_separate": { "const": true },
+        "no_finding_is_a_negative_observation_pending_adjudication": { "const": true },
+        "abstentions_are_neither_positive_nor_negative": { "const": true },
+        "errors_are_neither_findings_nor_no_findings": { "const": true },
+        "positive_unit": { "const": "principal-invariant" },
+        "safe_control_unit": { "const": "case" }
+      }
+    },
+    "metrics": {
+      "type": "object", "additionalProperties": false,
+      "required": ["required_metrics", "report_per_case", "report_per_lane", "report_all_outcome_kinds_separately", "no_composite_winner_score", "integer_units_only"],
+      "properties": {
+        "required_metrics": { "type": "array", "minItems": 12, "maxItems": 12, "uniqueItems": true, "items": { "enum": ["validated-recall", "validated-precision", "false-positive-rate", "false-negative-count", "analyst-active-time-nanoseconds", "wall-clock-time-nanoseconds", "cost-microusd", "input-tokens", "output-tokens", "peak-rss-bytes", "abstention-count", "operational-error-count"] } },
+        "report_per_case": { "const": true },
+        "report_per_lane": { "const": true },
+        "report_all_outcome_kinds_separately": { "const": true },
+        "no_composite_winner_score": { "const": true },
+        "integer_units_only": { "const": true }
+      }
+    },
+    "success": {
+      "type": "object", "additionalProperties": false,
+      "required": ["preregistered_criterion", "uncertainty_method", "multiplicity_policy", "negative_and_mixed_results_published", "criterion_changes_require_new_protocol"],
+      "properties": {
+        "preregistered_criterion": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "uncertainty_method": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "multiplicity_policy": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "negative_and_mixed_results_published": { "const": true },
+        "criterion_changes_require_new_protocol": { "const": true }
+      }
+    },
+    "claims": {
+      "type": "object", "additionalProperties": false,
+      "required": ["evaluation_only", "task_bounded_claim_status", "task_bounded_comparison_eligible_after_adjudication", "requires_preregistered_criterion", "requires_independent_adjudication", "requires_uncertainty_analysis", "limited_to_frozen_dataset_cohort_and_configuration", "global_superiority_claim_allowed", "best_or_always_human_claim_allowed", "human_replacement_claim_allowed", "production_safety_claim_allowed"],
+      "properties": {
+        "evaluation_only": { "const": true },
+        "task_bounded_claim_status": { "const": "not-established" },
+        "task_bounded_comparison_eligible_after_adjudication": { "type": "boolean" },
+        "requires_preregistered_criterion": { "const": true },
+        "requires_independent_adjudication": { "const": true },
+        "requires_uncertainty_analysis": { "const": true },
+        "limited_to_frozen_dataset_cohort_and_configuration": { "const": true },
+        "global_superiority_claim_allowed": { "const": false },
+        "best_or_always_human_claim_allowed": { "const": false },
+        "human_replacement_claim_allowed": { "const": false },
+        "production_safety_claim_allowed": { "const": false }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  }
+}

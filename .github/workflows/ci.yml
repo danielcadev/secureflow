@@ -25,6 +25,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes bubblewrap
 
+      - name: Test offline release evidence generator
+        run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+
       - name: Format
         run: cargo +1.92.0 fmt --all -- --check
 
@@ -42,8 +45,14 @@ jobs:
       - name: Build release binary
         run: cargo +1.92.0 build --release --locked -p secureflow
 
+      - name: Fetch checksum-bound archives for every locked target
+        run: cargo +1.92.0 fetch --locked
+
       - name: Generate deterministic CycloneDX inventory
-        run: python3 scripts/generate-sbom.py --output target/secureflow-sbom.cdx.json
+        run: |
+          python3 scripts/generate-sbom.py \
+            --output target/secureflow-sbom.cdx.json \
+            --attribution-output target/secureflow-dependency-license-declarations.md
 
       - name: Upload retained evidence
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
@@ -52,5 +61,6 @@ jobs:
           path: |
             target/release/secureflow
             target/secureflow-sbom.cdx.json
+            target/secureflow-dependency-license-declarations.md
           if-no-files-found: error
           retention-days: 14

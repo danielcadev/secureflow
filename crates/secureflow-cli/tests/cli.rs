@@ -65,6 +65,10 @@ fn prospective_protocol_fixture() -> PathBuf {
         .join("../../tests/fixtures/prospective-protocol-draft.json")
 }
 
+fn prospective_v2_fixture() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/prospective-v2")
+}
+
 fn web_fixture() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/web-nextjs")
 }
@@ -905,6 +909,265 @@ fn prospective_preflight_binds_real_artifacts_without_opening_labels() {
     assert!(!rejected.status.success());
     assert!(!root.join("must-not-exist.json").exists());
     std::fs::remove_dir_all(root).expect("study cleanup");
+}
+
+#[test]
+fn prospective_v2_freezes_and_revalidates_exact_fixture_bytes() {
+    let fixture = prospective_v2_fixture();
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("clock should be after epoch")
+        .as_nanos();
+    let output_root = std::env::temp_dir().join(format!(
+        "secureflow-cli-prospective-v2-{}-{nonce}",
+        std::process::id()
+    ));
+    std::fs::create_dir(&output_root).expect("create exact temporary directory");
+    let dataset = output_root.join("frozen-dataset.json");
+
+    let freeze = Command::new(binary())
+        .arg("benchmark-dataset-freeze")
+        .arg("--draft")
+        .arg(fixture.join("dataset-draft.json"))
+        .arg("--case-root")
+        .arg(&fixture)
+        .arg("--authorization-scope")
+        .arg(fixture.join("authorization-scope.json"))
+        .arg("--reviewer-commitment")
+        .arg(fixture.join("reviewer-commitment.json"))
+        .arg("--provenance-manifest")
+        .arg(fixture.join("provenance.json"))
+        .arg("--license-manifest")
+        .arg(fixture.join("licenses.json"))
+        .arg("--overlap-audit")
+        .arg(fixture.join("overlap-audit.json"))
+        .arg("--historical-inventory")
+        .arg(fixture.join("historical-inventory.json"))
+        .arg("--output")
+        .arg(&dataset)
+        .output()
+        .expect("dataset freeze should start");
+    assert!(
+        freeze.status.success(),
+        "{}",
+        String::from_utf8_lossy(&freeze.stderr)
+    );
+    let value: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(&dataset).expect("frozen dataset should be readable"),
+    )
+    .expect("frozen dataset should be JSON");
+    validate_with_schema("secureflow-prospective-dataset-v1.schema.json", &value);
+    assert_eq!(value["claims"]["fixture_only"], true);
+    assert_eq!(value["claims"]["comparison_eligible"], false);
+
+    let validate = Command::new(binary())
+        .arg("benchmark-dataset-validate")
+        .arg(&dataset)
+        .arg("--case-root")
+        .arg(&fixture)
+        .arg("--authorization-scope")
+        .arg(fixture.join("authorization-scope.json"))
+        .arg("--reviewer-commitment")
+        .arg(fixture.join("reviewer-commitment.json"))
+        .arg("--provenance-manifest")
+        .arg(fixture.join("provenance.json"))
+        .arg("--license-manifest")
+        .arg(fixture.join("licenses.json"))
+        .arg("--overlap-audit")
+        .arg(fixture.join("overlap-audit.json"))
+        .arg("--historical-inventory")
+        .arg(fixture.join("historical-inventory.json"))
+        .output()
+        .expect("dataset validation should start");
+    assert!(
+        validate.status.success(),
+        "{}",
+        String::from_utf8_lossy(&validate.stderr)
+    );
+
+    let overwrite = Command::new(binary())
+        .arg("benchmark-dataset-freeze")
+        .arg("--draft")
+        .arg(fixture.join("dataset-draft.json"))
+        .arg("--case-root")
+        .arg(&fixture)
+        .arg("--authorization-scope")
+        .arg(fixture.join("authorization-scope.json"))
+        .arg("--reviewer-commitment")
+        .arg(fixture.join("reviewer-commitment.json"))
+        .arg("--provenance-manifest")
+        .arg(fixture.join("provenance.json"))
+        .arg("--license-manifest")
+        .arg(fixture.join("licenses.json"))
+        .arg("--overlap-audit")
+        .arg(fixture.join("overlap-audit.json"))
+        .arg("--historical-inventory")
+        .arg(fixture.join("historical-inventory.json"))
+        .arg("--output")
+        .arg(&dataset)
+        .output()
+        .expect("overwrite check should start");
+    assert!(!overwrite.status.success());
+
+    let protocol = output_root.join("sealed-protocol.json");
+    let preflight = Command::new(binary())
+        .arg("benchmark-protocol-preflight")
+        .args(["--version", "v2"])
+        .arg("--draft")
+        .arg(fixture.join("protocol-draft.json"))
+        .arg("--dataset-manifest")
+        .arg(fixture.join("frozen-dataset.json"))
+        .arg("--provenance-manifest")
+        .arg(fixture.join("provenance.json"))
+        .arg("--license-manifest")
+        .arg(fixture.join("licenses.json"))
+        .arg("--overlap-audit")
+        .arg(fixture.join("overlap-audit.json"))
+        .arg("--environment-manifest")
+        .arg(fixture.join("environment.json"))
+        .arg("--capability-manifest")
+        .arg(fixture.join("capabilities.json"))
+        .arg("--randomization-commitment")
+        .arg(fixture.join("randomization.json"))
+        .arg("--secureflow-lane-configuration")
+        .arg(fixture.join("secureflow-lane.json"))
+        .arg("--human-lane-configuration")
+        .arg(fixture.join("human-lane.json"))
+        .arg("--output")
+        .arg(&protocol)
+        .output()
+        .expect("protocol v2 preflight should start");
+    assert!(
+        preflight.status.success(),
+        "{}",
+        String::from_utf8_lossy(&preflight.stderr)
+    );
+    let protocol_value: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(&protocol).expect("sealed protocol should be readable"),
+    )
+    .expect("sealed protocol should be JSON");
+    validate_with_schema(
+        "secureflow-prospective-protocol-v2.schema.json",
+        &protocol_value,
+    );
+    assert_eq!(
+        protocol_value["claims"]["task_bounded_claim_status"],
+        "not-established"
+    );
+
+    let raw = fixture.join("raw-no-finding.json");
+    let submission_draft = output_root.join("submission-draft.json");
+    let submission = output_root.join("sealed-submission.json");
+    let draft_value = serde_json::json!({
+        "protocol_id": protocol_value["protocol_id"],
+        "dataset_id": "sf_dataset_18609eb48b788934bd4e6aa5522eefa551471338cb1526bb2e5a0d7d605bf3c6",
+        "lane_id": "secureflow-assisted",
+        "participant_commitment_sha256": "11".repeat(32),
+        "case_id": "case-0005",
+        "attempt_ordinal": 0,
+        "recorded_at": protocol_value["sealed_at"],
+        "raw_artifact_sha256": "70bcf259fcb426362cbf2603af6375b9f96cb14e90c50ae4f118091a2129c506",
+        "outcome": {
+            "kind": "no-finding",
+            "rationale_sha256": "22".repeat(32),
+            "reviewed_scope_sha256": "33".repeat(32)
+        },
+        "metrics": {
+            "analyst_active_time_ns": 1,
+            "wall_clock_time_ns": 2,
+            "cost_microusd": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "peak_rss_bytes": 1
+        },
+        "claims": {
+            "result_is_independently_adjudicated": false,
+            "task_bounded_comparative_claim_established": false,
+            "global_superiority_claim_allowed": false,
+            "human_replacement_claim_allowed": false,
+            "production_safety_claim_allowed": false
+        }
+    });
+    std::fs::write(
+        &submission_draft,
+        serde_json::to_vec_pretty(&draft_value).expect("serialize submission draft"),
+    )
+    .expect("write exact temporary submission draft");
+    let sealed = Command::new(binary())
+        .arg("benchmark-submission-seal")
+        .arg("--draft")
+        .arg(&submission_draft)
+        .arg("--protocol")
+        .arg(&protocol)
+        .arg("--dataset")
+        .arg(fixture.join("frozen-dataset.json"))
+        .arg("--raw-artifact")
+        .arg(&raw)
+        .arg("--output")
+        .arg(&submission)
+        .output()
+        .expect("submission sealing should start");
+    assert!(
+        sealed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&sealed.stderr)
+    );
+    let submission_value: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(&submission).expect("sealed submission should be readable"),
+    )
+    .expect("sealed submission should be JSON");
+    validate_with_schema(
+        "secureflow-prospective-submission-v1.schema.json",
+        &submission_value,
+    );
+    assert_eq!(submission_value["outcome"]["kind"], "no-finding");
+    assert_eq!(
+        submission_value["claims"]["result_is_independently_adjudicated"],
+        false
+    );
+
+    let validated = Command::new(binary())
+        .arg("benchmark-submission-validate")
+        .arg(&submission)
+        .arg("--protocol")
+        .arg(&protocol)
+        .arg("--dataset")
+        .arg(fixture.join("frozen-dataset.json"))
+        .arg("--raw-artifact")
+        .arg(&raw)
+        .output()
+        .expect("submission validation should start");
+    assert!(
+        validated.status.success(),
+        "{}",
+        String::from_utf8_lossy(&validated.stderr)
+    );
+    let mutated_raw = Command::new(binary())
+        .arg("benchmark-submission-validate")
+        .arg(&submission)
+        .arg("--protocol")
+        .arg(&protocol)
+        .arg("--dataset")
+        .arg(fixture.join("frozen-dataset.json"))
+        .arg("--raw-artifact")
+        .arg(fixture.join("raw-error.json"))
+        .output()
+        .expect("mutated raw validation should start");
+    assert!(!mutated_raw.status.success());
+
+    #[cfg(unix)]
+    for path in [&dataset, &protocol, &submission] {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(
+            std::fs::metadata(path)
+                .expect("prospective artifact metadata")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
+    }
+    std::fs::remove_dir_all(&output_root).expect("remove exact temporary output directory");
 }
 
 #[test]

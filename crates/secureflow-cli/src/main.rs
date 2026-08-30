@@ -76,6 +76,12 @@ const ORCHESTRATION_SCHEMA: &str =
     include_str!("../../../schemas/secureflow-orchestration-v1.schema.json");
 const PROSPECTIVE_PROTOCOL_SCHEMA: &str =
     include_str!("../../../schemas/secureflow-prospective-protocol-v1.schema.json");
+const PROSPECTIVE_DATASET_SCHEMA: &str =
+    include_str!("../../../schemas/secureflow-prospective-dataset-v1.schema.json");
+const PROSPECTIVE_PROTOCOL_SCHEMA_V2: &str =
+    include_str!("../../../schemas/secureflow-prospective-protocol-v2.schema.json");
+const PROSPECTIVE_SUBMISSION_SCHEMA: &str =
+    include_str!("../../../schemas/secureflow-prospective-submission-v1.schema.json");
 const ADVISORY_DELTA_SCHEMA: &str =
     include_str!("../../../schemas/secureflow-advisory-delta-v1.schema.json");
 const CATALOG_BUNDLE_SCHEMA: &str =
@@ -145,8 +151,16 @@ enum Command {
     },
     /// Print the normative deterministic orchestration-plan schema.
     OrchestrationSchema,
-    /// Print the normative sealed prospective benchmark protocol schema.
-    ProspectiveProtocolSchema,
+    /// Print one normative sealed prospective benchmark protocol schema.
+    ProspectiveProtocolSchema {
+        /// Contract version to print. v1 remains the compatibility default.
+        #[arg(long, value_enum, default_value_t = ProspectiveProtocolSchemaVersion::V1)]
+        version: ProspectiveProtocolSchemaVersion,
+    },
+    /// Print the normative frozen prospective-dataset schema.
+    ProspectiveDatasetSchema,
+    /// Print the normative prospective per-case submission schema.
+    ProspectiveSubmissionSchema,
     /// Print the normative compressed catalog-bundle manifest schema.
     CatalogBundleSchema,
     /// Print one normative SecureFlow Web schema.
@@ -754,29 +768,139 @@ enum Command {
         #[arg(long)]
         output: PathBuf,
     },
-    /// Verify real public holdout commitments and seal the protocol without opening labels.
+    /// Freeze a label-free prospective dataset after verifying every local case artifact.
+    BenchmarkDatasetFreeze {
+        /// Dataset draft without contract identity.
+        #[arg(long)]
+        draft: PathBuf,
+        /// Authorized local root containing every committed relative case path.
+        #[arg(long)]
+        case_root: PathBuf,
+        #[arg(long)]
+        authorization_scope: PathBuf,
+        #[arg(long)]
+        reviewer_commitment: PathBuf,
+        #[arg(long)]
+        provenance_manifest: PathBuf,
+        #[arg(long)]
+        license_manifest: PathBuf,
+        #[arg(long)]
+        overlap_audit: PathBuf,
+        #[arg(long)]
+        historical_inventory: PathBuf,
+        /// New immutable frozen dataset.
+        #[arg(long)]
+        output: PathBuf,
+    },
+    /// Validate a frozen prospective dataset and optionally reverify its local case bytes.
+    BenchmarkDatasetValidate {
+        dataset: PathBuf,
+        #[arg(long)]
+        case_root: PathBuf,
+        #[arg(long)]
+        authorization_scope: PathBuf,
+        #[arg(long)]
+        reviewer_commitment: PathBuf,
+        #[arg(long)]
+        provenance_manifest: PathBuf,
+        #[arg(long)]
+        license_manifest: PathBuf,
+        #[arg(long)]
+        overlap_audit: PathBuf,
+        #[arg(long)]
+        historical_inventory: PathBuf,
+    },
+    /// Verify preregistration commitments and seal a protocol without opening labels.
     BenchmarkProtocolPreflight {
+        /// v1 preserves the original four-artifact preflight; v2 requires a frozen dataset and all control artifacts.
+        #[arg(long, value_enum, default_value_t = ProspectiveProtocolSchemaVersion::V1)]
+        version: ProspectiveProtocolSchemaVersion,
         /// Protocol draft JSON whose commitment hashes must match the supplied artifacts.
         #[arg(long)]
         draft: PathBuf,
-        /// Public opaque-case corpus manifest; must not contain ground-truth labels.
+        /// v1 public opaque-case corpus manifest; must not contain ground-truth labels.
         #[arg(long)]
-        corpus_manifest: PathBuf,
+        corpus_manifest: Option<PathBuf>,
+        /// v2 frozen dataset manifest.
+        #[arg(long)]
+        dataset_manifest: Option<PathBuf>,
         /// Corpus provenance manifest.
         #[arg(long)]
-        provenance_manifest: PathBuf,
+        provenance_manifest: Option<PathBuf>,
         /// Corpus license manifest.
         #[arg(long)]
-        license_manifest: PathBuf,
+        license_manifest: Option<PathBuf>,
+        /// v2 anti-leakage overlap audit.
+        #[arg(long)]
+        overlap_audit: Option<PathBuf>,
         /// Frozen execution environment/configuration manifest.
         #[arg(long)]
-        environment_manifest: PathBuf,
-        /// New sealed protocol written only after all four hashes match.
+        environment_manifest: Option<PathBuf>,
+        /// v2 shared non-treatment capability manifest.
+        #[arg(long)]
+        capability_manifest: Option<PathBuf>,
+        /// v2 retained randomization commitment bytes.
+        #[arg(long)]
+        randomization_commitment: Option<PathBuf>,
+        /// v2 SecureFlow-assisted lane configuration.
+        #[arg(long)]
+        secureflow_lane_configuration: Option<PathBuf>,
+        /// v2 human-comparator lane configuration.
+        #[arg(long)]
+        human_lane_configuration: Option<PathBuf>,
+        /// New sealed protocol written only after every required hash matches.
         #[arg(long)]
         output: PathBuf,
     },
     /// Validate a sealed prospective-study protocol and its content-derived ID.
-    BenchmarkProtocolValidate { path: PathBuf },
+    BenchmarkProtocolValidate {
+        path: PathBuf,
+        /// Contract version. v1 remains the compatibility default.
+        #[arg(long, value_enum, default_value_t = ProspectiveProtocolSchemaVersion::V1)]
+        version: ProspectiveProtocolSchemaVersion,
+        /// v2 frozen dataset bytes.
+        #[arg(long)]
+        dataset_manifest: Option<PathBuf>,
+        #[arg(long)]
+        provenance_manifest: Option<PathBuf>,
+        #[arg(long)]
+        license_manifest: Option<PathBuf>,
+        #[arg(long)]
+        overlap_audit: Option<PathBuf>,
+        #[arg(long)]
+        environment_manifest: Option<PathBuf>,
+        #[arg(long)]
+        capability_manifest: Option<PathBuf>,
+        #[arg(long)]
+        randomization_commitment: Option<PathBuf>,
+        #[arg(long)]
+        secureflow_lane_configuration: Option<PathBuf>,
+        #[arg(long)]
+        human_lane_configuration: Option<PathBuf>,
+    },
+    /// Seal one per-case, per-participant prospective submission after verifying raw bytes.
+    BenchmarkSubmissionSeal {
+        #[arg(long)]
+        draft: PathBuf,
+        #[arg(long)]
+        protocol: PathBuf,
+        #[arg(long)]
+        dataset: PathBuf,
+        #[arg(long)]
+        raw_artifact: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+    },
+    /// Validate a sealed prospective submission against retained protocol, dataset, and raw bytes.
+    BenchmarkSubmissionValidate {
+        submission: PathBuf,
+        #[arg(long)]
+        protocol: PathBuf,
+        #[arg(long)]
+        dataset: PathBuf,
+        #[arg(long)]
+        raw_artifact: PathBuf,
+    },
     /// Prepare one local redacted AI request. This command performs no network call.
     AiPrepare {
         /// Validated SecureFlow run manifest.
@@ -942,6 +1066,12 @@ enum RunSchemaVersion {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
 enum CorrelationSchemaVersion {
+    V1,
+    V2,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+enum ProspectiveProtocolSchemaVersion {
     V1,
     V2,
 }
@@ -1133,6 +1263,18 @@ enum CliError {
     Benchmark(#[from] bench_adapter::BenchAdapterError),
     #[error("prospective benchmark protocol failed: {0}")]
     BenchmarkProtocol(#[from] bench_adapter::prospective::ProtocolError),
+    #[error("prospective benchmark v2 contract failed: {0}")]
+    BenchmarkProtocolV2(#[from] bench_adapter::prospective_v2::ProspectiveV2Error),
+    #[error("missing required {version} prospective argument: {argument}")]
+    MissingProspectiveArgument {
+        version: &'static str,
+        argument: &'static str,
+    },
+    #[error("argument is not valid for prospective {version}: {argument}")]
+    UnexpectedProspectiveArgument {
+        version: &'static str,
+        argument: &'static str,
+    },
     #[error("prospective protocol artifact hash does not match draft field: {0}")]
     ProspectiveArtifactHashMismatch(&'static str),
     #[error("AI contract failed: {0}")]
@@ -1246,8 +1388,22 @@ fn execute(cli: Cli) -> Result<(), CliError> {
             print!("{ORCHESTRATION_SCHEMA}");
             Ok(())
         }
-        Command::ProspectiveProtocolSchema => {
-            print!("{PROSPECTIVE_PROTOCOL_SCHEMA}");
+        Command::ProspectiveProtocolSchema { version } => {
+            print!(
+                "{}",
+                match version {
+                    ProspectiveProtocolSchemaVersion::V1 => PROSPECTIVE_PROTOCOL_SCHEMA,
+                    ProspectiveProtocolSchemaVersion::V2 => PROSPECTIVE_PROTOCOL_SCHEMA_V2,
+                }
+            );
+            Ok(())
+        }
+        Command::ProspectiveDatasetSchema => {
+            print!("{PROSPECTIVE_DATASET_SCHEMA}");
+            Ok(())
+        }
+        Command::ProspectiveSubmissionSchema => {
+            print!("{PROSPECTIVE_SUBMISSION_SCHEMA}");
             Ok(())
         }
         Command::CatalogBundleSchema => {
@@ -2650,74 +2806,490 @@ fn execute(cli: Cli) -> Result<(), CliError> {
             );
             Ok(())
         }
-        Command::BenchmarkProtocolPreflight {
+        Command::BenchmarkDatasetFreeze {
             draft,
-            corpus_manifest,
+            case_root,
+            authorization_scope,
+            reviewer_commitment,
             provenance_manifest,
             license_manifest,
-            environment_manifest,
+            overlap_audit,
+            historical_inventory,
             output,
         } => {
             ensure_output_distinct(
                 &output,
                 &[
                     &draft,
-                    &corpus_manifest,
+                    &case_root,
+                    &authorization_scope,
+                    &reviewer_commitment,
                     &provenance_manifest,
                     &license_manifest,
-                    &environment_manifest,
+                    &overlap_audit,
+                    &historical_inventory,
                 ],
             )?;
+            ensure_output_outside_tree(&output, &case_root)?;
+            ensure_output_absent(&output)?;
             let draft_bytes =
-                read_bounded_file(&draft, bench_adapter::prospective::MAX_PROTOCOL_BYTES)?;
-            let draft_value: bench_adapter::prospective::ProtocolDraft =
-                serde_json::from_slice(&draft_bytes)?;
-            let commitments = [
-                (
-                    "corpus.manifest_sha256",
-                    &draft_value.corpus.manifest_sha256,
-                    &corpus_manifest,
-                ),
-                (
-                    "corpus.provenance_sha256",
-                    &draft_value.corpus.provenance_sha256,
-                    &provenance_manifest,
-                ),
-                (
-                    "corpus.license_manifest_sha256",
-                    &draft_value.corpus.license_manifest_sha256,
-                    &license_manifest,
-                ),
-                (
-                    "execution.environment_sha256",
-                    &draft_value.execution.environment_sha256,
-                    &environment_manifest,
-                ),
-            ];
-            for (field, expected, path) in commitments {
-                let bytes = read_bounded_file(path, MAX_PROSPECTIVE_ARTIFACT_BYTES)?;
-                if sha256_bytes(&bytes) != *expected {
-                    return Err(CliError::ProspectiveArtifactHashMismatch(field));
-                }
-            }
-            let protocol = bench_adapter::prospective::seal_draft(&draft_bytes, None)?;
-            let protocol_id = protocol.protocol_id.clone();
-            write_atomic(&output, &serde_json::to_vec_pretty(&protocol)?)?;
+                read_bounded_file(&draft, bench_adapter::prospective_v2::MAX_DATASET_BYTES)?;
+            let dataset = bench_adapter::prospective_v2::freeze_dataset(&draft_bytes, &case_root)?;
+            let authorization_scope_bytes =
+                read_bounded_file(&authorization_scope, MAX_PROSPECTIVE_ARTIFACT_BYTES)?;
+            let reviewer_commitment_bytes =
+                read_bounded_file(&reviewer_commitment, MAX_PROSPECTIVE_ARTIFACT_BYTES)?;
+            let provenance_bytes =
+                read_bounded_file(&provenance_manifest, MAX_PROSPECTIVE_ARTIFACT_BYTES)?;
+            let license_bytes =
+                read_bounded_file(&license_manifest, MAX_PROSPECTIVE_ARTIFACT_BYTES)?;
+            let overlap_bytes = read_bounded_file(&overlap_audit, MAX_PROSPECTIVE_ARTIFACT_BYTES)?;
+            let history_bytes =
+                read_bounded_file(&historical_inventory, MAX_PROSPECTIVE_ARTIFACT_BYTES)?;
+            bench_adapter::prospective_v2::verify_dataset_public_artifacts(
+                &dataset,
+                &authorization_scope_bytes,
+                &reviewer_commitment_bytes,
+                &provenance_bytes,
+                &license_bytes,
+                &overlap_bytes,
+                &history_bytes,
+            )?;
+            write_atomic_new(&output, &serde_json::to_vec_pretty(&dataset)?)?;
             println!(
-                "prospective protocol preflight complete: output={} protocol_id={} artifact_hashes_verified=true labels_opened=false human_comparator_required=true negative_results_required=true claims=task-bounded-only",
+                "prospective dataset frozen: output={} dataset_id={} cases={} holdout_cases={} labels_opened=false fixture_only={}",
                 output.display(),
-                protocol_id,
+                dataset.dataset_id,
+                dataset.draft.accounting.total_cases,
+                dataset.draft.accounting.holdout_cases,
+                dataset.draft.claims.fixture_only,
             );
             Ok(())
         }
-        Command::BenchmarkProtocolValidate { path } => {
-            let bytes = read_bounded_file(&path, bench_adapter::prospective::MAX_PROTOCOL_BYTES)?;
-            let protocol = bench_adapter::prospective::parse_protocol(&bytes)?;
+        Command::BenchmarkDatasetValidate {
+            dataset,
+            case_root,
+            authorization_scope,
+            reviewer_commitment,
+            provenance_manifest,
+            license_manifest,
+            overlap_audit,
+            historical_inventory,
+        } => {
+            let bytes =
+                read_bounded_file(&dataset, bench_adapter::prospective_v2::MAX_DATASET_BYTES)?;
+            let frozen = bench_adapter::prospective_v2::parse_dataset(&bytes)?;
+            bench_adapter::prospective_v2::verify_dataset_case_artifacts(&frozen, &case_root)?;
+            let authorization_scope_bytes =
+                read_bounded_file(&authorization_scope, MAX_PROSPECTIVE_ARTIFACT_BYTES)?;
+            let reviewer_commitment_bytes =
+                read_bounded_file(&reviewer_commitment, MAX_PROSPECTIVE_ARTIFACT_BYTES)?;
+            let provenance_bytes =
+                read_bounded_file(&provenance_manifest, MAX_PROSPECTIVE_ARTIFACT_BYTES)?;
+            let license_bytes =
+                read_bounded_file(&license_manifest, MAX_PROSPECTIVE_ARTIFACT_BYTES)?;
+            let overlap_bytes = read_bounded_file(&overlap_audit, MAX_PROSPECTIVE_ARTIFACT_BYTES)?;
+            let history_bytes =
+                read_bounded_file(&historical_inventory, MAX_PROSPECTIVE_ARTIFACT_BYTES)?;
+            bench_adapter::prospective_v2::verify_dataset_public_artifacts(
+                &frozen,
+                &authorization_scope_bytes,
+                &reviewer_commitment_bytes,
+                &provenance_bytes,
+                &license_bytes,
+                &overlap_bytes,
+                &history_bytes,
+            )?;
             println!(
-                "valid secureflow-prospective-protocol-v1: {} protocol_id={} cases={} claims=task-bounded-only",
-                path.display(),
-                protocol.protocol_id,
-                protocol.draft.corpus.total_cases,
+                "valid secureflow-prospective-dataset-v1: {} dataset_id={} labels_opened=false",
+                dataset.display(),
+                frozen.dataset_id,
+            );
+            Ok(())
+        }
+        Command::BenchmarkProtocolPreflight {
+            version,
+            draft,
+            corpus_manifest,
+            dataset_manifest,
+            provenance_manifest,
+            license_manifest,
+            overlap_audit,
+            environment_manifest,
+            capability_manifest,
+            randomization_commitment,
+            secureflow_lane_configuration,
+            human_lane_configuration,
+            output,
+        } => match version {
+            ProspectiveProtocolSchemaVersion::V1 => {
+                for (value, argument) in [
+                    (&dataset_manifest, "--dataset-manifest"),
+                    (&overlap_audit, "--overlap-audit"),
+                    (&capability_manifest, "--capability-manifest"),
+                    (&randomization_commitment, "--randomization-commitment"),
+                    (
+                        &secureflow_lane_configuration,
+                        "--secureflow-lane-configuration",
+                    ),
+                    (&human_lane_configuration, "--human-lane-configuration"),
+                ] {
+                    reject_prospective_path(value, "v1", argument)?;
+                }
+                let corpus_manifest =
+                    required_prospective_path(&corpus_manifest, "v1", "--corpus-manifest")?;
+                let provenance_manifest =
+                    required_prospective_path(&provenance_manifest, "v1", "--provenance-manifest")?;
+                let license_manifest =
+                    required_prospective_path(&license_manifest, "v1", "--license-manifest")?;
+                let environment_manifest = required_prospective_path(
+                    &environment_manifest,
+                    "v1",
+                    "--environment-manifest",
+                )?;
+                ensure_output_distinct(
+                    &output,
+                    &[
+                        &draft,
+                        corpus_manifest,
+                        provenance_manifest,
+                        license_manifest,
+                        environment_manifest,
+                    ],
+                )?;
+                let draft_bytes =
+                    read_bounded_file(&draft, bench_adapter::prospective::MAX_PROTOCOL_BYTES)?;
+                let draft_value: bench_adapter::prospective::ProtocolDraft =
+                    serde_json::from_slice(&draft_bytes)?;
+                let commitments = [
+                    (
+                        "corpus.manifest_sha256",
+                        &draft_value.corpus.manifest_sha256,
+                        corpus_manifest,
+                    ),
+                    (
+                        "corpus.provenance_sha256",
+                        &draft_value.corpus.provenance_sha256,
+                        provenance_manifest,
+                    ),
+                    (
+                        "corpus.license_manifest_sha256",
+                        &draft_value.corpus.license_manifest_sha256,
+                        license_manifest,
+                    ),
+                    (
+                        "execution.environment_sha256",
+                        &draft_value.execution.environment_sha256,
+                        environment_manifest,
+                    ),
+                ];
+                for (field, expected, path) in commitments {
+                    let bytes = read_bounded_file(path, MAX_PROSPECTIVE_ARTIFACT_BYTES)?;
+                    if sha256_bytes(&bytes) != *expected {
+                        return Err(CliError::ProspectiveArtifactHashMismatch(field));
+                    }
+                }
+                let protocol = bench_adapter::prospective::seal_draft(&draft_bytes, None)?;
+                let protocol_id = protocol.protocol_id.clone();
+                write_atomic(&output, &serde_json::to_vec_pretty(&protocol)?)?;
+                println!(
+                    "prospective protocol v1 preflight complete: output={} protocol_id={} artifact_hashes_verified=true labels_opened=false human_comparator_required=true negative_results_required=true claims=task-bounded-only",
+                    output.display(),
+                    protocol_id,
+                );
+                Ok(())
+            }
+            ProspectiveProtocolSchemaVersion::V2 => {
+                reject_prospective_path(&corpus_manifest, "v2", "--corpus-manifest")?;
+                let dataset_manifest =
+                    required_prospective_path(&dataset_manifest, "v2", "--dataset-manifest")?;
+                let provenance_manifest =
+                    required_prospective_path(&provenance_manifest, "v2", "--provenance-manifest")?;
+                let license_manifest =
+                    required_prospective_path(&license_manifest, "v2", "--license-manifest")?;
+                let overlap_audit =
+                    required_prospective_path(&overlap_audit, "v2", "--overlap-audit")?;
+                let environment_manifest = required_prospective_path(
+                    &environment_manifest,
+                    "v2",
+                    "--environment-manifest",
+                )?;
+                let capability_manifest =
+                    required_prospective_path(&capability_manifest, "v2", "--capability-manifest")?;
+                let randomization_commitment = required_prospective_path(
+                    &randomization_commitment,
+                    "v2",
+                    "--randomization-commitment",
+                )?;
+                let secureflow_lane_configuration = required_prospective_path(
+                    &secureflow_lane_configuration,
+                    "v2",
+                    "--secureflow-lane-configuration",
+                )?;
+                let human_lane_configuration = required_prospective_path(
+                    &human_lane_configuration,
+                    "v2",
+                    "--human-lane-configuration",
+                )?;
+                let inputs = [
+                    draft.as_path(),
+                    dataset_manifest,
+                    provenance_manifest,
+                    license_manifest,
+                    overlap_audit,
+                    environment_manifest,
+                    capability_manifest,
+                    randomization_commitment,
+                    secureflow_lane_configuration,
+                    human_lane_configuration,
+                ];
+                ensure_output_distinct(&output, &inputs)?;
+                ensure_output_absent(&output)?;
+                let draft_bytes =
+                    read_bounded_file(&draft, bench_adapter::prospective_v2::MAX_PROTOCOL_BYTES)?;
+                let dataset_bytes = read_bounded_file(
+                    dataset_manifest,
+                    bench_adapter::prospective_v2::MAX_DATASET_BYTES,
+                )?;
+                let dataset = bench_adapter::prospective_v2::parse_dataset(&dataset_bytes)?;
+                let protocol = bench_adapter::prospective_v2::seal_protocol(&draft_bytes, None)?;
+                bench_adapter::prospective_v2::bind_protocol_to_dataset(
+                    &protocol,
+                    &dataset,
+                    &dataset_bytes,
+                )?;
+                let provenance =
+                    read_bounded_file(provenance_manifest, MAX_PROSPECTIVE_ARTIFACT_BYTES)?;
+                let licenses = read_bounded_file(license_manifest, MAX_PROSPECTIVE_ARTIFACT_BYTES)?;
+                let overlap = read_bounded_file(overlap_audit, MAX_PROSPECTIVE_ARTIFACT_BYTES)?;
+                let environment =
+                    read_bounded_file(environment_manifest, MAX_PROSPECTIVE_ARTIFACT_BYTES)?;
+                let capabilities =
+                    read_bounded_file(capability_manifest, MAX_PROSPECTIVE_ARTIFACT_BYTES)?;
+                bench_adapter::prospective_v2::verify_protocol_artifacts(
+                    &protocol,
+                    &provenance,
+                    &licenses,
+                    &overlap,
+                    &environment,
+                    &capabilities,
+                )?;
+                let randomization =
+                    read_bounded_file(randomization_commitment, MAX_PROSPECTIVE_ARTIFACT_BYTES)?;
+                let secureflow_configuration = read_bounded_file(
+                    secureflow_lane_configuration,
+                    MAX_PROSPECTIVE_ARTIFACT_BYTES,
+                )?;
+                let human_configuration =
+                    read_bounded_file(human_lane_configuration, MAX_PROSPECTIVE_ARTIFACT_BYTES)?;
+                bench_adapter::prospective_v2::verify_protocol_control_artifacts(
+                    &protocol,
+                    &randomization,
+                    &secureflow_configuration,
+                    &human_configuration,
+                )?;
+                let protocol_id = protocol.protocol_id.clone();
+                write_atomic_new(&output, &serde_json::to_vec_pretty(&protocol)?)?;
+                println!(
+                    "prospective protocol v2 preflight complete: output={} protocol_id={} all_artifact_hashes_verified=true labels_opened=false task_bounded_claim_status=not-established",
+                    output.display(),
+                    protocol_id,
+                );
+                Ok(())
+            }
+        },
+        Command::BenchmarkProtocolValidate {
+            path,
+            version,
+            dataset_manifest,
+            provenance_manifest,
+            license_manifest,
+            overlap_audit,
+            environment_manifest,
+            capability_manifest,
+            randomization_commitment,
+            secureflow_lane_configuration,
+            human_lane_configuration,
+        } => match version {
+            ProspectiveProtocolSchemaVersion::V1 => {
+                for (value, argument) in [
+                    (&dataset_manifest, "--dataset-manifest"),
+                    (&provenance_manifest, "--provenance-manifest"),
+                    (&license_manifest, "--license-manifest"),
+                    (&overlap_audit, "--overlap-audit"),
+                    (&environment_manifest, "--environment-manifest"),
+                    (&capability_manifest, "--capability-manifest"),
+                    (&randomization_commitment, "--randomization-commitment"),
+                    (
+                        &secureflow_lane_configuration,
+                        "--secureflow-lane-configuration",
+                    ),
+                    (&human_lane_configuration, "--human-lane-configuration"),
+                ] {
+                    reject_prospective_path(value, "v1", argument)?;
+                }
+                let bytes =
+                    read_bounded_file(&path, bench_adapter::prospective::MAX_PROTOCOL_BYTES)?;
+                let protocol = bench_adapter::prospective::parse_protocol(&bytes)?;
+                println!(
+                    "valid secureflow-prospective-protocol-v1: {} protocol_id={} cases={} claims=task-bounded-only",
+                    path.display(),
+                    protocol.protocol_id,
+                    protocol.draft.corpus.total_cases,
+                );
+                Ok(())
+            }
+            ProspectiveProtocolSchemaVersion::V2 => {
+                let dataset_manifest =
+                    required_prospective_path(&dataset_manifest, "v2", "--dataset-manifest")?;
+                let provenance_manifest =
+                    required_prospective_path(&provenance_manifest, "v2", "--provenance-manifest")?;
+                let license_manifest =
+                    required_prospective_path(&license_manifest, "v2", "--license-manifest")?;
+                let overlap_audit =
+                    required_prospective_path(&overlap_audit, "v2", "--overlap-audit")?;
+                let environment_manifest = required_prospective_path(
+                    &environment_manifest,
+                    "v2",
+                    "--environment-manifest",
+                )?;
+                let capability_manifest =
+                    required_prospective_path(&capability_manifest, "v2", "--capability-manifest")?;
+                let randomization_commitment = required_prospective_path(
+                    &randomization_commitment,
+                    "v2",
+                    "--randomization-commitment",
+                )?;
+                let secureflow_lane_configuration = required_prospective_path(
+                    &secureflow_lane_configuration,
+                    "v2",
+                    "--secureflow-lane-configuration",
+                )?;
+                let human_lane_configuration = required_prospective_path(
+                    &human_lane_configuration,
+                    "v2",
+                    "--human-lane-configuration",
+                )?;
+                let protocol_bytes =
+                    read_bounded_file(&path, bench_adapter::prospective_v2::MAX_PROTOCOL_BYTES)?;
+                let protocol = bench_adapter::prospective_v2::parse_protocol(&protocol_bytes)?;
+                let dataset_bytes = read_bounded_file(
+                    dataset_manifest,
+                    bench_adapter::prospective_v2::MAX_DATASET_BYTES,
+                )?;
+                let dataset = bench_adapter::prospective_v2::parse_dataset(&dataset_bytes)?;
+                bench_adapter::prospective_v2::bind_protocol_to_dataset(
+                    &protocol,
+                    &dataset,
+                    &dataset_bytes,
+                )?;
+                let provenance =
+                    read_bounded_file(provenance_manifest, MAX_PROSPECTIVE_ARTIFACT_BYTES)?;
+                let licenses = read_bounded_file(license_manifest, MAX_PROSPECTIVE_ARTIFACT_BYTES)?;
+                let overlap = read_bounded_file(overlap_audit, MAX_PROSPECTIVE_ARTIFACT_BYTES)?;
+                let environment =
+                    read_bounded_file(environment_manifest, MAX_PROSPECTIVE_ARTIFACT_BYTES)?;
+                let capabilities =
+                    read_bounded_file(capability_manifest, MAX_PROSPECTIVE_ARTIFACT_BYTES)?;
+                bench_adapter::prospective_v2::verify_protocol_artifacts(
+                    &protocol,
+                    &provenance,
+                    &licenses,
+                    &overlap,
+                    &environment,
+                    &capabilities,
+                )?;
+                let randomization =
+                    read_bounded_file(randomization_commitment, MAX_PROSPECTIVE_ARTIFACT_BYTES)?;
+                let secureflow_configuration = read_bounded_file(
+                    secureflow_lane_configuration,
+                    MAX_PROSPECTIVE_ARTIFACT_BYTES,
+                )?;
+                let human_configuration =
+                    read_bounded_file(human_lane_configuration, MAX_PROSPECTIVE_ARTIFACT_BYTES)?;
+                bench_adapter::prospective_v2::verify_protocol_control_artifacts(
+                    &protocol,
+                    &randomization,
+                    &secureflow_configuration,
+                    &human_configuration,
+                )?;
+                println!(
+                    "valid secureflow-prospective-protocol-v2: {} protocol_id={} dataset_id={} all_artifact_hashes_verified=true task_bounded_claim_status=not-established",
+                    path.display(),
+                    protocol.protocol_id,
+                    dataset.dataset_id,
+                );
+                Ok(())
+            }
+        },
+        Command::BenchmarkSubmissionSeal {
+            draft,
+            protocol,
+            dataset,
+            raw_artifact,
+            output,
+        } => {
+            ensure_output_distinct(&output, &[&draft, &protocol, &dataset, &raw_artifact])?;
+            ensure_output_absent(&output)?;
+            let draft_bytes =
+                read_bounded_file(&draft, bench_adapter::prospective_v2::MAX_SUBMISSION_BYTES)?;
+            let protocol_bytes =
+                read_bounded_file(&protocol, bench_adapter::prospective_v2::MAX_PROTOCOL_BYTES)?;
+            let protocol_value = bench_adapter::prospective_v2::parse_protocol(&protocol_bytes)?;
+            let dataset_bytes =
+                read_bounded_file(&dataset, bench_adapter::prospective_v2::MAX_DATASET_BYTES)?;
+            let dataset_value = bench_adapter::prospective_v2::parse_dataset(&dataset_bytes)?;
+            let raw_bytes = read_bounded_file(
+                &raw_artifact,
+                bench_adapter::prospective_v2::MAX_RAW_ARTIFACT_BYTES,
+            )?;
+            let submission = bench_adapter::prospective_v2::seal_submission(
+                &draft_bytes,
+                &protocol_value,
+                &dataset_value,
+                &dataset_bytes,
+                &raw_bytes,
+            )?;
+            write_atomic_new(&output, &serde_json::to_vec_pretty(&submission)?)?;
+            println!(
+                "prospective submission sealed: output={} submission_id={} participant_commitment={} raw_artifact_verified=true independently_adjudicated=false",
+                output.display(),
+                submission.submission_id,
+                submission.draft.participant_commitment_sha256,
+            );
+            Ok(())
+        }
+        Command::BenchmarkSubmissionValidate {
+            submission,
+            protocol,
+            dataset,
+            raw_artifact,
+        } => {
+            let submission_bytes = read_bounded_file(
+                &submission,
+                bench_adapter::prospective_v2::MAX_SUBMISSION_BYTES,
+            )?;
+            let protocol_bytes =
+                read_bounded_file(&protocol, bench_adapter::prospective_v2::MAX_PROTOCOL_BYTES)?;
+            let protocol_value = bench_adapter::prospective_v2::parse_protocol(&protocol_bytes)?;
+            let dataset_bytes =
+                read_bounded_file(&dataset, bench_adapter::prospective_v2::MAX_DATASET_BYTES)?;
+            let dataset_value = bench_adapter::prospective_v2::parse_dataset(&dataset_bytes)?;
+            let raw_bytes = read_bounded_file(
+                &raw_artifact,
+                bench_adapter::prospective_v2::MAX_RAW_ARTIFACT_BYTES,
+            )?;
+            let value = bench_adapter::prospective_v2::parse_submission(
+                &submission_bytes,
+                &protocol_value,
+                &dataset_value,
+                &dataset_bytes,
+                &raw_bytes,
+            )?;
+            println!(
+                "valid secureflow-prospective-submission-v1: {} submission_id={} raw_artifact_verified=true independently_adjudicated=false",
+                submission.display(),
+                value.submission_id,
             );
             Ok(())
         }
@@ -3080,20 +3652,20 @@ fn execute(cli: Cli) -> Result<(), CliError> {
     }
 }
 
-fn load_manifest(path: &PathBuf) -> Result<(Vec<u8>, RunManifest), CliError> {
+fn load_manifest(path: &Path) -> Result<(Vec<u8>, RunManifest), CliError> {
     let bytes = read_bounded_file(path, MAX_MANIFEST_BYTES)?;
     let manifest: RunManifest = serde_json::from_slice(&bytes)?;
     manifest.validate()?;
     Ok((bytes, manifest))
 }
 
-fn ensure_catalog_database_outside_input(database: &Path, input: &PathBuf) -> Result<(), CliError> {
+fn ensure_catalog_database_outside_input(database: &Path, input: &Path) -> Result<(), CliError> {
     let metadata = fs::symlink_metadata(input).map_err(|source| CliError::Read {
-        path: input.clone(),
+        path: input.to_path_buf(),
         source,
     })?;
     if metadata.file_type().is_symlink() {
-        return Err(CliError::CatalogInputSymlink(input.clone()));
+        return Err(CliError::CatalogInputSymlink(input.to_path_buf()));
     }
     if metadata.is_dir() {
         ensure_output_outside_tree(database, input)
@@ -3102,24 +3674,24 @@ fn ensure_catalog_database_outside_input(database: &Path, input: &PathBuf) -> Re
     }
 }
 
-fn collect_osv_files(input: &PathBuf) -> Result<Vec<PathBuf>, CliError> {
+fn collect_osv_files(input: &Path) -> Result<Vec<PathBuf>, CliError> {
     let metadata = fs::symlink_metadata(input).map_err(|source| CliError::Read {
-        path: input.clone(),
+        path: input.to_path_buf(),
         source,
     })?;
     if metadata.file_type().is_symlink() {
-        return Err(CliError::CatalogInputSymlink(input.clone()));
+        return Err(CliError::CatalogInputSymlink(input.to_path_buf()));
     }
     let mut files = Vec::new();
     if metadata.is_file() {
-        files.push(input.clone());
+        files.push(input.to_path_buf());
     } else if metadata.is_dir() {
         collect_osv_directory(input, 0, &mut files)?;
     } else {
-        return Err(CliError::NotAFile(input.clone()));
+        return Err(CliError::NotAFile(input.to_path_buf()));
     }
     if files.is_empty() {
-        return Err(CliError::EmptyCatalogInput(input.clone()));
+        return Err(CliError::EmptyCatalogInput(input.to_path_buf()));
     }
     Ok(files)
 }
@@ -3173,28 +3745,28 @@ fn collect_osv_directory(
     Ok(())
 }
 
-fn read_bounded_file(path: &PathBuf, maximum: u64) -> Result<Vec<u8>, CliError> {
+fn read_bounded_file(path: &Path, maximum: u64) -> Result<Vec<u8>, CliError> {
     let metadata = fs::metadata(path).map_err(|source| CliError::Read {
-        path: path.clone(),
+        path: path.to_path_buf(),
         source,
     })?;
     if !metadata.is_file() {
-        return Err(CliError::NotAFile(path.clone()));
+        return Err(CliError::NotAFile(path.to_path_buf()));
     }
     if metadata.len() == 0 || metadata.len() > maximum {
         return Err(CliError::InputTooLarge {
-            path: path.clone(),
+            path: path.to_path_buf(),
             bytes: metadata.len(),
             maximum,
         });
     }
     let bytes = fs::read(path).map_err(|source| CliError::Read {
-        path: path.clone(),
+        path: path.to_path_buf(),
         source,
     })?;
     if bytes.is_empty() || bytes.len() as u64 > maximum {
         return Err(CliError::InputTooLarge {
-            path: path.clone(),
+            path: path.to_path_buf(),
             bytes: bytes.len() as u64,
             maximum,
         });
@@ -3779,6 +4351,27 @@ fn paths_alias(left: &Path, right: &Path) -> Result<bool, CliError> {
     Ok(false)
 }
 
+fn required_prospective_path<'a>(
+    value: &'a Option<PathBuf>,
+    version: &'static str,
+    argument: &'static str,
+) -> Result<&'a Path, CliError> {
+    value
+        .as_deref()
+        .ok_or(CliError::MissingProspectiveArgument { version, argument })
+}
+
+fn reject_prospective_path(
+    value: &Option<PathBuf>,
+    version: &'static str,
+    argument: &'static str,
+) -> Result<(), CliError> {
+    if value.is_some() {
+        return Err(CliError::UnexpectedProspectiveArgument { version, argument });
+    }
+    Ok(())
+}
+
 fn ensure_output_distinct(output: &Path, inputs: &[&Path]) -> Result<(), CliError> {
     for input in inputs {
         if paths_alias(output, input)? {
@@ -3809,7 +4402,7 @@ fn ensure_output_outside_tree(output: &Path, root: &Path) -> Result<(), CliError
     Ok(())
 }
 
-fn write_atomic(path: &PathBuf, bytes: &[u8]) -> Result<(), CliError> {
+fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), CliError> {
     let parent = path.parent().unwrap_or_else(|| std::path::Path::new("."));
     let name = path
         .file_name()
@@ -3836,7 +4429,7 @@ fn write_atomic(path: &PathBuf, bytes: &[u8]) -> Result<(), CliError> {
                 if let Err(source) = write_result {
                     let _ = fs::remove_file(&candidate);
                     return Err(CliError::Write {
-                        path: path.clone(),
+                        path: path.to_path_buf(),
                         source,
                     });
                 }
@@ -3846,14 +4439,14 @@ fn write_atomic(path: &PathBuf, bytes: &[u8]) -> Result<(), CliError> {
             Err(source) if source.kind() == std::io::ErrorKind::AlreadyExists => continue,
             Err(source) => {
                 return Err(CliError::Write {
-                    path: path.clone(),
+                    path: path.to_path_buf(),
                     source,
                 });
             }
         }
     }
     let temporary = temporary.ok_or_else(|| CliError::Write {
-        path: path.clone(),
+        path: path.to_path_buf(),
         source: std::io::Error::new(
             std::io::ErrorKind::AlreadyExists,
             "could not allocate a unique temporary output file",
@@ -3862,7 +4455,7 @@ fn write_atomic(path: &PathBuf, bytes: &[u8]) -> Result<(), CliError> {
     if let Err(source) = fs::rename(&temporary, path) {
         let _ = fs::remove_file(&temporary);
         return Err(CliError::Write {
-            path: path.clone(),
+            path: path.to_path_buf(),
             source,
         });
     }

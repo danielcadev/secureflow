@@ -21,24 +21,24 @@ outperforms a human researcher.
 | Local knowledge base | JSONL v2 for human decisions and a separate SQLite v3 catalog for advisories, revisions, aliases, packages, snapshots/deltas, and FTS5 | Complete as local infrastructure; the traceable pilot accepted 229,644 real records and quarantined 347 without converting them into human validations |
 | Evidence-based JSONL/SQLite choice | JSONL measured through 10k; SQLite measured on NVMe/Btrfs with 100k, 500k, and 1M synthetic records | JSONL remains for the small ledger; SQLite demonstrated 1M source records/900k entities in 104.736 s and 2.07 GB, without extrapolating to real records |
 | Secure Skill | Strict `review-contract` 1.1 import with commit/hashes/license and a separate envelope; when `.git` exists, the commit must match `HEAD` | Complete as an adapter; a snapshot without `.git` retains hashes but its revision is operator-declared; upstream `verified` is not SecureFlow validation |
-| Secure Bench | `result-v2` import, suite/run fingerprints, optional `HEAD` verification, separated TP/FN and FP/TN, blocked claims, prospective protocol, and artifact preflight | Complete as evaluation infrastructure; the Phase 1 corpus is synthetic and known, and no real holdout/cohort/study exists yet |
+| Secure Bench | `result-v2` import, suite/run fingerprints, optional `HEAD` verification, separated TP/FN and FP/TN, blocked claims, label-free dataset/protocol-v2/submission contracts, and artifact preflight | Complete as evaluation infrastructure; the Phase 1 and six-case v2 corpora are synthetic and known, and no real holdout/cohort/study or adjudicated comparison exists yet |
 | Conservative correlation | Exact finding-package-version-advisory link with run, catalog, snapshot/delta, and canonicalization hashes | V2 evaluates exact lists and `SEMVER`, preserves unknowns, and asserts no causality; package context is operator-declared |
 | Incremental updates | Per-ecosystem `modified_id.csv`, hashed index/payloads/licenses, linear chain, replay, recovery, and explicit `withdrawn` | Complete with fixtures and a real overlapping replay of 7 RUSTSEC records; absence never deletes, and there were no new post-snapshot changes |
-| Recon/API Exposure | `secureflow-web`: expiring scope, Next.js inventory, local OpenAPI/manifest/GraphQL/tRPC inference, control matrix, JSON/SARIF, 24 route assertions, and 400 paired API risk scenarios | Complete for the offline vertical and corpus-generation slice; the Mitiquete plan remains blocked because no production HTTP transport, independently bound ownership evidence, or staging run exists |
+| Recon/API Exposure | `secureflow-web`: expiring scope, Next.js inventory, local OpenAPI/manifest/GraphQL/tRPC inference, control matrix, JSON/SARIF, 24 development assertions, and 400 paired API risk scenarios | Complete for the offline vertical and corpus-generation slice; the Mitiquete plan remains blocked because no production HTTP transport, independently bound ownership evidence, or staging run exists |
 | Fail-closed orchestration | Seven-phase state machine, artifacts retained by hash, abstention, and derived next action | Complete as a local plan; it does not automatically execute network activity, AI, or human review |
 | Operational backups | SQLite Online Backup API, hashed manifest, `quick_check`, foreign keys, no-overwrite creation, and restore to a new destination | Complete with round-trip and concurrency tests; external retention, encryption, and disaster-recovery policies are missing |
 | Modular catalog distribution | Database-derived `core`, `malicious`, and `full` profiles; bounded Zstandard; strict manifest; deep verify/install; manifest-hash pin required for installation by default | Implemented locally; stored source declarations do not authenticate publishers, projected profiles are standalone current-record catalogs, publisher signatures and incremental bundle updates are not implemented, and no advisory data ships in the app release |
 | Local-first AI | Redacted preparation disabled by default, consent, budget, Luna default, model/prompt/token accounting, and advisory response | Complete as an offline contract; no network client or real provider quality/cost measurement exists |
 | CV/paper evidence | Demo, separate evaluation, schemas, ADRs, threat model, and a matrix of allowed/prohibited claims | Complete for describing an engineering prototype; does not support superiority, production readiness, or general effectiveness |
 | Preservation of originals | Demo and evaluation write under `/tmp`; subsequent Git verification | Complete in this work: source repositories remained outside SecureFlow, and pre-existing changes in other worktrees were not modified |
-| Reproducible publication | Public `danielcadev/secureflow` repository, pinned Rust 1.92, commit-pinned CI actions, fmt/clippy/test/audit/build, deterministic CycloneDX SBOM, and a hashed bundle from clean Git | Remote CI passed; release `v0.1.0` uses an annotated tag and checksums, but the initial tag has no cryptographic signature |
+| Reproducible publication | Public `danielcadev/secureflow` repository, pinned Rust 1.92, commit-pinned CI actions, fmt/clippy/test/audit/build, deterministic CycloneDX SBOM, checksum-bound Cargo license declarations, and a hashed bundle from clean Git | The 0.2.0 release path fails closed on missing or ambiguous Cargo evidence and adds a human-readable declaration inventory; this is not legal completeness or cross-host binary reproducibility. Release `v0.1.0` uses an annotated tag and checksums, but the initial tag has no cryptographic signature |
 
 ## Executed evidence
 
 - `cargo fmt --all -- --check`: passed with the pinned Rust 1.92.0 toolchain.
 - `cargo clippy --workspace --all-targets --locked -- -D warnings`: passed in
   the pinned Rust 1.92.0 toolchain.
-- `cargo test --workspace --locked`: 178 tests passed, 0 failed in the pinned
+- `cargo test --workspace --locked`: 185 tests passed, 0 failed in the pinned
   Rust 1.92.0 toolchain.
 - `cargo audit`: 173 dependencies checked against 1,226 advisories with no
   reported vulnerabilities.
@@ -49,7 +49,7 @@ outperforms a human researcher.
   reported an empty full graph. The compatibility run explicitly disabled
   Bubblewrap, so it supports contract compatibility only; zero candidates is
   not security evidence.
-- Corrected Secure Engine commit `c5c67cd` (binary SHA-256
+- Corrected Secure Engine commit `c5c67cd84a1d39c20f545bc05c9da9e01246e04e` (binary SHA-256
   `74caae8462bf80f8be45787262d7addf685c7711db4b6c70353487be9723b96f`)
   completed compact and negotiated-full runs through SecureFlow on the neutral
   calibration fixture. Both retained 14 pending candidates and 7 deterministic
@@ -60,6 +60,16 @@ outperforms a human researcher.
   report represented 208,157 internal nodes and 368,627 edges in 2,507,778
   bytes. End-to-end execution took 25.33 seconds and peaked at 987,332 KiB on
   this host. No target code or network request was executed.
+- Optimized Secure Engine commit
+  `4eee7eeaf34856416f8acc5719d296efbeffd251` retained the same npm compact
+  fingerprint, 4,847 scanned files, 57,748 facts, 208,157 conceptual nodes,
+  368,627 conceptual edges, 0 findings, and 3 abstentions. Two local release
+  samples reduced mean peak compact RSS from 987,470 KiB to 737,420 KiB
+  (approximately 25.3%). This is traceable single-host evidence, not an
+  independently reproduced or universal memory guarantee. Human source review
+  did not validate any of the three abstentions as vulnerabilities; exact
+  dispositions are retained in
+  `docs/evidence/npm-cli-engine-triage-2026-08-29.json`.
 - `scripts/demo-local.sh`: 6 deterministic candidates, all `pending`; a Luna
   request with an 899-byte payload and `transmitted=false`; valid Secure Skill
   and historical benchmark imports. The synthetic catalog imported 2 source
@@ -67,8 +77,9 @@ outperforms a human researcher.
   violations. Artifacts from this execution remained in a private temporary
   directory and are not published.
 - `scripts/eval-local.sh`: 14 synthetic cases, 0 TP, 7 FN, 2 FP, 5 TN, 0
-  operational failures, and 70 ms aggregate duration. Its artifacts remained
-  in a private temporary directory and are not published.
+  operational failures, and 75 ms aggregate duration in the latest local run.
+  Duration is volatile host telemetry, not a performance claim. Its artifacts
+  remained in a private temporary directory and are not published.
 - The raw demo report's SHA-256 matches the hash in the manifest; creation and
   completion timestamps bound the execution.
 - Two consecutive demos retained exactly the same target hash, ordering, and
@@ -99,9 +110,17 @@ outperforms a human researcher.
   pinned manifest hashes: `core` 66,142,849 bytes, `malicious` 147,507,376
   bytes, and `full` 234,613,073 bytes compressed. They remain local evidence,
   not authenticated or published catalog releases.
-- Two SBOM generator executions produced the same SHA-256. This measures
-  inventory determinism for one `Cargo.lock`, not cross-host binary
-  reproducibility.
+- Focused generator tests produce byte-identical paired SBOM and attribution
+  artifacts from the same synthetic `Cargo.lock`, workspace manifests, and
+  checksum-verified `.crate` bytes. This measures local evidence determinism,
+  not legal completeness or cross-host binary reproducibility.
+- Two combined-workspace offline runs produced byte-identical 173-component
+  inventories with zero missing Cargo license declarations. The SBOM SHA-256
+  was `c491833d5a487c212a5fbc101f5279af760c2e5d79ccc95380e55199b081c9cd`;
+  the declaration inventory SHA-256 was
+  `dfa9de0d6c3daf1326af219a4643ac9aeb11518ee6711c2eddd328e22991e33a`.
+  These are traceable local artifacts, not a legal-completeness or cross-host
+  reproducibility result.
 - The online backup of the real 1.20 GB catalog completed in 45.96 seconds,
   used mode `0600`, and revalidated its hash, `quick_check`, and foreign keys.
   That 2026-08-23 run did not execute a full-scale restore. The later Go/PyPI

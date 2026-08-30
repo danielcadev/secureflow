@@ -1,0 +1,5 @@
+{
+  "artifact_version": "secureflow-synthetic-raw-observation-v1",
+  "private_rationale": "Development-only candidate evidence for the synthetic holdout case.",
+  "reviewed_scope": ["case-0005.ts"]
+}

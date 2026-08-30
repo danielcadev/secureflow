@@ -1,0 +1,143 @@
+{
+  "study_mode": "synthetic-contract-test",
+  "research_question": "Does this known fixture exercise the v2 integrity contract without establishing a comparative result?",
+  "dataset": {
+    "dataset_id": "sf_dataset_18609eb48b788934bd4e6aa5522eefa551471338cb1526bb2e5a0d7d605bf3c6",
+    "dataset_sha256": "0da2ee5e868db6133b2da3b575a662679b81f3b261c6c56bce187c91c679df15",
+    "total_cases": 6,
+    "holdout_cases": 2,
+    "holdout_vulnerable_cases": 1,
+    "holdout_safe_controls": 1,
+    "ground_truth_commitment_sha256": "5a84f6849dfc32b8aa25d29b00746de7037f625c64486cdee098df00caff4abd"
+  },
+  "artifacts": {
+    "provenance_sha256": "bb6bc01804279bd84da7abb4ac0ae99ba29039e881ed1ed2b960a2fb8b97bb2a",
+    "license_manifest_sha256": "84d53ad60cc156227723b998ce0003f1b54cfc69e214e9d5a79d9a33e349bca8",
+    "overlap_audit_sha256": "cbecb6a005e2031992545e1758b3fc7a36040216a388c8f037d723091c4ecb9e",
+    "environment_sha256": "042a2c4a5e2fcbf66cd687cd8d6de8ddfde124e0f7d5eda8a9fc2f279ef1cf20",
+    "shared_capability_manifest_sha256": "788f9d545bf7f9584c812e1d33401282290a96a2b98afa8341d9310e55d8dd4a"
+  },
+  "lanes": [
+    {
+      "lane_id": "secureflow-assisted",
+      "kind": "secureflow-assisted-human",
+      "treatment": "secureflow-available",
+      "equivalent_capability_group": "synthetic-equivalent-v1",
+      "cohort_or_version": "Three synthetic participant commitments with SecureFlow",
+      "lane_configuration_sha256": "35414d0d3c105a8957bf216f955929f7e176eb0cdfb8a6cc025dc079a17a01f2",
+      "shared_capability_manifest_sha256": "788f9d545bf7f9584c812e1d33401282290a96a2b98afa8341d9310e55d8dd4a",
+      "environment_sha256": "042a2c4a5e2fcbf66cd687cd8d6de8ddfde124e0f7d5eda8a9fc2f279ef1cf20",
+      "time_limit_seconds_per_case": 600,
+      "network_policy": "disabled",
+      "case_access_policy": "opaque-case-only",
+      "human_reviewer_count": 3
+    },
+    {
+      "lane_id": "human-comparator",
+      "kind": "human-comparator",
+      "treatment": "secureflow-unavailable",
+      "equivalent_capability_group": "synthetic-equivalent-v1",
+      "cohort_or_version": "Three synthetic participant commitments without SecureFlow",
+      "lane_configuration_sha256": "5a50b28f7d8e93778636a30abf2050b703f7f867213a42c4e8a94ec07f44cc36",
+      "shared_capability_manifest_sha256": "788f9d545bf7f9584c812e1d33401282290a96a2b98afa8341d9310e55d8dd4a",
+      "environment_sha256": "042a2c4a5e2fcbf66cd687cd8d6de8ddfde124e0f7d5eda8a9fc2f279ef1cf20",
+      "time_limit_seconds_per_case": 600,
+      "network_policy": "disabled",
+      "case_access_policy": "opaque-case-only",
+      "human_reviewer_count": 3
+    }
+  ],
+  "equivalence": {
+    "group_id": "synthetic-equivalent-v1",
+    "secureflow_lane_id": "secureflow-assisted",
+    "human_lane_id": "human-comparator",
+    "same_case_inputs": true,
+    "same_time_limit": true,
+    "same_network_policy": true,
+    "same_environment_class": true,
+    "same_non_treatment_tools": true,
+    "treatment_is_only_planned_difference": true,
+    "native_and_equivalent_lanes_reported_separately": true
+  },
+  "blinding": {
+    "participant_ground_truth_hidden": true,
+    "system_ground_truth_hidden": true,
+    "lane_identity_hidden_from_adjudicators": true,
+    "submissions_close_before_labels_open": true,
+    "randomized_case_order": true,
+    "randomization_commitment_sha256": "56fb31ddcb535f745476290e5cd91c4b4e86d9f1edc1b25977d8dc059ed2a5d3",
+    "independent_primary_adjudicators": 2,
+    "independent_tie_breaker_required": true,
+    "adjudicators_independent_from_corpus_authors": true,
+    "adjudicators_independent_from_system_developers": true,
+    "disagreement_resolution": "A third independent adjudicator resolves retained disagreements."
+  },
+  "execution": {
+    "attempt_ordinal_starts_at_zero": true,
+    "default_attempts_per_case_lane": 1,
+    "retries_permitted": false,
+    "retry_policy": "No retries; any rerun requires a newly versioned and preregistered protocol.",
+    "timeout_is_operational_error": true,
+    "crash_is_operational_error": true,
+    "malformed_output_is_operational_error": true,
+    "operational_errors_never_count_as_no_finding": true,
+    "raw_artifacts_retained_by_hash": true
+  },
+  "outcomes": {
+    "one_atomic_case_per_principal_invariant": true,
+    "finding_requires_source_evidence_impact_and_repair": true,
+    "outcome_kinds": [
+      "findings",
+      "no-finding",
+      "abstention",
+      "operational-error"
+    ],
+    "all_outcome_kinds_separate": true,
+    "no_finding_is_a_negative_observation_pending_adjudication": true,
+    "abstentions_are_neither_positive_nor_negative": true,
+    "errors_are_neither_findings_nor_no_findings": true,
+    "positive_unit": "principal-invariant",
+    "safe_control_unit": "case"
+  },
+  "metrics": {
+    "required_metrics": [
+      "validated-recall",
+      "validated-precision",
+      "false-positive-rate",
+      "false-negative-count",
+      "analyst-active-time-nanoseconds",
+      "wall-clock-time-nanoseconds",
+      "cost-microusd",
+      "input-tokens",
+      "output-tokens",
+      "peak-rss-bytes",
+      "abstention-count",
+      "operational-error-count"
+    ],
+    "report_per_case": true,
+    "report_per_lane": true,
+    "report_all_outcome_kinds_separately": true,
+    "no_composite_winner_score": true,
+    "integer_units_only": true
+  },
+  "success": {
+    "preregistered_criterion": "This synthetic fixture can only pass contract-integrity checks and cannot establish comparative performance.",
+    "uncertainty_method": "No effectiveness estimate is permitted for this known six-case fixture.",
+    "multiplicity_policy": "No post-hoc family selection and no comparative inference are permitted.",
+    "negative_and_mixed_results_published": true,
+    "criterion_changes_require_new_protocol": true
+  },
+  "claims": {
+    "evaluation_only": true,
+    "task_bounded_claim_status": "not-established",
+    "task_bounded_comparison_eligible_after_adjudication": false,
+    "requires_preregistered_criterion": true,
+    "requires_independent_adjudication": true,
+    "requires_uncertainty_analysis": true,
+    "limited_to_frozen_dataset_cohort_and_configuration": true,
+    "global_superiority_claim_allowed": false,
+    "best_or_always_human_claim_allowed": false,
+    "human_replacement_claim_allowed": false,
+    "production_safety_claim_allowed": false
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "artifact_version": "secureflow-synthetic-reviewer-commitment-v1",
+  "pseudonymous_reviewer_commitments": ["fixture-reviewer-a", "fixture-reviewer-b", "fixture-reviewer-c"],
+  "real_people_observed": false
+}

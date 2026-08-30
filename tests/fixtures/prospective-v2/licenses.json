@@ -1,0 +1,5 @@
+{
+  "artifact_version": "secureflow-synthetic-license-manifest-v1",
+  "fixture_license": "Apache-2.0 OR MIT",
+  "external_source_material": false
+}

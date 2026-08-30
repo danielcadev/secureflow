@@ -353,7 +353,7 @@ combined total is not presented as a vulnerability count. Exact evidence:
 From that copy, deeply verified policy-v2 bundles measured 66,142,849 bytes for
 `core`, 147,507,376 bytes for `malicious`, and 234,613,073 bytes for `full`.
 Catalogs therefore remain optional artifacts outside the application binary;
-`core` is the practical default download.
+`core` is the planned practical default if catalog downloads are published.
 
 A finding is conservatively linked to advisories for a package. V2 evaluates
 exact lists and OSV `SEMVER` ranges; invalid data and `GIT`/`ECOSYSTEM` ranges
@@ -487,19 +487,20 @@ bash scripts/eval-local.sh
 The protocol, observed result, and limitations are in
 [`docs/evaluation.md`](./docs/evaluation.md).
 
-Before a new study, a prospective protocol can be sealed with a holdout, human
-cohort, blinding, adjudication, costs, and claim limits:
+Before a new study, SecureFlow can freeze a label-free dataset and seal a v2
+protocol for equivalent SecureFlow-assisted-human and human-comparator lanes.
+The contracts bind blinding, artifacts, costs, outcomes, and claim limits:
 
 ```bash
-cargo run -p secureflow -- benchmark-protocol-seal \
-  --draft /path/to/protocol-draft.json \
-  --output /path/to/protocol-sealed.json
+cargo run -p secureflow -- benchmark-dataset-freeze --help
+cargo run -p secureflow -- benchmark-protocol-preflight --version v2 --help
+cargo run -p secureflow -- benchmark-submission-seal --help
 ```
 
-A real study must use `benchmark-protocol-preflight`, which checks hashes for
-the public holdout manifest, provenance, licenses, and environment before
-sealing without receiving or opening labels. The repository fixture tests only
-the contract; it is not a real preregistration. Runbook:
+A real study must check the exact dataset, case, provenance, license,
+anti-leakage, environment, capability, randomization, lane, and raw-submission
+hashes without receiving or opening labels. The repository fixture tests only
+the contract; it is not a real preregistration, adjudication, or result. Runbook:
 [`docs/prospective-study-runbook.md`](./docs/prospective-study-runbook.md).
 
 Optional AI begins with an offline contract. The CLI prepares one redacted,
@@ -613,6 +614,17 @@ analysis: authorized scope, Next.js inventory, local inference, route
 assessment, a 400-scenario paired API risk corpus, and a blocked-by-construction
 production pilot plan. Remote recon, DNS/CT, and HTTP transport remain
 unimplemented.
+
+## Release evidence
+
+The local release bundle includes a deterministic CycloneDX 1.5 inventory and
+a human-readable Cargo dependency license-declaration inventory. Registry
+metadata is extracted offline from local `.crate` archives only after their
+SHA-256 matches `Cargo.lock`; missing or ambiguous evidence stops the release.
+This records package-manager declarations and does not establish legal
+completeness, license compatibility, compliance, or cross-host binary
+reproducibility. See
+[`docs/dependency-license-evidence.md`](./docs/dependency-license-evidence.md).
 
 ## Security and contributions
 

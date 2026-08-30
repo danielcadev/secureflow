@@ -1,0 +1,85 @@
+{
+  "contract_version": "secureflow-local-triage-evidence-v1",
+  "observed_at": "2026-08-29",
+  "authorization_basis": "local operator-authorized open-source review checkout",
+  "network_used_by_scanner": false,
+  "target_executed": false,
+  "target": {
+    "repository": "npm/cli",
+    "local_checkout": "npm-cli-security-review",
+    "git_commit": "b888cc9a9ff34a8b023ff47b784692396635397b",
+    "git_state": "detached-clean"
+  },
+  "engine": {
+    "source_commit": "4eee7eeaf34856416f8acc5719d296efbeffd251",
+    "release_binary_sha256": "c4b2dbe6c06d7b020c483bbb38b3a26959155cc118e81e2e8c777b7e83d77d4a",
+    "report_contract": "secure-json-v1",
+    "compact_report_sha256": "ccc77b9e891212591e7a7f472ef2307911b3289dbc0d6a640bf91bd80023123f",
+    "compact_report_fingerprint": "0c76afa4aa89f99d7c48bc08edc37f8e7e375a46ebb00aa43149f78bd3635b82",
+    "compact_report_bytes": 2507723,
+    "full_report_sha256": "7d3f5fd595dc6a4806e2f96b33f694673125473eb1c50ad288ce0f40af3be965",
+    "full_report_fingerprint": "f024e99f337ff2ca185e603f8967964b63ebeacefa1853614fbcf4c5a0bb6bb7",
+    "full_report_bytes": 539259886,
+    "raw_reports_published": false,
+    "raw_reports_retention": "local temporary evidence only"
+  },
+  "scan": {
+    "files_discovered": 4859,
+    "files_scanned": 4847,
+    "normalized_facts": 57748,
+    "conceptual_graph_nodes": 208157,
+    "conceptual_graph_edges": 368627,
+    "retained_compact_facts": 14,
+    "findings": 0,
+    "explicit_abstentions": 3,
+    "validated_vulnerabilities": 0,
+    "clean_verdict": false
+  },
+  "human_triage": [
+    {
+      "rule_id": "SE1001",
+      "engine_reason": "actor-authority-equivalence",
+      "path": "workspaces/libnpmpack/test/index.js",
+      "source_lines": "173-207",
+      "disposition": "not-validated",
+      "evidence": "The call is a test-only spawk process expectation for a fixed touch command. No production reachability or attacker-controlled command was established.",
+      "missing_for_vulnerability": [
+        "production reachability",
+        "lower-privilege attacker control",
+        "reproducible security impact"
+      ]
+    },
+    {
+      "rule_id": "SE1004",
+      "engine_reason": "actor-authority-equivalence",
+      "path": "lib/utils/oidc.js",
+      "source_lines": "49-105",
+      "disposition": "not-validated",
+      "evidence": "The GitHub OIDC request URL and bearer token are supplied by the same CI environment authority. Review did not establish a distinct lower-privilege actor controlling only the destination or a privilege gain.",
+      "missing_for_vulnerability": [
+        "distinct lower-privilege actor",
+        "independent destination control",
+        "privilege gain or reproducible disclosure"
+      ]
+    },
+    {
+      "rule_id": "SE1013",
+      "engine_reason": "independent-policy-bypass",
+      "path": "workspaces/arborist/lib/arborist/rebuild.js",
+      "source_lines": "202-225",
+      "disposition": "not-validated",
+      "evidence": "The source comment and tests define workspaces as owner-managed and intentionally exempt them from allowScripts, while ignoreScripts still gates lifecycle execution at lines 147-164. No independent attacker path into an owner-managed workspace was established.",
+      "missing_for_vulnerability": [
+        "attacker-controlled workspace insertion under a supported threat model",
+        "unintended policy boundary",
+        "reproducible privilege or integrity impact"
+      ]
+    }
+  ],
+  "scanner_learning": [
+    "Rank test-only evidence below production evidence without blanket test exclusion.",
+    "Model authority equivalence when a single CI principal controls both a URL and its credential.",
+    "Retain intentional policy exceptions as abstentions unless an independent attacker path and supported invariant are proven."
+  ],
+  "claim_boundary": "This is traceable local source triage of scanner abstentions, not a complete npm security audit, clean bill of health, disclosed vulnerability, or independently reproduced result."
+}

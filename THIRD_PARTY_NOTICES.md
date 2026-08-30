@@ -1,5 +1,14 @@
 # Third-party notices
 
+## Cargo dependency declarations
+
+Release bundles produced by the 0.2.0-or-later release path include
+`evidence/dependency-license-declarations.md`, generated offline from local
+workspace manifests and `.crate` archives whose SHA-256 matches `Cargo.lock`.
+It is a traceable inventory of Cargo-declared metadata, not legal advice or a
+claim of complete attribution, compatibility, or compliance. See
+`docs/dependency-license-evidence.md` for the evidence boundary and limitations.
+
 ## rusqlite and SQLite
 
 - Crate: `rusqlite` 0.40.2
@@ -88,6 +97,11 @@ repository or release artifacts.
 - OpenSSF Malicious Packages: Apache-2.0. A `MAL-*` record is accepted only
   when all affected entries point to the corresponding official repository
   path; otherwise it stays quarantined.
+- PyPA Advisory Database: CC-BY-4.0. Imported records retain the supplied
+  license-evidence hash and snapshot provenance.
+- Go Vulnerability Database: advisory data is CC-BY-4.0. Imported records
+  retain the supplied license-evidence hash and snapshot provenance; its
+  tooling and source-code licensing are outside the advisory-data snapshot.
 
 OSV ecosystem ZIPs are treated as transport. SecureFlow does not assign one
 blanket license to the aggregate. Source locator, artifact generation/hash,

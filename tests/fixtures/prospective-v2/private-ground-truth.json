@@ -1,0 +1,13 @@
+{
+  "artifact_version": "secureflow-synthetic-ground-truth-v1",
+  "development_only": true,
+  "comparison_evidence": false,
+  "cases": [
+    { "case_id": "case-0001", "label": "positive", "principal_invariant": "filesystem path remains below authorized root" },
+    { "case_id": "case-0002", "label": "safe-control", "principal_invariant": "filesystem path remains below authorized root" },
+    { "case_id": "case-0003", "label": "positive", "principal_invariant": "tenant identity matches resource tenant" },
+    { "case_id": "case-0004", "label": "safe-control", "principal_invariant": "tenant identity matches resource tenant" },
+    { "case_id": "case-0005", "label": "positive", "principal_invariant": "actor identity matches resource owner" },
+    { "case_id": "case-0006", "label": "safe-control", "principal_invariant": "actor identity matches resource owner" }
+  ]
+}

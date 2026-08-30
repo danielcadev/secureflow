@@ -19,6 +19,12 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Verify tracked release notes
+        run: |
+          notes_file="docs/releases/${GITHUB_REF_NAME}.md"
+          test -f "${notes_file}"
+          test -s "${notes_file}"
+
       - name: Install pinned Rust toolchain
         run: rustup toolchain install 1.92.0 --profile minimal --component clippy,rustfmt
 
@@ -44,4 +50,4 @@ jobs:
           --repo "${GITHUB_REPOSITORY}"
           --verify-tag
           --title "SecureFlow ${GITHUB_REF_NAME}"
-          --generate-notes
+          --notes-file "docs/releases/${GITHUB_REF_NAME}.md"

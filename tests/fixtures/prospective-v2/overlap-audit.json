@@ -1,0 +1,7 @@
+{
+  "artifact_version": "secureflow-synthetic-overlap-audit-v1",
+  "scope": "Development-only fixtures",
+  "known_to_authors": true,
+  "known_to_participants": true,
+  "comparison_eligible": false
+}

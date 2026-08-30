@@ -42,6 +42,22 @@ if [[ "${GITHUB_REF_TYPE:-}" == "tag" && "${GITHUB_REF_NAME:-}" != "v${release_v
   echo "release tag ${GITHUB_REF_NAME:-<missing>} does not match package version v${release_version}" >&2
   exit 1
 fi
+if [[ "${GITHUB_REF_TYPE:-}" == "tag" ]]; then
+  citation_version=$(sed -n 's/^version: "\([^"]*\)"/\1/p' CITATION.cff | head -n 1)
+  if [[ "$citation_version" != "$release_version" ]]; then
+    echo "CITATION.cff version ${citation_version:-<missing>} does not match package version ${release_version}" >&2
+    exit 1
+  fi
+  if grep -Fq "## ${release_version} — Unreleased" CHANGELOG.md; then
+    echo "CHANGELOG still marks ${release_version} as Unreleased" >&2
+    exit 1
+  fi
+  notes_file="docs/releases/${GITHUB_REF_NAME}.md"
+  if [[ ! -s "$notes_file" ]]; then
+    echo "missing tracked release notes: $notes_file" >&2
+    exit 1
+  fi
+fi
 release_commit=$(git rev-parse --verify HEAD)
 release_epoch=$(git show -s --format=%ct HEAD)
 release_name="secureflow-${release_version}-${release_commit:0:12}"
@@ -50,16 +66,20 @@ mkdir -p "$release_parent"
 release_stage=$(mktemp -d "$release_parent/.secureflow-release.XXXXXX")
 trap 'if [[ -n "${release_stage:-}" && -d "$release_stage" ]]; then find "$release_stage" -type f -delete; find "$release_stage" -depth -type d -empty -delete; fi' EXIT
 
+python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 "${cargo_cmd[@]}" fmt --all -- --check
 "${cargo_cmd[@]}" clippy --workspace --all-targets --locked -- -D warnings
 "${cargo_cmd[@]}" test --workspace --locked
 "${cargo_cmd[@]}" build --release --locked -p secureflow
+"${cargo_cmd[@]}" fetch --locked
 
 mkdir -p "$release_stage/$release_name/bin" "$release_stage/$release_name/evidence"
 install -m 0755 target/release/secureflow "$release_stage/$release_name/bin/secureflow"
 cp -a README.md CHANGELOG.md SECURITY.md CONTRIBUTING.md CITATION.cff LICENSE-MIT LICENSE-APACHE \
   THIRD_PARTY_NOTICES.md docs schemas "$release_stage/$release_name/"
-python3 scripts/generate-sbom.py --output "$release_stage/$release_name/evidence/sbom.cdx.json"
+python3 scripts/generate-sbom.py \
+  --output "$release_stage/$release_name/evidence/sbom.cdx.json" \
+  --attribution-output "$release_stage/$release_name/evidence/dependency-license-declarations.md"
 git archive --format=tar --prefix="$release_name/source/" HEAD > "$release_stage/source.tar"
 tar -xf "$release_stage/source.tar" -C "$release_stage"
 

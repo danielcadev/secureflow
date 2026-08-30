@@ -1,0 +1,5 @@
+{
+  "artifact_version": "secureflow-synthetic-randomization-v1",
+  "seed_commitment_only": "fixture-not-a-real-secret-seed",
+  "labels_used_for_ordering": false
+}

@@ -1,0 +1,5 @@
+{
+  "artifact_version": "secureflow-synthetic-environment-v1",
+  "network": "disabled",
+  "execution_class": "local-test"
+}
