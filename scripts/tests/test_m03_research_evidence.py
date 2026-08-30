@@ -46,6 +46,123 @@ class M03ResearchEvidenceTests(unittest.TestCase):
             )
         )
 
+    def test_fresh_npm_evidence_is_exact_and_preserves_the_baseline(self) -> None:
+        evidence = load_json("npm-cli-m0.3-fresh-scan-2026-08-30.json")
+        self.assertEqual(
+            evidence["evidence_version"],
+            "secureflow-npm-cli-m0.3-fresh-scan-v2",
+        )
+        self.assertEqual(
+            evidence["supersedes_for_current_engine_observation"],
+            "npm-cli-m0.3-pilot-2026-08-30.json",
+        )
+        self.assertTrue(evidence["preserves_historical_baseline"])
+        self.assertEqual(
+            evidence["target"]["revision"],
+            "b888cc9a9ff34a8b023ff47b784692396635397b",
+        )
+        self.assertEqual(
+            evidence["engine"]["source_commit"],
+            "0959cc6d9fe06fb92369497caab78af31cbf98d5",
+        )
+        self.assertEqual(
+            evidence["engine"]["binary_sha256"],
+            "14ddca249a22a324ef6fa206268cf7089216cc400d3617c9fb750f40ccc2de3c",
+        )
+        self.assertEqual(
+            evidence["report"]["raw_report_sha256"],
+            "2557f2ba0a0705e4cf9ee18a00c6201bb35fa82e8d40cb0db9017fe4c2a36e7d",
+        )
+        self.assertEqual(
+            evidence["report"]["semantic_fingerprint"],
+            "91b75fdacd4caecb2610d86afdcd855cc9dc5446060ec61aea9ae33fd3159a89",
+        )
+        self.assertEqual(evidence["report"]["bytes"], 2_508_213)
+        self.assertFalse(evidence["report"]["raw_report_published"])
+
+        accounting = evidence["exact_accounting"]
+        self.assertEqual(
+            accounting,
+            {
+                "candidate_files": 4859,
+                "files_scanned": 4847,
+                "normalized_facts_total": 57748,
+                "facts_retained": 14,
+                "conceptual_graph_nodes_total": 208157,
+                "conceptual_graph_edges_total": 368627,
+                "graph_nodes_retained": 7,
+                "graph_edges_retained": 4,
+                "candidate_paths": 3,
+                "findings": 0,
+                "explicit_abstentions": 3,
+                "parser_diagnostics": 0,
+                "scan_errors": 0,
+                "truncated": False,
+                "complete": True,
+            },
+        )
+        resources = evidence["resource_observation"]
+        self.assertEqual(resources["wall_seconds"], 19.17)
+        self.assertEqual(resources["peak_rss_kib"], 737_564)
+        self.assertFalse(resources["performance_claim_allowed"])
+
+        expected_dispositions = [
+            (
+                "SE1004",
+                "lib/utils/oidc.js",
+                "actor-authority-equivalence",
+                "205c3897d837142dfe549136eed2bbd56949281dbd043cd84be157851f154fcb",
+            ),
+            (
+                "SE1013",
+                "workspaces/arborist/lib/arborist/rebuild.js",
+                "independent-policy-bypass",
+                "a2bc3c16683c14906dee2c4ba9a8ad7d0d35068c8f23b0e62964bedf319ef162",
+            ),
+            (
+                "SE1001",
+                "workspaces/libnpmpack/test/index.js",
+                "test-context-reachability-unresolved",
+                "cb1c16a4983ce6a423371cf0e82f0ab2fadb299ec71cc6a172f6488703b41314",
+            ),
+        ]
+        actual_dispositions = [
+            (
+                item["rule_id"],
+                item["path"],
+                item["engine_reason"],
+                item["engine_fingerprint"],
+            )
+            for item in evidence["dispositions"]
+        ]
+        self.assertEqual(actual_dispositions, expected_dispositions)
+        self.assertTrue(
+            all(
+                item["engine_disposition"] == "explicit-abstention"
+                and item["human_disposition"] == "abstained-after-source-review"
+                and item["unresolved_gates"]
+                for item in evidence["dispositions"]
+            )
+        )
+        self.assertEqual(
+            evidence["disposition_counts"],
+            {
+                "validated_vulnerabilities": 0,
+                "abstained_after_source_review": 3,
+                "clean_verdict": False,
+            },
+        )
+
+        protocol = (ROOT / "docs" / "pilots" / "npm-cli-m0.3-pilot.md").read_text(
+            encoding="utf-8"
+        )
+        index = (ROOT / "docs" / "m0.3-research-phases-3-6.md").read_text(
+            encoding="utf-8"
+        )
+        for document in (protocol, index):
+            self.assertIn("npm-cli-m0.3-pilot-2026-08-30.json", document)
+            self.assertIn("npm-cli-m0.3-fresh-scan-2026-08-30.json", document)
+
     def test_mitiquete_inventory_is_not_promoted_to_exposure_or_vulnerability(self) -> None:
         evidence = load_json("mitiquete-offline-web-m0.3-2026-08-30.json")
         self.assertEqual(

@@ -1,12 +1,12 @@
-# npm CLI M0.3 frozen pilot
+# npm CLI M0.3 evidence protocol
 
-Status: **frozen local baseline; no new scan and no external claim**.
+Status: **fresh local run recorded; historical baseline retained; no external claim**.
 
 ## Purpose
 
-This pilot preserves a bounded, reproducible starting point for the next npm CLI analysis. It binds the authorized detached checkout at `b888cc9a9ff34a8b023ff47b784692396635397b`, the historical compact Engine evidence, the three source-reviewed abstentions, and a resource budget before another execution occurs.
+This pilot preserves a bounded, reproducible lineage for npm CLI analysis. It binds the authorized detached checkout at `b888cc9a9ff34a8b023ff47b784692396635397b`, the historical compact Engine evidence, the fresh Engine observation, the three source-reviewed abstentions, and the resource budget fixed before the fresh execution.
 
-The tracked evidence is [`npm-cli-m0.3-pilot-2026-08-30.json`](../evidence/npm-cli-m0.3-pilot-2026-08-30.json). The previous detailed source review remains in [`npm-cli-engine-triage-2026-08-29.json`](../evidence/npm-cli-engine-triage-2026-08-29.json).
+The immutable historical baseline is [`npm-cli-m0.3-pilot-2026-08-30.json`](../evidence/npm-cli-m0.3-pilot-2026-08-30.json). The current fresh observation is [`npm-cli-m0.3-fresh-scan-2026-08-30.json`](../evidence/npm-cli-m0.3-fresh-scan-2026-08-30.json). The previous detailed source review remains in [`npm-cli-engine-triage-2026-08-29.json`](../evidence/npm-cli-engine-triage-2026-08-29.json). The fresh artifact supersedes the baseline only for statements about the current Engine revision; it does not delete, rewrite, or retroactively change historical evidence.
 
 ## Frozen execution configuration
 
@@ -21,7 +21,7 @@ The tracked evidence is [`npm-cli-m0.3-pilot-2026-08-30.json`](../evidence/npm-c
 
 If the exact target revision, Engine binary hash, exclusions, limits, or authorization changes, create a new versioned pilot artifact instead of editing the result after observation.
 
-## Existing triage baseline
+## Historical triage baseline
 
 The retained compact run reported zero candidates and three deterministic Engine abstentions. Manual source review did not establish all five exploitability gates for any of them:
 
@@ -31,6 +31,14 @@ The retained compact run reported zero candidates and three deterministic Engine
 
 Their state is `abstained-after-source-review`, not `validated`, `rejected`, or `safe`. A future run must preserve the old artifact and record any changed disposition as a new review event with source evidence.
 
+## Fresh Engine observation
+
+The fresh compact run binds Engine commit `0959cc6d9fe06fb92369497caab78af31cbf98d5` and binary SHA-256 `14ddca249a22a324ef6fa206268cf7089216cc400d3617c9fb750f40ccc2de3c`. It scanned 4,847 of 4,859 candidate files, extracted 57,748 facts, and evaluated three candidate paths. It retained 14 facts and a seven-node/four-edge evidence graph, producing zero findings, three explicit abstentions, zero diagnostics, zero errors, and no truncation.
+
+The three dispositions remain source-reviewed abstentions. SE1004 records `actor-authority-equivalence`; SE1013 records `independent-policy-bypass`; and the test-only SE1001 evidence records `test-context-reachability-unresolved`. No disposition is a validated vulnerability, rejected finding, false negative, or safe control. Zero findings is not a clean verdict.
+
+The 19.17-second wall time and 737,564 KiB peak RSS are descriptive values from one local execution. Cache state, run order, and filesystem contention were not controlled, so these values cannot support a performance or superiority claim.
+
 ## Completion gate
 
-The next pilot may be called complete only when the exact revision and Engine identity are recorded, execution stayed inside the frozen budget, raw evidence hashes validate, every lead has one mutually exclusive triage state, and all unresolved categories are named. It must publish zero clean-repository, product-superiority, or vulnerability claims without independent validation and the separate external-publication approval gate.
+The fresh pilot may be called recorded because the exact revision and Engine identity are present, execution stayed inside the frozen budget, raw evidence hashes were recorded, every lead has one mutually exclusive triage state, and all unresolved categories are named. This is evidence completion, not security-audit completion. It must publish zero clean-repository, performance, product-superiority, or vulnerability claims without independent validation and the separate external-publication approval gate.
