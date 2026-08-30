@@ -1,0 +1,64 @@
+{
+  "evidence_version": "secureflow-m0.3-human-comparison-readiness-v1",
+  "recorded_at": "2026-08-30",
+  "status": "protocol-defined-study-not-started",
+  "normative_contract": "secureflow-prospective-protocol-v2",
+  "research_question": "On a previously unseen, explicitly authorized Rust and TypeScript holdout, does a SecureFlow-assisted human cohort improve validated recall and active analysis time without an unacceptable reduction in validated precision compared with a human-only cohort under equivalent non-treatment capabilities?",
+  "minimum_design": {
+    "opaque_holdout_cases": 20,
+    "vulnerable_cases_min": 10,
+    "safe_controls_min": 10,
+    "participants_per_lane_min": 3,
+    "independent_primary_adjudicators": 2,
+    "independent_tie_breakers": 1,
+    "languages_reported_separately": [
+      "Rust",
+      "TypeScript"
+    ],
+    "lanes": [
+      "secureflow-assisted-human",
+      "human-only"
+    ]
+  },
+  "required_outcomes": [
+    "findings",
+    "no-finding",
+    "abstention",
+    "operational-error"
+  ],
+  "required_metrics": [
+    "validated-recall",
+    "validated-precision",
+    "false-positive-rate",
+    "false-negative-count",
+    "analyst-active-time-nanoseconds",
+    "wall-clock-time-nanoseconds",
+    "input-tokens",
+    "output-tokens",
+    "cost-microusd",
+    "peak-rss-bytes",
+    "abstention-count",
+    "operational-error-count"
+  ],
+  "completed_gates": {
+    "v2_dataset_protocol_and_submission_contracts_implemented": true,
+    "known_synthetic_contract_fixture_validated": true,
+    "claim_boundary_documented": true
+  },
+  "blocking_gates": {
+    "independent_lineage_disjoint_holdout_frozen": false,
+    "sample_size_and_uncertainty_plan_frozen": false,
+    "independent_participants_recruited": false,
+    "independent_adjudicators_recruited": false,
+    "protocol_externally_timestamped_before_execution": false,
+    "submissions_collected": false,
+    "labels_opened_after_submission_close": false,
+    "independent_adjudication_complete": false
+  },
+  "claims": {
+    "task_bounded_comparison_status": "not-established",
+    "global_superiority_claim_allowed": false,
+    "human_replacement_claim_allowed": false,
+    "production_safety_claim_allowed": false
+  }
+}

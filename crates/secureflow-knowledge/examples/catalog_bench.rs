@@ -36,7 +36,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         sizes
     };
     println!(
-        "source_records,canonical_vulnerabilities,database_bytes,raw_revision_bytes,normalize_ms,index_build_ms,total_ingest_ms,records_per_second,lookup_median_us,fts_median_us,package_median_us"
+        "source_records,canonical_vulnerabilities,database_bytes,raw_revision_bytes,normalize_ms,index_build_ms,total_ingest_ms,records_per_second,lookup_median_us,fts_median_us,package_median_us,expected_canonical_vulnerabilities,exact_alias_reduction,dedup_gate_passed,quick_check,foreign_key_violations,search_index_status,integrity_gate_passed"
     );
     for count in sizes {
         if count == 0 || count > 1_000_000 {
@@ -78,6 +78,16 @@ fn run_size(count: usize, iterations: usize, benchmark_root: &Path) -> Result<()
     let index_seconds = index_started.elapsed().as_secs_f64();
     let ingest_seconds = normalize_seconds + index_seconds;
     let stats = catalog.stats()?;
+    let integrity = catalog.check_integrity()?;
+    let expected_canonical_vulnerabilities = expected_canonical_count(count);
+    let dedup_gate_passed =
+        stats.canonical_vulnerabilities == u64::try_from(expected_canonical_vulnerabilities)?;
+    let exact_alias_reduction = stats
+        .source_records
+        .saturating_sub(stats.canonical_vulnerabilities);
+    let integrity_gate_passed = integrity.quick_check == "ok"
+        && integrity.foreign_key_violations == 0
+        && integrity.search_index_status == "ready";
     let lookup_id = duplicate_cve_id(count.saturating_sub(1));
     let last_index = count.saturating_sub(1);
     let crates_index = last_index - (last_index % 3);
@@ -102,7 +112,7 @@ fn run_size(count: usize, iterations: usize, benchmark_root: &Path) -> Result<()
     fts_samples.sort_by(f64::total_cmp);
     package_samples.sort_by(f64::total_cmp);
     println!(
-        "{},{},{},{},{:.3},{:.3},{:.3},{:.1},{:.3},{:.3},{:.3}",
+        "{},{},{},{},{:.3},{:.3},{:.3},{:.1},{:.3},{:.3},{:.3},{},{},{},{},{},{},{}",
         stats.source_records,
         stats.canonical_vulnerabilities,
         stats.database_bytes,
@@ -114,6 +124,13 @@ fn run_size(count: usize, iterations: usize, benchmark_root: &Path) -> Result<()
         median(&lookup_samples),
         median(&fts_samples),
         median(&package_samples),
+        expected_canonical_vulnerabilities,
+        exact_alias_reduction,
+        dedup_gate_passed,
+        integrity.quick_check,
+        integrity.foreign_key_violations,
+        integrity.search_index_status,
+        integrity_gate_passed,
     );
     drop(catalog);
     std::fs::remove_dir_all(root)?;
@@ -159,11 +176,28 @@ fn duplicate_cve_id(index: usize) -> String {
     format!("CVE-2099-{canonical_index:09}")
 }
 
+fn expected_canonical_count(source_records: usize) -> usize {
+    source_records - source_records / 10
+}
+
 fn median(samples: &[f64]) -> f64 {
     let middle = samples.len() / 2;
     if samples.len().is_multiple_of(2) {
         (samples[middle - 1] + samples[middle]) / 2.0
     } else {
         samples[middle]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::expected_canonical_count;
+
+    #[test]
+    fn expected_canonical_count_matches_every_tenth_alias() {
+        assert_eq!(expected_canonical_count(9), 9);
+        assert_eq!(expected_canonical_count(10), 9);
+        assert_eq!(expected_canonical_count(50_000), 45_000);
+        assert_eq!(expected_canonical_count(100_000), 90_000);
     }
 }

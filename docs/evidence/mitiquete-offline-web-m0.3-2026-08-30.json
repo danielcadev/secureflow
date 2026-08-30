@@ -1,0 +1,105 @@
+{
+  "evidence_version": "secureflow-mitiquete-offline-web-m0.3-v1",
+  "recorded_at": "2026-08-30T19:41:42.45436282Z",
+  "status": "offline-inventory-complete-passive-staging-blocked",
+  "authorization": {
+    "basis": "owner assertion in the source task",
+    "independently_verified_domain_ownership": false,
+    "local_checkout_read_only": true,
+    "network_requests": 0,
+    "target_code_executed": false
+  },
+  "target": {
+    "repository_label": "mitiquete-secureflow-pilot",
+    "revision": "0dfb307902ea6f20c9a2755c8af4d338536b99fd",
+    "observed_checkout_state": "detached-clean",
+    "inventoried_subtree": "apps/web/src",
+    "subtree_sha256": "5014e23107ba4d36eaca9cc5a0ea2a5a442ac7ed648a86d140f4c638645917bf",
+    "license_status": "private-or-undisclosed",
+    "source_published": false
+  },
+  "offline_pipeline": {
+    "scope": {
+      "scope_id": "sf_web_scope_57e09528bdc8679bd3297cfd84d58e72daa316b7d3840aa4a616f07652624ef4",
+      "artifact_sha256": "7fe98be0341bcdf27794d42a0226a4ec602168b5055abc0efc8765aa03a926ec",
+      "artifact_bytes": 965
+    },
+    "inventory": {
+      "inventory_id": "sf_web_inventory_fde380decd4b075eddcde6a1af0eafc3394ef282395f6dad26ff1f64f3ed3ceb",
+      "artifact_sha256": "af5d9f2378b3b91dd10436baf79a20ab45dd687070f5697800479075c202a9d9",
+      "artifact_bytes": 226649,
+      "files_seen": 454,
+      "javascript_or_typescript_files_read": 450,
+      "bytes_read": 2118059,
+      "routes_total": 176,
+      "api_routes": 99,
+      "page_routes": 77,
+      "server_actions": 0,
+      "middleware_records": 0,
+      "truncated": false,
+      "issues": 0
+    },
+    "inference": {
+      "inference_id": "sf_web_inference_7daab7a5d50c876bfd6eb53236f7656c13a840840ebb9e5999d95f49b54ee0a3",
+      "artifact_sha256": "e351c193632b234502fbdb15c7de207bd9cdb4d304decbefcb09ab8b18b56614",
+      "artifact_bytes": 169323,
+      "candidates_total": 127,
+      "locally_correlated_http_endpoints": 99,
+      "dynamic_client_call_abstentions": 27,
+      "trpc_candidates_needing_human_review": 1,
+      "issues": 0
+    },
+    "raw_artifact_retention": "ignored local target/m0.3-pilots/mitiquete directory; not published"
+  },
+  "security_decision_boundary": {
+    "inventory_records": 176,
+    "inference_candidates": 127,
+    "not_assessed_candidates": 127,
+    "human_validated_vulnerabilities": 0,
+    "production_exposure_observations": 0,
+    "clean_verdict": false,
+    "inventory_is_exposure_evidence": false,
+    "inference_is_vulnerability_evidence": false
+  },
+  "passive_staging_plan": {
+    "state": "blocked",
+    "environment": "dedicated staging only",
+    "production_allowed": false,
+    "required_gates": [
+      "bind a written authorization and independently reviewed ownership artifact to the exact staging host",
+      "review a bounded HTTPS transport with DNS revalidation, no proxy path, and no credential discovery",
+      "provision dedicated non-production test accounts before any authentication, role, owner, or tenant comparison",
+      "seal expected routes and stop conditions before the first request"
+    ],
+    "allowed_methods": [
+      "GET",
+      "HEAD",
+      "OPTIONS"
+    ],
+    "request_limit": 12,
+    "requests_per_minute": 3,
+    "concurrency": 1,
+    "redirect_limit": 2,
+    "timeout_seconds": 5,
+    "response_bytes_max": 1048576,
+    "total_response_bytes_max": 4194304,
+    "body_retained": false,
+    "secrets_and_pii_redacted": true,
+    "stop_on": [
+      "authorization expiry",
+      "scope drift",
+      "non-public DNS result",
+      "HTTP 429",
+      "two consecutive 5xx responses",
+      "response budget exhaustion",
+      "operator-reported unexpected behavior"
+    ]
+  },
+  "limitations": [
+    "The inventory covers the Next.js apps/web/src subtree, not the complete monorepo or the Astro applications.",
+    "Server actions and middleware were not represented by the current v1 conventions in this subtree; zero records is not proof of absence.",
+    "Route controls, documentation state, runtime reachability, deployment exposure, and observed behavior remain unknown until separately evidenced.",
+    "The raw local artifacts can contain private route paths and are intentionally excluded from the public repository.",
+    "No request was sent to staging, production, mitiqueteonline.com, or any other host."
+  ]
+}
