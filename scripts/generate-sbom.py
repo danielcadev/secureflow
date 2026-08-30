@@ -274,7 +274,7 @@ def verified_archive(
             return
     raise EvidenceError(
         f"no local checksum-verified crate archive for {name} {version}; "
-        "run the locked release build before this offline generator"
+        "run cargo fetch --locked before this offline generator"
     )
 
 

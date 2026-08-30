@@ -66,10 +66,13 @@ Run the focused tests before generating release evidence:
 
 ```bash
 python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+cargo +1.92.0 fetch --locked
 python3 scripts/generate-sbom.py \
   --output /tmp/secureflow-sbom.cdx.json \
   --attribution-output /tmp/secureflow-dependency-license-declarations.md
 ```
 
-The second command requires the locked `.crate` archives to already exist in
-the selected Cargo cache. It deliberately does not fetch a missing archive.
+`cargo fetch --locked` runs as an explicit online acquisition step and, without
+`--target`, downloads the lockfile dependencies for every target. The generator
+then runs offline and fails closed if any checksum-bound `.crate` archive is
+still missing from the selected Cargo cache.

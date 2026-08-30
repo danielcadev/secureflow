@@ -45,6 +45,9 @@ jobs:
       - name: Build release binary
         run: cargo +1.92.0 build --release --locked -p secureflow
 
+      - name: Fetch checksum-bound archives for every locked target
+        run: cargo +1.92.0 fetch --locked
+
       - name: Generate deterministic CycloneDX inventory
         run: |
           python3 scripts/generate-sbom.py \

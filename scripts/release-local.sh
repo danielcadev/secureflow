@@ -71,6 +71,7 @@ python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 "${cargo_cmd[@]}" clippy --workspace --all-targets --locked -- -D warnings
 "${cargo_cmd[@]}" test --workspace --locked
 "${cargo_cmd[@]}" build --release --locked -p secureflow
+"${cargo_cmd[@]}" fetch --locked
 
 mkdir -p "$release_stage/$release_name/bin" "$release_stage/$release_name/evidence"
 install -m 0755 target/release/secureflow "$release_stage/$release_name/bin/secureflow"
