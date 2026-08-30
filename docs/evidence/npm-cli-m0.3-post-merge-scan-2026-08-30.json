@@ -1,0 +1,241 @@
+{
+  "evidence_version": "secureflow-npm-cli-m0.3-post-merge-scan-v1",
+  "recorded_at": "2026-08-30",
+  "status": "post-merge-local-run-source-reviewed-with-recorded-retry",
+  "supersedes_for_current_engine_observation": "npm-cli-m0.3-fresh-scan-2026-08-30.json",
+  "preserves_prior_evidence": [
+    "npm-cli-m0.3-pilot-2026-08-30.json",
+    "npm-cli-m0.3-fresh-scan-2026-08-30.json"
+  ],
+  "authorization": {
+    "basis": "local operator-authorized open-source review checkout",
+    "target_read_only": true,
+    "target_code_executed": false,
+    "target_dependencies_installed": false,
+    "network_used_by_scanner": false,
+    "model_calls": 0,
+    "external_disclosure_or_write_performed": false
+  },
+  "target": {
+    "repository": "npm/cli",
+    "revision": "b888cc9a9ff34a8b023ff47b784692396635397b",
+    "git_tree": "37da8c2250f22d26a737b9ff54b687a3f824b711",
+    "observed_checkout_state": "detached-clean",
+    "primary_engine_exclusions": [
+      ".git",
+      "node_modules/**",
+      "**/node_modules/**"
+    ]
+  },
+  "engine": {
+    "source_commit": "ffc724d4b0aeb872542f5d683de15850ca0c6c38",
+    "merged_pull_request": "https://github.com/usesecure/secure-engine/pull/5",
+    "main_ci_run": "https://github.com/usesecure/secure-engine/actions/runs/33335959253",
+    "main_ci_conclusion": "success",
+    "pre_merge_evaluated_source_commit": "c3aa5f7ee54139eac2e0398d6e4bc09969488cef",
+    "pre_merge_evidence_binding_commit": "adf92157366251538946d4707de643ba05700c05",
+    "approved_tree_equivalence": {
+      "pre_merge_commit": "adf92157366251538946d4707de643ba05700c05",
+      "merged_commit": "ffc724d4b0aeb872542f5d683de15850ca0c6c38",
+      "shared_git_tree": "fa829a635b976c42f5bfdd4995f71990304c013c",
+      "exact_tree_match": true
+    },
+    "binary_sha256": "9dc96a691e9379624cf1d109cab48fb2540e2b473a674534ef0b18cb2b667f2d",
+    "report_contract": "secure-json-v1",
+    "engine_version": "0.1.10",
+    "rules_evaluated": 13,
+    "rule_ids": [
+      "SE1001",
+      "SE1002",
+      "SE1003",
+      "SE1004",
+      "SE1005",
+      "SE1006",
+      "SE1007",
+      "SE1008",
+      "SE1009",
+      "SE1010",
+      "SE1011",
+      "SE1012",
+      "SE1013"
+    ],
+    "mode": "compact",
+    "parse_cache_enabled": false,
+    "full_graph_requested": false,
+    "binary_reproducibility_claim_allowed": false
+  },
+  "execution_attempts": [
+    {
+      "attempt": 1,
+      "status": "excluded-from-primary-comparison-configuration-mismatch",
+      "explicit_exclude_patterns": [],
+      "effective_node_modules_exclusion": "vendor-directory",
+      "raw_report_sha256": "8e63b43498e6577bfe6480b59a4434950a11ae128cff310f3eabb334d7654f33",
+      "report_fingerprint": "0c76afa4aa89f99d7c48bc08edc37f8e7e375a46ebb00aa43149f78bd3635b82",
+      "bytes": 2508156,
+      "wall_seconds": 12.60,
+      "peak_rss_kib": 737240,
+      "findings": 0,
+      "explicit_abstentions": 3,
+      "retained_abstentions_equal_to_primary": true,
+      "reason": "The scanner still excluded all node_modules entries through its vendor-directory policy, but the two frozen explicit exclusion globs were omitted. This attempt is retained as an operational event and is not the primary comparable report."
+    },
+    {
+      "attempt": 2,
+      "status": "primary-exact-scanner-input-configuration",
+      "explicit_exclude_patterns": [
+        "node_modules/**",
+        "**/node_modules/**"
+      ],
+      "effective_node_modules_exclusion": "exclude-pattern",
+      "raw_report_sha256": "903922f52262799046bfbbab4dbf8de56cde4e3366efbd95113a18ee372bba1b",
+      "report_fingerprint": "91b75fdacd4caecb2610d86afdcd855cc9dc5446060ec61aea9ae33fd3159a89",
+      "bytes": 2508212,
+      "wall_seconds": 12.09,
+      "peak_rss_kib": 737408,
+      "findings": 0,
+      "explicit_abstentions": 3
+    }
+  ],
+  "protocol_deviation": {
+    "name": "post-merge-one-pass-limit-exceeded",
+    "frozen_compact_passes_max": 1,
+    "post_merge_compact_passes_observed": 2,
+    "reason": "The first post-merge attempt omitted the two frozen explicit exclusion globs. A second attempt was required to reproduce the exact scanner-input configuration.",
+    "primary_attempt_matches_frozen_scanner_inputs": true,
+    "post_merge_resource_lane_conforms_to_frozen_budget": false,
+    "performance_comparison_allowed": false,
+    "security_disposition_effect": "None observed: all three abstention objects were identical in both post-merge reports, but neither attempt is promoted to a vulnerability or clean verdict."
+  },
+  "report": {
+    "primary_attempt": 2,
+    "raw_report_sha256": "903922f52262799046bfbbab4dbf8de56cde4e3366efbd95113a18ee372bba1b",
+    "semantic_fingerprint": "91b75fdacd4caecb2610d86afdcd855cc9dc5446060ec61aea9ae33fd3159a89",
+    "stable_normalized_sha256": "d4feba70755b2ddf280789f36721c51469947580db7329785df640acbd5a65e9",
+    "stable_normalization": {
+      "tool": "jq-1.8.1",
+      "command_template": "jq -S 'del(.scan.started_at,.scan.finished_at,.scan.duration_ms,.parsing.duration_ms,.analysis.duration_ms,.report_fingerprint)' INPUT",
+      "serialization": "jq pretty-printed UTF-8 JSON with sorted object keys, two-space indentation, LF line endings, and one trailing LF; the compact-output flag is not used"
+    },
+    "stable_equal_to_pre_merge_primary": true,
+    "bytes": 2508212,
+    "raw_report_published": false,
+    "raw_report_retention": "local temporary evidence only"
+  },
+  "resource_observation": {
+    "wall_seconds": 12.09,
+    "peak_rss_kib": 737408,
+    "performance_claim_allowed": false,
+    "limitation": "This is one retained local attempt after one recorded configuration-mismatch attempt. Cache state, run order, filesystem contention, build path, and binary bit reproducibility were not controlled; timing and memory values are descriptive observations only."
+  },
+  "exact_accounting": {
+    "candidate_files": 4859,
+    "files_scanned": 4847,
+    "normalized_facts_total": 57748,
+    "facts_retained": 14,
+    "conceptual_graph_nodes_total": 208157,
+    "conceptual_graph_edges_total": 368627,
+    "graph_nodes_retained": 7,
+    "graph_edges_retained": 4,
+    "candidate_paths": 3,
+    "findings": 0,
+    "explicit_abstentions": 3,
+    "parser_diagnostics": 0,
+    "scan_errors": 0,
+    "truncated": false,
+    "scan_completed": true
+  },
+  "disposition_counts": {
+    "validated_vulnerabilities": 0,
+    "abstained_after_source_review": 3,
+    "clean_verdict": false
+  },
+  "dispositions": [
+    {
+      "rule_id": "SE1004",
+      "path": "lib/utils/oidc.js",
+      "source_sha256": "2ece1890fe0b89a21f0024a29cc7630d4fa5faa27ca8625f682dc85aa5df2daa",
+      "engine_disposition": "explicit-abstention",
+      "engine_reason": "actor-authority-equivalence",
+      "engine_fingerprint": "205c3897d837142dfe549136eed2bbd56949281dbd043cd84be157851f154fcb",
+      "human_disposition": "abstained-after-source-review",
+      "source_review": "The request URL and bearer token are supplied by the same CI environment authority; no distinct lower-privilege destination controller, privilege gain, or reproducible disclosure was established.",
+      "unresolved_gates": [
+        "distinct lower-privilege actor",
+        "independent destination control",
+        "privilege gain or reproducible disclosure"
+      ]
+    },
+    {
+      "rule_id": "SE1013",
+      "path": "workspaces/arborist/lib/arborist/rebuild.js",
+      "source_sha256": "115adc4a3ff6129918283e4552cb0384513ab682c8c528f360a52fc16b0b8152",
+      "engine_disposition": "explicit-abstention",
+      "engine_reason": "independent-policy-bypass",
+      "engine_fingerprint": "a2bc3c16683c14906dee2c4ba9a8ad7d0d35068c8f23b0e62964bedf319ef162",
+      "human_disposition": "abstained-after-source-review",
+      "source_review": "The workspace lifecycle exception is documented as owner-managed while ignoreScripts continues to dominate execution; supported attacker insertion, an unintended policy crossing, and reproducible impact remain unresolved.",
+      "unresolved_gates": [
+        "attacker-controlled workspace insertion under a supported threat model",
+        "unintended policy boundary",
+        "reproducible privilege or integrity impact"
+      ]
+    },
+    {
+      "rule_id": "SE1001",
+      "path": "workspaces/libnpmpack/test/index.js",
+      "source_sha256": "2d8f476b1812faf1c1c8a9db400ce328cb491024118602c4e0e5935aed791459",
+      "engine_disposition": "explicit-abstention",
+      "engine_reason": "test-context-reachability-unresolved",
+      "engine_fingerprint": "cb1c16a4983ce6a423371cf0e82f0ab2fadb299ec71cc6a172f6488703b41314",
+      "human_disposition": "abstained-after-source-review",
+      "source_review": "All retained evidence is inside a test harness expecting a fixed process command; production or CI reachability, distinct lower-privilege actor control, and reproducible impact remain unproven.",
+      "unresolved_gates": [
+        "production or CI reachability",
+        "distinct lower-privilege actor control",
+        "reproducible security impact"
+      ]
+    }
+  ],
+  "hosted_post_merge_state": {
+    "observed_at": "2026-08-30",
+    "merged_main_commit": "ffc724d4b0aeb872542f5d683de15850ca0c6c38",
+    "main_ci_conclusion": "success",
+    "dependabot_alerts": {
+      "historical_total": 63,
+      "open": 0,
+      "fixed": 63,
+      "dismissed": 0,
+      "grouped_by_manifest_and_package": [
+        {
+          "manifest": "fixtures/phase2-js-ts/package.json",
+          "package": "next",
+          "fixed": 31
+        },
+        {
+          "manifest": "fixtures/phase5-multilang/python/requirements.txt",
+          "package": "Django",
+          "fixed": 19
+        },
+        {
+          "manifest": "fixtures/phase5-multilang/python/requirements.txt",
+          "package": "django",
+          "fixed": 12
+        },
+        {
+          "manifest": "fixtures/phase5-multilang/python/requirements.txt",
+          "package": "flask",
+          "fixed": 1
+        }
+      ]
+    }
+  },
+  "claim_boundary": [
+    "The post-merge artifact supersedes the pre-merge artifact only for current Engine-main observations; both prior artifacts remain immutable provenance.",
+    "Zero findings is not a clean verdict and does not establish npm CLI security.",
+    "The three explicit abstentions are human-review leads, not validated vulnerabilities, rejected findings, false negatives, or safe controls.",
+    "The recorded retry and single retained local resource observation cannot support a scanner performance or binary reproducibility claim.",
+    "GitHub marking dependency alerts fixed establishes hosted dependency-state recomputation only; it does not establish that Engine or its fixtures are vulnerability-free.",
+    "No vulnerability, human-superiority, product-superiority, or external disclosure claim is authorized by this artifact."
+  ]
+}

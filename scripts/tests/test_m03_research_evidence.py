@@ -172,6 +172,151 @@ class M03ResearchEvidenceTests(unittest.TestCase):
             self.assertIn("npm-cli-m0.3-pilot-2026-08-30.json", document)
             self.assertIn("npm-cli-m0.3-fresh-scan-2026-08-30.json", document)
 
+    def test_post_merge_npm_evidence_preserves_lineage_and_records_retry(self) -> None:
+        evidence = load_json("npm-cli-m0.3-post-merge-scan-2026-08-30.json")
+        self.assertEqual(
+            evidence["evidence_version"],
+            "secureflow-npm-cli-m0.3-post-merge-scan-v1",
+        )
+        self.assertEqual(
+            evidence["supersedes_for_current_engine_observation"],
+            "npm-cli-m0.3-fresh-scan-2026-08-30.json",
+        )
+        self.assertEqual(
+            evidence["preserves_prior_evidence"],
+            [
+                "npm-cli-m0.3-pilot-2026-08-30.json",
+                "npm-cli-m0.3-fresh-scan-2026-08-30.json",
+            ],
+        )
+        self.assertEqual(
+            evidence["target"]["revision"],
+            "b888cc9a9ff34a8b023ff47b784692396635397b",
+        )
+
+        engine = evidence["engine"]
+        self.assertEqual(
+            engine["source_commit"],
+            "ffc724d4b0aeb872542f5d683de15850ca0c6c38",
+        )
+        self.assertEqual(
+            engine["pre_merge_evaluated_source_commit"],
+            "c3aa5f7ee54139eac2e0398d6e4bc09969488cef",
+        )
+        self.assertEqual(
+            engine["pre_merge_evidence_binding_commit"],
+            "adf92157366251538946d4707de643ba05700c05",
+        )
+        self.assertEqual(
+            engine["binary_sha256"],
+            "9dc96a691e9379624cf1d109cab48fb2540e2b473a674534ef0b18cb2b667f2d",
+        )
+        self.assertEqual(engine["main_ci_conclusion"], "success")
+        self.assertFalse(engine["binary_reproducibility_claim_allowed"])
+        equivalence = engine["approved_tree_equivalence"]
+        self.assertEqual(
+            equivalence["shared_git_tree"],
+            "fa829a635b976c42f5bfdd4995f71990304c013c",
+        )
+        self.assertTrue(equivalence["exact_tree_match"])
+
+        attempts = evidence["execution_attempts"]
+        self.assertEqual(len(attempts), 2)
+        self.assertEqual(
+            attempts[0]["status"],
+            "excluded-from-primary-comparison-configuration-mismatch",
+        )
+        self.assertEqual(attempts[0]["explicit_exclude_patterns"], [])
+        self.assertEqual(attempts[0]["effective_node_modules_exclusion"], "vendor-directory")
+        self.assertTrue(attempts[0]["retained_abstentions_equal_to_primary"])
+        self.assertEqual(
+            attempts[1]["status"],
+            "primary-exact-scanner-input-configuration",
+        )
+        self.assertEqual(
+            attempts[1]["explicit_exclude_patterns"],
+            ["node_modules/**", "**/node_modules/**"],
+        )
+        self.assertEqual(
+            attempts[1]["raw_report_sha256"],
+            "903922f52262799046bfbbab4dbf8de56cde4e3366efbd95113a18ee372bba1b",
+        )
+
+        deviation = evidence["protocol_deviation"]
+        self.assertEqual(deviation["name"], "post-merge-one-pass-limit-exceeded")
+        self.assertEqual(deviation["frozen_compact_passes_max"], 1)
+        self.assertEqual(deviation["post_merge_compact_passes_observed"], 2)
+        self.assertTrue(deviation["primary_attempt_matches_frozen_scanner_inputs"])
+        self.assertFalse(deviation["post_merge_resource_lane_conforms_to_frozen_budget"])
+        self.assertFalse(deviation["performance_comparison_allowed"])
+
+        report = evidence["report"]
+        self.assertEqual(report["primary_attempt"], 2)
+        self.assertEqual(
+            report["semantic_fingerprint"],
+            "91b75fdacd4caecb2610d86afdcd855cc9dc5446060ec61aea9ae33fd3159a89",
+        )
+        self.assertEqual(
+            report["stable_normalized_sha256"],
+            "d4feba70755b2ddf280789f36721c51469947580db7329785df640acbd5a65e9",
+        )
+        normalization = report["stable_normalization"]
+        self.assertEqual(normalization["tool"], "jq-1.8.1")
+        self.assertEqual(
+            normalization["command_template"],
+            "jq -S 'del(.scan.started_at,.scan.finished_at,.scan.duration_ms,.parsing.duration_ms,.analysis.duration_ms,.report_fingerprint)' INPUT",
+        )
+        self.assertIn("one trailing LF", normalization["serialization"])
+        self.assertIn("compact-output flag is not used", normalization["serialization"])
+        self.assertTrue(report["stable_equal_to_pre_merge_primary"])
+        self.assertEqual(report["bytes"], 2_508_212)
+        self.assertFalse(report["raw_report_published"])
+
+        accounting = evidence["exact_accounting"]
+        self.assertEqual(accounting["findings"], 0)
+        self.assertEqual(accounting["explicit_abstentions"], 3)
+        self.assertEqual(accounting["candidate_paths"], 3)
+        self.assertTrue(accounting["scan_completed"])
+        self.assertFalse(accounting["truncated"])
+        self.assertEqual(
+            [item["engine_fingerprint"] for item in evidence["dispositions"]],
+            [
+                "205c3897d837142dfe549136eed2bbd56949281dbd043cd84be157851f154fcb",
+                "a2bc3c16683c14906dee2c4ba9a8ad7d0d35068c8f23b0e62964bedf319ef162",
+                "cb1c16a4983ce6a423371cf0e82f0ab2fadb299ec71cc6a172f6488703b41314",
+            ],
+        )
+
+        alerts = evidence["hosted_post_merge_state"]["dependabot_alerts"]
+        self.assertEqual(alerts["historical_total"], 63)
+        self.assertEqual(alerts["open"], 0)
+        self.assertEqual(alerts["fixed"], 63)
+        self.assertEqual(alerts["dismissed"], 0)
+        self.assertEqual(
+            sum(item["fixed"] for item in alerts["grouped_by_manifest_and_package"]),
+            63,
+        )
+
+        protocol = (ROOT / "docs" / "pilots" / "npm-cli-m0.3-pilot.md").read_text(
+            encoding="utf-8"
+        )
+        index = (ROOT / "docs" / "m0.3-research-phases-3-6.md").read_text(
+            encoding="utf-8"
+        )
+        milestone = (ROOT / "docs" / "m0.3-milestone-status.md").read_text(
+            encoding="utf-8"
+        )
+        for document in (protocol, index, milestone):
+            self.assertIn("ffc724d4b0aeb872542f5d683de15850ca0c6c38", document)
+        for document in (protocol, index):
+            self.assertIn("npm-cli-m0.3-post-merge-scan-2026-08-30.json", document)
+        self.assertIn(
+            "903922f52262799046bfbbab4dbf8de56cde4e3366efbd95113a18ee372bba1b",
+            protocol,
+        )
+        self.assertIn("one-pass protocol deviation", protocol)
+        self.assertNotIn("not yet merged to Engine `main`", milestone)
+
     def test_mitiquete_inventory_is_not_promoted_to_exposure_or_vulnerability(self) -> None:
         evidence = load_json("mitiquete-offline-web-m0.3-2026-08-30.json")
         self.assertEqual(
