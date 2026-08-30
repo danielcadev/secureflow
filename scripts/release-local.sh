@@ -53,7 +53,13 @@ if [[ "$actual_rustc" != "$required_toolchain" || "$actual_cargo" != "$required_
   exit 1
 fi
 
-release_stage=$(mktemp -d /tmp/secureflow-release-stage.XXXXXX)
+release_temp_parent=${TMPDIR:-/tmp}
+if [[ ! -d "$release_temp_parent" || ! -w "$release_temp_parent" || ! -x "$release_temp_parent" ]]; then
+  echo "release temporary directory must be an accessible writable directory: $release_temp_parent" >&2
+  exit 1
+fi
+release_temp_parent=$(realpath -e -- "$release_temp_parent")
+release_stage=$(mktemp -d "$release_temp_parent/secureflow-release-stage.XXXXXX")
 trap 'if [[ -n "${release_stage:-}" && -d "$release_stage" ]]; then chmod -R u+w "$release_stage" 2>/dev/null || true; find "$release_stage" -depth -delete 2>/dev/null || true; fi' EXIT
 gate_source="$release_stage/gate-source"
 python3 scripts/materialize_exact_tree.py \

@@ -89,6 +89,8 @@ class LocalReleaseIntegrationTests(unittest.TestCase):
         )
         self.fake_bin = self.root / "fake-bin"
         self.fake_bin.mkdir()
+        self.release_temp = self.root / "release-temp"
+        self.release_temp.mkdir()
         rustup = self.fake_bin / "rustup"
         rustup.write_text(
             textwrap.dedent(
@@ -127,6 +129,7 @@ class LocalReleaseIntegrationTests(unittest.TestCase):
     ) -> subprocess.CompletedProcess[str]:
         environment = os.environ.copy()
         environment["PATH"] = f"{self.fake_bin}:{environment['PATH']}"
+        environment["TMPDIR"] = os.fspath(self.release_temp)
         if mutate:
             environment["SECUREFLOW_TEST_MUTATE_WORKTREE"] = os.fspath(self.repository)
         return subprocess.run(
@@ -142,6 +145,7 @@ class LocalReleaseIntegrationTests(unittest.TestCase):
         output = self.root / "release-output"
         result = self.run_release(output)
         self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(list(self.release_temp.iterdir()), [])
         checksum_result = subprocess.run(
             ["sha256sum", "--check", *sorted(path.name for path in output.glob("*.sha256"))],
             cwd=output,
@@ -165,6 +169,7 @@ class LocalReleaseIntegrationTests(unittest.TestCase):
         result = self.run_release(output, mutate=True)
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(output.exists())
+        self.assertEqual(list(self.release_temp.iterdir()), [])
         self.assertTrue(
             "exact gate source changed" in result.stderr
             or "release worktree verification failed" in result.stderr

@@ -9,6 +9,8 @@ Each archive has an adjacent `.sha256` file. The tag workflow also creates a Git
 
 The release script captures an exact 40-character commit only after verifying the index and tracked worktree against that commit. It performs tests and assembly in a temporary exact-tree materialization, copies package inputs only from a fresh exact-tree materialization, and repeats the identity and tracked-state gate both immediately before packaging and immediately before exposing output files. Ignored and untracked worktree files cannot enter either artifact; tracked mutations fail closed even when an index flag such as `assume-unchanged` would hide them from normal status output.
 
+Local operators may set `TMPDIR` to an existing writable directory with sufficient build space. The script creates a private uniquely named staging directory there and removes it on success or failure; no partial release output is exposed before all gates and archive checks complete.
+
 ## Verify a published release
 
 Set the exact release tag, download only the workflow-produced assets into a new directory, and verify both adjacent checksums:
