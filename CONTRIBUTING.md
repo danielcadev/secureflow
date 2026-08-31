@@ -41,6 +41,17 @@ independent comparison. The complete integrity, attestation, source
 reproduction, and limitation procedure is in
 [`docs/release-verification.md`](./docs/release-verification.md).
 
+Release publication has two distinct human approval boundaries. First, review
+the exact final commit, release text, locally generated files, checksums, SBOM,
+and license-declaration evidence before creating or pushing a `v*` tag. The tag
+workflow can build, attest, and retain files but cannot publish a release.
+After that workflow succeeds, download and verify its exact retained artifact
+and both attestations, then obtain explicit approval before manually dispatching
+`publish-release.yml` with the exact tag, build run ID, run attempt, artifact ID,
+and artifact digest. A rerun or changed artifact requires renewed review and
+approval. The publisher fails closed on a mismatched or moved tag, workflow,
+run, attempt, artifact, checksum, attestation, or staged draft upload.
+
 Changes to JSON contracts must update the corresponding schema, semantic
 validator, positive test, and tamper/negative test. New benchmark data must
 state its split, provenance, license, units, failures, and claim limitations.

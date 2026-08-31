@@ -5,6 +5,8 @@ on:
     tags:
       - "v*"
 
+permissions: {}
+
 jobs:
   build-and-attest:
     runs-on: ubuntu-24.04
@@ -72,76 +74,8 @@ jobs:
       - name: Retain exact release assets for publication
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          name: secureflow-release-assets
+          name: secureflow-release-assets-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
           path: target/dist/*
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 30
           compression-level: 0
-
-  publish:
-    needs: build-and-attest
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout exact tag for release notes
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-          ref: ${{ github.sha }}
-
-      - name: Verify tag resolves to event commit
-        env:
-          GIT_CONFIG_GLOBAL: /dev/null
-          GIT_CONFIG_NOSYSTEM: "1"
-          GIT_NO_REPLACE_OBJECTS: "1"
-        run: |
-          set -euo pipefail
-          test "${GITHUB_REF_TYPE}" = "tag"
-          test "${GITHUB_REF}" = "refs/tags/${GITHUB_REF_NAME}"
-          head_commit=$(git rev-parse --verify --end-of-options 'HEAD^{commit}')
-          tag_commit=$(git rev-parse --verify --end-of-options "${GITHUB_REF}^{commit}")
-          verification_ref=refs/secureflow-release-verification/remote-tag
-          git fetch --no-tags --force origin "${GITHUB_REF}:${verification_ref}"
-          remote_tag_commit=$(git rev-parse --verify --end-of-options "${verification_ref}^{commit}")
-          test "${head_commit}" = "${GITHUB_SHA}"
-          test "${tag_commit}" = "${GITHUB_SHA}"
-          test "${remote_tag_commit}" = "${GITHUB_SHA}"
-          git update-ref -d "${verification_ref}"
-
-      - name: Download attested release assets
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: secureflow-release-assets
-          path: target/dist
-
-      - name: Reverify downloadable checksums
-        run: |
-          cd target/dist
-          sha256sum --check *.sha256
-
-      - name: Publish GitHub release assets
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GIT_CONFIG_GLOBAL: /dev/null
-          GIT_CONFIG_NOSYSTEM: "1"
-          GIT_NO_REPLACE_OBJECTS: "1"
-        run: |
-          set -euo pipefail
-          head_commit=$(git rev-parse --verify --end-of-options 'HEAD^{commit}')
-          tag_commit=$(git rev-parse --verify --end-of-options "${GITHUB_REF}^{commit}")
-          verification_ref=refs/secureflow-release-verification/remote-tag
-          git fetch --no-tags --force origin "${GITHUB_REF}:${verification_ref}"
-          remote_tag_commit=$(git rev-parse --verify --end-of-options "${verification_ref}^{commit}")
-          test "${head_commit}" = "${GITHUB_SHA}"
-          test "${tag_commit}" = "${GITHUB_SHA}"
-          test "${remote_tag_commit}" = "${GITHUB_SHA}"
-          git update-ref -d "${verification_ref}"
-          gh release create "${GITHUB_REF_NAME}" \
-            target/dist/* \
-            --repo "${GITHUB_REPOSITORY}" \
-            --verify-tag \
-            --title "SecureFlow ${GITHUB_REF_NAME}" \
-            --notes-file "docs/releases/${GITHUB_REF_NAME}.md"

@@ -2,7 +2,7 @@
 
 Observed state: August 29, 2026.
 
-This is the immutable MVP-era audit snapshot. Current unpublished M0.3 workstreams, measured evidence, and publication gates are tracked separately in [`m0.3-milestone-status.md`](./m0.3-milestone-status.md).
+This is the immutable MVP-era audit snapshot. The later M0.3 evidence lanes, measurements, and enduring claim boundaries are tracked separately in [`m0.3-milestone-status.md`](./m0.3-milestone-status.md).
 
 This matrix separates demonstrable functionality, evidence, and later work. A
 technical check is not a claim that SecureFlow finds every vulnerability or
