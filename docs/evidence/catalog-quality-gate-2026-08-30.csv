@@ -1,0 +1,3 @@
+source_records,canonical_vulnerabilities,database_bytes,raw_revision_bytes,normalize_ms,index_build_ms,total_ingest_ms,records_per_second,lookup_median_us,fts_median_us,package_median_us,expected_canonical_vulnerabilities,exact_alias_reduction,dedup_gate_passed,quick_check,foreign_key_violations,search_index_status,integrity_gate_passed
+50000,45000,106049536,19667940,3812.301,632.643,4444.944,11248.7,130.512,81813.926,271.903,45000,5000,true,ok,0,ready,true
+100000,90000,209502208,39347807,6216.371,653.603,6869.974,14556.1,68.700,78584.637,156.142,90000,10000,true,ok,0,ready,true

@@ -13,6 +13,7 @@ rustup run 1.92.0 cargo clippy --workspace --all-targets --locked -- -D warnings
 rustup run 1.92.0 cargo test --workspace --locked
 rustup run 1.92.0 cargo audit
 python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+python3 scripts/lint_release_notes.py docs/releases
 ```
 
 If Rust was installed through a distribution package rather than rustup, use
@@ -21,6 +22,24 @@ release script fails closed instead of silently using a different compiler.
 Dependency-license evidence changes must also preserve the offline,
 checksum-bound behavior and limitations documented in
 [`docs/dependency-license-evidence.md`](./docs/dependency-license-evidence.md).
+
+Release-note paragraphs and list items must each use one physical source line;
+this lets GitHub use the full rendered content width instead of preserving an
+editor's hard wrap. Each release-note file also has exactly one hidden
+`secureflow-release-state` marker. Normal CI permits `draft`, but a tag build
+fails unless its selected note is marked `final`. A release from a clean commit
+creates a host-specific Linux bundle and a separate deterministic source-only
+archive:
+
+```bash
+bash scripts/release-local.sh /tmp/secureflow-release
+(cd /tmp/secureflow-release && sha256sum --check ./*.sha256)
+```
+
+Do not describe the Linux bundle as cross-host reproducible without an actual
+independent comparison. The complete integrity, attestation, source
+reproduction, and limitation procedure is in
+[`docs/release-verification.md`](./docs/release-verification.md).
 
 Changes to JSON contracts must update the corresponding schema, semantic
 validator, positive test, and tamper/negative test. New benchmark data must

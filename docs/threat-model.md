@@ -1,6 +1,6 @@
 # SecureFlow threat model
 
-Status: current design baseline for the `0.2.0` development line.
+Status: current design baseline for the unpublished `0.3.0` development line.
 
 This document models threats to SecureFlow itself. It does not claim that
 SecureFlow proves an analyzed target secure, and it does not authorize testing
@@ -132,18 +132,21 @@ evidence.
 | Tool output validates its own finding | Authority domains are separate; only human review validates | Reviewer quality and independence still determine final correctness |
 | Secret reaches a report or model | Local-first defaults, minimized AI envelope, conservative redaction, no provider transport | Redaction is not a formal non-disclosure guarantee; future transport needs a separate security/privacy review |
 | Advisory identities are over-merged | Exact alias union only; related/upstream links do not merge | Upstream aliases can still be wrong; rebuild and human correction remain necessary |
-| Catalog or release artifact is substituted | SHA-256 pinning, deep verification, SBOM, clean-tree release | Current release/tag and catalog manifests are unsigned; add publisher signatures and key-rotation policy |
+| Catalog or release artifact is substituted | SHA-256 pinning, deep verification, SBOM, clean-tree release, and GitHub/Sigstore attestations for future release archives | Artifact attestations bind workflow provenance but do not sign the Git tag, prove source safety, or establish cross-host binary reproducibility; catalog manifests still need separately authenticated publisher signatures and key rotation |
 | Benchmark leakage creates a false superiority result | Prospective sealing, holdout fields, claim gates, separate metrics | No real blinded human study has been completed yet |
 | Zero findings is presented as assurance | Reports explicitly state that zero candidates is not a security guarantee | Users can still misrepresent output outside the system; public claims require review |
 
 ## Validation evidence
 
 Controls are expected to be backed by repository-native tests or retained
-artifacts. The current evidence map is maintained in
-[`completion-audit.md`](./completion-audit.md), while publishable and prohibited
-claims are separated in [`evidence-and-claims.md`](./evidence-and-claims.md).
+artifacts. The historical MVP evidence map is preserved in
+[`completion-audit.md`](./completion-audit.md), the current unpublished line is
+tracked in [`m0.3-milestone-status.md`](./m0.3-milestone-status.md), and
+publishable and prohibited claims are separated in
+[`evidence-and-claims.md`](./evidence-and-claims.md).
 Changes that alter a trust boundary must update this model, the relevant
-contract or ADR, positive and negative tests, and the completion audit.
+contract or ADR, positive and negative tests, and the applicable versioned
+evidence status.
 
 ## Explicit non-goals for the current line
 

@@ -1,0 +1,150 @@
+{
+  "evidence_version": "secureflow-catalog-quality-gate-v1",
+  "recorded_at": "2026-08-30T14:47:20-05:00",
+  "classification": "synthetic local capacity, exact-alias deduplication, integrity, and latency evidence; not vulnerability-detection evidence",
+  "measurement_csv_sha256": "856f0f30ea7bfae1794178f76cafe1636e8e380dae9f74e85edfaff0bcaf900e",
+  "implementation": {
+    "base_revision": "582b23375d386c3bf2e75c2a624d60e12b671992",
+    "benchmark_source": "crates/secureflow-knowledge/examples/catalog_bench.rs",
+    "benchmark_source_sha256": "05c92419103d927a3bba5a9ee306d61274d5bc5078ee9e5f633771c6f92d511b",
+    "release_binary_sha256": "5bc3c629efed7b0c99e9306de28c70bd32873c7f7db4c24b39a7350ae8adbdae",
+    "rustc": "rustc 1.92.0 (ded5c06cf 2025-12-08)",
+    "cargo": "cargo 1.92.0 (344c4567c 2025-10-21)"
+  },
+  "environment": {
+    "operating_system": "Fedora Linux 44",
+    "kernel": "7.1.8-200.fc44.x86_64",
+    "cpu": "AMD Ryzen 7 5700X 8-Core Processor",
+    "logical_cpus": 16,
+    "memory_gib_approx": 15,
+    "storage": "NVMe Btrfs under /home with zstd:1 compression"
+  },
+  "method": {
+    "command": "target/release/examples/catalog_bench --root target/m0.3-catalog-gate --iterations 5 50000 100000",
+    "database_per_size": "fresh local SQLite catalog removed after its result row",
+    "input_class": "deterministic generated synthetic OSV-shaped records; no real vulnerability labels",
+    "input_retained": false,
+    "ecosystems": [
+      "crates.io",
+      "npm",
+      "GitHub Actions"
+    ],
+    "exact_alias_policy": "every tenth source record aliases the immediately preceding synthetic CVE, yielding an expected 10 percent source-record reduction",
+    "query_samples_per_class": 5,
+    "query_cache_state": "same-process after ingestion; warm or partially warm and order-dependent",
+    "network_used": false,
+    "model_calls": 0,
+    "size_order": [
+      50000,
+      100000
+    ]
+  },
+  "row_semantics": {
+    "source_records": "generated synthetic source rows",
+    "canonical_vulnerabilities_schema_field": "exact-alias canonical rows; the historical schema field name does not mean human-validated vulnerabilities",
+    "validated_vulnerabilities_measured": false
+  },
+  "gates": {
+    "required_source_record_counts": [
+      50000,
+      100000
+    ],
+    "canonical_count_must_equal_generator_expectation": true,
+    "quick_check_must_equal": "ok",
+    "foreign_key_violations_max": 0,
+    "search_index_status_must_equal": "ready",
+    "database_bytes_at_100k_max": 268435456,
+    "total_ingest_ms_at_100k_max": 30000,
+    "records_per_second_at_100k_min": 3000,
+    "exact_identifier_median_us_at_100k_max": 5000,
+    "exact_package_median_us_at_100k_max": 5000,
+    "broad_fts_median_us_at_100k_max": 1000000
+  },
+  "measurements": [
+    {
+      "source_records": 50000,
+      "canonical_vulnerabilities": 45000,
+      "expected_canonical_vulnerabilities": 45000,
+      "exact_alias_reduction": 5000,
+      "database_bytes": 106049536,
+      "raw_revision_bytes": 19667940,
+      "normalize_ms": 3812.301,
+      "index_build_ms": 632.643,
+      "total_ingest_ms": 4444.944,
+      "records_per_second": 11248.7,
+      "exact_identifier_median_us": 130.512,
+      "broad_fts_median_us": 81813.926,
+      "exact_package_median_us": 271.903,
+      "quick_check": "ok",
+      "foreign_key_violations": 0,
+      "search_index_status": "ready",
+      "dedup_gate_passed": true,
+      "integrity_gate_passed": true
+    },
+    {
+      "source_records": 100000,
+      "canonical_vulnerabilities": 90000,
+      "expected_canonical_vulnerabilities": 90000,
+      "exact_alias_reduction": 10000,
+      "database_bytes": 209502208,
+      "raw_revision_bytes": 39347807,
+      "normalize_ms": 6216.371,
+      "index_build_ms": 653.603,
+      "total_ingest_ms": 6869.974,
+      "records_per_second": 14556.1,
+      "exact_identifier_median_us": 68.7,
+      "broad_fts_median_us": 78584.637,
+      "exact_package_median_us": 156.142,
+      "quick_check": "ok",
+      "foreign_key_violations": 0,
+      "search_index_status": "ready",
+      "dedup_gate_passed": true,
+      "integrity_gate_passed": true
+    }
+  ],
+  "process_measurement": {
+    "wall_seconds_for_both_sizes": 13.6,
+    "maximum_resident_set_kib_for_both_sizes": 100552,
+    "scope": "one direct benchmark process covering both sizes; not per-size peak memory"
+  },
+  "build_and_run_process_measurement": {
+    "command_class": "cargo 1.92.0 release build and benchmark run in one measured process tree",
+    "wall_seconds": 70.36,
+    "maximum_resident_set_kib": 571660,
+    "scope": "includes Cargo and compilation/linking work as well as execution; it is a conservative pipeline observation and not catalog runtime RSS",
+    "fts_median_us": {
+      "50000_synthetic_source_rows": 105496.274,
+      "100000_synthetic_source_rows": 76091.366
+    }
+  },
+  "measured_query_bottleneck": {
+    "query": "broad FTS phrase present in every synthetic source row with a result limit of 20",
+    "median_range_us_across_retained_1_92_runs": [
+      76091.366,
+      105496.274
+    ],
+    "comparison": "FTS was the measured query bottleneck; exact identifier and exact package medians stayed below 0.3 milliseconds in the retained direct run"
+  },
+  "gate_result": "passed",
+  "real_source_reference_lane": {
+    "evidence": "docs/evidence/real-advisory-expansion-2026-08-25.json",
+    "active_source_records": 263522,
+    "canonical_security_records": 251657,
+    "record_classes": {
+      "advisory_records": 32203,
+      "malicious_package_records": 231319
+    },
+    "rerun_as_part_of_this_gate": false,
+    "latency_result_inherited": false,
+    "note": "Real-source provenance and counts are retained separately; the M0.3 timing rows are synthetic and do not relabel these source records as validated vulnerabilities."
+  },
+  "limitations": [
+    "The 50k and 100k rows are synthetic source-record capacity tests, not counts of real or human-validated vulnerabilities.",
+    "The exact 10 percent alias pattern validates deterministic structural deduplication only; it does not measure semantic deduplication precision or recall.",
+    "Query medians use five same-process samples after ingestion and are warm or partially warm; cold-start, p95, p99, and concurrent query latency remain unmeasured.",
+    "The two sizes ran sequentially in one process, so filesystem cache and order effects prevent treating them as independent trials.",
+    "The process-wide peak RSS covers both sizes and cannot be attributed to either row.",
+    "The 571,660 KiB build-and-run peak includes compiler and linker memory; the direct benchmark process peak was 100,552 KiB, and neither is a per-size peak.",
+    "Crash recovery under load, concurrent writers, low-power hardware, and five to twenty million relationships remain unmeasured."
+  ]
+}

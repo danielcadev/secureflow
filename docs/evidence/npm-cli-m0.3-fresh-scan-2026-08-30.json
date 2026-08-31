@@ -1,0 +1,142 @@
+{
+  "evidence_version": "secureflow-npm-cli-m0.3-fresh-scan-v2",
+  "recorded_at": "2026-08-30",
+  "status": "fresh-local-run-source-reviewed",
+  "supersedes_for_current_engine_observation": "npm-cli-m0.3-pilot-2026-08-30.json",
+  "preserves_historical_baseline": true,
+  "authorization": {
+    "basis": "local operator-authorized open-source review checkout",
+    "target_read_only": true,
+    "target_code_executed": false,
+    "target_dependencies_installed": false,
+    "network_used_by_scanner": false,
+    "model_calls": 0,
+    "external_disclosure_or_write_performed": false
+  },
+  "target": {
+    "repository": "npm/cli",
+    "revision": "b888cc9a9ff34a8b023ff47b784692396635397b",
+    "git_tree": "37da8c2250f22d26a737b9ff54b687a3f824b711",
+    "observed_checkout_state": "detached-clean",
+    "engine_exclusions": [
+      ".git",
+      "node_modules/**",
+      "**/node_modules/**"
+    ]
+  },
+  "engine": {
+    "source_commit": "c3aa5f7ee54139eac2e0398d6e4bc09969488cef",
+    "evidence_binding_commit": "adf92157366251538946d4707de643ba05700c05",
+    "binary_sha256": "eb1bdc4c0b79855d85cc39feabba1ac79b43ba8bab3687e95103ef670cbb3913",
+    "report_contract": "secure-json-v1",
+    "engine_version": "0.1.10",
+    "rules_evaluated": 13,
+    "rule_ids": [
+      "SE1001",
+      "SE1002",
+      "SE1003",
+      "SE1004",
+      "SE1005",
+      "SE1006",
+      "SE1007",
+      "SE1008",
+      "SE1009",
+      "SE1010",
+      "SE1011",
+      "SE1012",
+      "SE1013"
+    ],
+    "mode": "compact",
+    "parse_cache_enabled": false,
+    "full_graph_requested": false
+  },
+  "report": {
+    "raw_report_sha256": "5f13488477fb859bab640875e3482fc87f85bf5c6a691c613e95c596b086084f",
+    "semantic_fingerprint": "91b75fdacd4caecb2610d86afdcd855cc9dc5446060ec61aea9ae33fd3159a89",
+    "bytes": 2508211,
+    "raw_report_published": false,
+    "raw_report_retention": "local temporary evidence only"
+  },
+  "resource_observation": {
+    "wall_seconds": 13.03,
+    "peak_rss_kib": 737204,
+    "performance_claim_allowed": false,
+    "limitation": "This is one local run without controlled cache state, run order, or filesystem contention; its timing and memory values are descriptive observations, not comparative performance evidence."
+  },
+  "exact_accounting": {
+    "candidate_files": 4859,
+    "files_scanned": 4847,
+    "normalized_facts_total": 57748,
+    "facts_retained": 14,
+    "conceptual_graph_nodes_total": 208157,
+    "conceptual_graph_edges_total": 368627,
+    "graph_nodes_retained": 7,
+    "graph_edges_retained": 4,
+    "candidate_paths": 3,
+    "findings": 0,
+    "explicit_abstentions": 3,
+    "parser_diagnostics": 0,
+    "scan_errors": 0,
+    "truncated": false,
+    "scan_completed": true
+  },
+  "disposition_counts": {
+    "validated_vulnerabilities": 0,
+    "abstained_after_source_review": 3,
+    "clean_verdict": false
+  },
+  "dispositions": [
+    {
+      "rule_id": "SE1004",
+      "path": "lib/utils/oidc.js",
+      "source_sha256": "2ece1890fe0b89a21f0024a29cc7630d4fa5faa27ca8625f682dc85aa5df2daa",
+      "engine_disposition": "explicit-abstention",
+      "engine_reason": "actor-authority-equivalence",
+      "engine_fingerprint": "205c3897d837142dfe549136eed2bbd56949281dbd043cd84be157851f154fcb",
+      "human_disposition": "abstained-after-source-review",
+      "source_review": "The request URL and bearer token are supplied by the same CI environment authority; no distinct lower-privilege destination controller, privilege gain, or reproducible disclosure was established.",
+      "unresolved_gates": [
+        "distinct lower-privilege actor",
+        "independent destination control",
+        "privilege gain or reproducible disclosure"
+      ]
+    },
+    {
+      "rule_id": "SE1013",
+      "path": "workspaces/arborist/lib/arborist/rebuild.js",
+      "source_sha256": "115adc4a3ff6129918283e4552cb0384513ab682c8c528f360a52fc16b0b8152",
+      "engine_disposition": "explicit-abstention",
+      "engine_reason": "independent-policy-bypass",
+      "engine_fingerprint": "a2bc3c16683c14906dee2c4ba9a8ad7d0d35068c8f23b0e62964bedf319ef162",
+      "human_disposition": "abstained-after-source-review",
+      "source_review": "The workspace lifecycle exception is documented as owner-managed while ignoreScripts continues to dominate execution; supported attacker insertion, an unintended policy crossing, and reproducible impact remain unresolved.",
+      "unresolved_gates": [
+        "attacker-controlled workspace insertion under a supported threat model",
+        "unintended policy boundary",
+        "reproducible privilege or integrity impact"
+      ]
+    },
+    {
+      "rule_id": "SE1001",
+      "path": "workspaces/libnpmpack/test/index.js",
+      "source_sha256": "2d8f476b1812faf1c1c8a9db400ce328cb491024118602c4e0e5935aed791459",
+      "engine_disposition": "explicit-abstention",
+      "engine_reason": "test-context-reachability-unresolved",
+      "engine_fingerprint": "cb1c16a4983ce6a423371cf0e82f0ab2fadb299ec71cc6a172f6488703b41314",
+      "human_disposition": "abstained-after-source-review",
+      "source_review": "All retained evidence is inside a test harness expecting a fixed process command; production or CI reachability, distinct lower-privilege actor control, and reproducible impact remain unproven.",
+      "unresolved_gates": [
+        "production or CI reachability",
+        "distinct lower-privilege actor control",
+        "reproducible security impact"
+      ]
+    }
+  ],
+  "claim_boundary": [
+    "This fresh run supersedes the frozen artifact only as the current Engine observation; the historical baseline remains immutable and relevant to provenance.",
+    "Zero findings is not a clean verdict and does not establish npm CLI security.",
+    "The three explicit abstentions are human-review leads, not validated vulnerabilities, rejected findings, false negatives, or safe controls.",
+    "One local resource observation is not a scanner performance claim or a comparison with another tool or human reviewer.",
+    "No vulnerability, human-superiority, product-superiority, or external disclosure claim is authorized by this artifact."
+  ]
+}
