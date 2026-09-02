@@ -2,13 +2,13 @@
 
 All notable changes to SecureFlow are documented here.
 
-## 0.3.0 — Unreleased
+## 0.3.0 — 2026-08-30
 
 - prepare a deterministic source-only archive alongside the explicitly host-specific Linux bundle, with adjacent checksums and documented verification boundaries;
-- split release construction and attestation from publication, use commit-pinned GitHub Actions with least-privilege job permissions, and attest the exact retained archives before publication;
+- split tag-triggered release construction and attestation from manually approved publication, use commit-pinned GitHub Actions with least-privilege job permissions, and verify the retained archives, attestations, and draft uploads before publication;
 - require every release-note paragraph and list item to occupy one physical Markdown source line so GitHub renders the full content area consistently;
-- stage the workspace crates at version `0.3.0` while deliberately retaining the published `0.2.0` citation metadata until a separately approved release finalization;
-- record a fresh, hash-bound npm CLI scan with zero findings and three explicit abstentions, while keeping Mitiquete evidence offline-only, the human-comparator study not started, and 50,000/100,000-record knowledge measurements classified as synthetic capacity and quality gates rather than validated-vulnerability counts.
+- release the workspace crates and citation metadata as `0.3.0`; research users should cite the exact tag or commit;
+- record fresh, hash-bound npm CLI observations with zero findings, three explicit abstentions, and one disclosed one-pass protocol deviation, while keeping Mitiquete evidence offline-only, the human-comparator study not started, and 50,000/100,000-record knowledge measurements classified as synthetic capacity and quality gates rather than validated-vulnerability counts; zero findings is not a clean verdict, and only a human review decision may validate a vulnerability.
 
 ## 0.2.0 — 2026-08-30
 

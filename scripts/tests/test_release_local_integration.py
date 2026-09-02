@@ -8,6 +8,7 @@ import tarfile
 import tempfile
 import textwrap
 import unittest
+from unittest import mock
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -128,6 +129,8 @@ class LocalReleaseIntegrationTests(unittest.TestCase):
         self, output: pathlib.Path, mutate: bool = False
     ) -> subprocess.CompletedProcess[str]:
         environment = os.environ.copy()
+        for variable in ("GITHUB_REF_TYPE", "GITHUB_REF_NAME", "GITHUB_SHA"):
+            environment.pop(variable, None)
         environment["PATH"] = f"{self.fake_bin}:{environment['PATH']}"
         environment["TMPDIR"] = os.fspath(self.release_temp)
         if mutate:
@@ -143,7 +146,15 @@ class LocalReleaseIntegrationTests(unittest.TestCase):
 
     def test_release_excludes_ignored_docs_and_checksums_are_adjacent(self) -> None:
         output = self.root / "release-output"
-        result = self.run_release(output)
+        with mock.patch.dict(
+            os.environ,
+            {
+                "GITHUB_REF_TYPE": "tag",
+                "GITHUB_REF_NAME": "v99.99.99",
+                "GITHUB_SHA": "f" * 40,
+            },
+        ):
+            result = self.run_release(output)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(list(self.release_temp.iterdir()), [])
         checksum_result = subprocess.run(

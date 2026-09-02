@@ -1,6 +1,6 @@
 # npm CLI M0.3 evidence protocol
 
-Status: **fresh local run recorded; historical baseline retained; no external claim**.
+Status: **local observations recorded; historical baseline retained; no vulnerability, clean-target, performance, or superiority claim**.
 
 ## Purpose
 
