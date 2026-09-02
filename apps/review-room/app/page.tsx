@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bot,
   Check,
@@ -161,6 +161,7 @@ export default function Home() {
   const [webMcpStatus, setWebMcpStatus] = useState<
     'ready' | 'unavailable' | 'error'
   >('unavailable');
+  const decisionsRef = useRef(decisions);
 
   useEffect(() => {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -178,6 +179,9 @@ export default function Home() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ decisions, audit }));
   }, [decisions, audit]);
+  useEffect(() => {
+    decisionsRef.current = decisions;
+  }, [decisions]);
   const selected = candidates.find((c) => c.id === selectedId) ?? candidates[0];
   const filtered = useMemo(
     () =>
@@ -308,7 +312,7 @@ export default function Home() {
             severity: c.severity,
             title: c.title,
             evidenceConfidence: c.confidence,
-            humanDecision: decisions[c.id]?.decision ?? null,
+            humanDecision: decisionsRef.current[c.id]?.decision ?? null,
           })),
         }),
       },
@@ -409,7 +413,7 @@ export default function Home() {
       queueMicrotask(() => setWebMcpStatus('error'));
     }
     return () => lifecycle.abort();
-  }, [decisions]);
+  }, []);
 
   return (
     <main className="min-h-screen bg-[#080c12] text-slate-100">

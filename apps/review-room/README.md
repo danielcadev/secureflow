@@ -17,12 +17,12 @@ Open `http://localhost:3000` in a browser with imperative WebMCP support.
 
 ## WebMCP tools
 
-| Tool | Effect |
-| --- | --- |
-| `list_candidates` | Reads all candidates and existing human dispositions. |
-| `inspect_evidence` | Selects a candidate and returns its evidence boundary. |
-| `compare_revision` | Selects a candidate and returns the supplied revision note. |
-| `draft_hardening` | Returns evidence-bound remediation guidance. |
+| Tool                         | Effect                                                       |
+| ---------------------------- | ------------------------------------------------------------ |
+| `list_candidates`            | Reads all candidates and existing human dispositions.        |
+| `inspect_evidence`           | Selects a candidate and returns its evidence boundary.       |
+| `compare_revision`           | Selects a candidate and returns the supplied revision note.  |
+| `draft_hardening`            | Returns evidence-bound remediation guidance.                 |
 | `stage_agent_recommendation` | Prepares the visible human review form but cannot submit it. |
 
 There is deliberately no WebMCP tool that records a final security decision.
