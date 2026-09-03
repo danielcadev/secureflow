@@ -2,23 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Bot,
-  Check,
-  CircleAlert,
-  Copy,
   Download,
-  FileCode2,
-  Fingerprint,
-  GitCompareArrows,
-  LockKeyhole,
   RotateCcw,
   Search,
   ShieldCheck,
-  ShieldQuestion,
-  UserCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 
@@ -154,7 +143,6 @@ export default function Home() {
       time: '09:41:08',
     },
   ]);
-  const [copied, setCopied] = useState(false);
   const [webMcpStatus, setWebMcpStatus] = useState<
     'ready' | 'unavailable' | 'error'
   >('unavailable');
@@ -413,328 +401,230 @@ export default function Home() {
   }, []);
 
   return (
-    <main className="review-shell min-h-screen">
-      <header className="topbar">
-        <div className="brand-lockup">
-          <span className="brand-mark">
-            <ShieldCheck />
-          </span>
-          <span className="brand-name">SECUREFLOW</span>
-          <span className="brand-divider" />
-          <span className="brand-product">Review Room</span>
-        </div>
-        <div className="topbar-actions">
-          <span className="status-line status-authorized">
-            <LockKeyhole /> Authorized scope
-          </span>
-          <span className="status-line">Offline evidence</span>
-          <span
-            className={`status-line ${webMcpStatus === 'ready' ? 'status-agent' : ''}`}
-          >
-            <span className="status-dot" />
-            {webMcpStatus === 'ready'
-              ? 'WebMCP ready'
-              : webMcpStatus === 'error'
-                ? 'WebMCP error'
-                : 'WebMCP unavailable'}
-          </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={reset}
-            className="utility-button"
-          >
-            <RotateCcw /> Reset
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={exportAudit}
-            className="utility-button"
-          >
-            <Download /> Export audit
-          </Button>
+    <main className="min-h-screen bg-white text-[#1f2328]">
+      <header className="border-b border-[#d8dee4]">
+        <div className="mx-auto flex h-14 max-w-[1440px] items-center justify-between px-5">
+          <div className="flex items-center gap-3">
+            <ShieldCheck className="size-5 text-[#176b45]" />
+            <strong className="text-[15px] tracking-[-0.02em]">SecureFlow</strong>
+            <span className="h-5 w-px bg-[#d8dee4]" />
+            <span className="text-sm text-[#57606a]">Review room</span>
+          </div>
+          <div className="flex items-center gap-3 text-xs text-[#57606a]">
+            <span className="hidden items-center gap-1.5 sm:flex">
+              <span className="size-1.5 rounded-full bg-[#1a7f37]" /> Authorized scope
+            </span>
+            <span className="hidden items-center gap-1.5 md:flex">
+              <span
+                className={`size-1.5 rounded-full ${
+                  webMcpStatus === 'ready' ? 'bg-[#1a7f37]' : 'bg-[#8c959f]'
+                }`}
+              />
+              {webMcpStatus === 'ready'
+                ? 'WebMCP ready'
+                : webMcpStatus === 'error'
+                  ? 'WebMCP error'
+                  : 'WebMCP unavailable'}
+            </span>
+            <Button variant="ghost" size="sm" onClick={reset} className="h-8 px-2 text-xs">
+              <RotateCcw className="size-3.5" /> Reset
+            </Button>
+            <Button variant="outline" size="sm" onClick={exportAudit} className="h-8 rounded px-2 text-xs">
+              <Download className="size-3.5" /> Export
+            </Button>
+          </div>
         </div>
       </header>
 
-      <section className="case-masthead">
-        <div>
-          <p className="section-kicker">Active review / authorization</p>
-          <h1>Northstar API authorization review</h1>
-          <p className="case-deck">
-            Structured evidence for an explicitly authorized synthetic case. The
-            agent may investigate and stage; only the reviewer may decide.
-          </p>
-        </div>
-        <div className="case-metadata">
-          <button
-            className="case-id"
-            onClick={() => {
-              void navigator.clipboard.writeText(CASE_ID);
-              setCopied(true);
-              setTimeout(() => setCopied(false), 1200);
-            }}
-          >
-            <Fingerprint /> {CASE_ID} {copied ? <Check /> : <Copy />}
-          </button>
-          <span>REV 7f3c1ad</span>
-          <span>SCOPE synthetic/northstar-api</span>
-        </div>
-        <div className="review-progress">
-          <div>
-            <span>Human dispositions</span>
-            <strong>{Object.keys(decisions).length} / 3</strong>
+      <div className="mx-auto grid max-w-[1440px] lg:grid-cols-[300px_minmax(0,1fr)]">
+        <aside className="border-b border-[#d8dee4] lg:min-h-[calc(100vh-3.5rem)] lg:border-r lg:border-b-0" aria-label="Candidate queue">
+          <div className="flex items-center justify-between px-6 pt-8 pb-5">
+            <h2 className="text-base font-semibold">Findings</h2>
+            <span className="text-sm text-[#57606a]">{candidates.length}</span>
           </div>
-          <Progress
-            value={(Object.keys(decisions).length / 3) * 100}
-            className="h-1 bg-black/10 [&>div]:bg-[#146b4d]"
-          />
-        </div>
-      </section>
-
-      <div className="workbench">
-        <aside className="queue-pane" aria-label="Candidate queue">
-          <div className="pane-heading">
-            <div>
-              <p className="section-kicker">Candidate queue</p>
-              <h2>Unresolved signals</h2>
-            </div>
-            <span className="count-cell">{candidates.length}</span>
-          </div>
-          <div className="queue-search">
-            <Search />
+          <div className="relative mx-6 mb-3">
+            <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#8c959f]" />
             <input
+              className="h-9 w-full border border-[#d0d7de] bg-white pr-3 pl-9 text-sm outline-none focus:border-[#1f6f4a]"
               aria-label="Search candidates"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Filter by ID or title"
+              placeholder="Filter findings"
             />
           </div>
-          <div className="queue-columns" aria-hidden="true">
-            <span>Signal</span>
-            <span>Evidence</span>
-          </div>
-          <div className="candidate-list">
+          <div>
             {filtered.map((c) => (
               <button
                 key={c.id}
                 onClick={() => choose(c.id)}
-                className={`candidate-row ${c.id === selected.id ? 'candidate-row-active' : ''}`}
+                className={`relative block w-full border-t border-[#e6e8eb] px-6 py-4 text-left transition-colors hover:bg-[#f6f8fa] ${
+                  c.id === selected.id ? 'bg-[#f6f8fa]' : 'bg-white'
+                }`}
               >
-                <span className={`severity-rule severity-${c.severity}`} />
-                <span className="candidate-copy">
-                  <span className="candidate-id">
-                    {c.id} · {c.severity}
-                  </span>
-                  <span className="candidate-title">{c.title}</span>
-                  <span className="candidate-state">
+                {c.id === selected.id && <span className="absolute inset-y-0 left-0 w-0.5 bg-[#1f6f4a]" />}
+                <span className="block text-sm font-medium leading-5 text-[#1f2328]">{c.title}</span>
+                <span className="mt-2 flex items-center justify-between text-xs text-[#57606a]">
+                  <span>{c.id} · {c.severity}</span>
+                  <span>{c.confidence}%</span>
+                </span>
+                <span className="mt-1 block text-xs text-[#6e7781]">
                     {decisions[c.id]
                       ? `human: ${decisions[c.id].decision}`
                       : 'awaiting review'}
-                  </span>
                 </span>
-                <strong>{c.confidence}%</strong>
               </button>
             ))}
             {filtered.length === 0 && (
-              <p className="queue-empty">No candidates match this filter.</p>
+              <p className="px-6 py-5 text-sm text-[#57606a]">No findings match this filter.</p>
             )}
           </div>
-          <div className="queue-footnote">
+          <p className="border-t border-[#e6e8eb] px-6 py-4 text-xs leading-5 text-[#6e7781]">
             Candidates are leads, not confirmed vulnerabilities.
-          </div>
+          </p>
         </aside>
 
-        <section className="evidence-pane">
-          <header className="finding-header">
-            <div className="finding-reference">
-              <span>{selected.id}</span>
-              <span
-                className={`severity-label severity-text-${selected.severity}`}
-              >
+        <div className="min-w-0 px-6 py-8 lg:px-12">
+          <section>
+          <header className="border-b border-[#d8dee4] pb-6">
+            <div className="flex items-center gap-3 text-sm">
+              <span className="text-[#57606a]">{selected.id}</span>
+              <span className="h-4 w-px bg-[#d8dee4]" />
+              <span className={selected.severity === 'high' ? 'text-[#cf222e]' : selected.severity === 'medium' ? 'text-[#bc4c00]' : 'text-[#0969da]'}>
                 {selected.severity} signal
               </span>
             </div>
-            <h2>{selected.title}</h2>
-            <p>{selected.summary}</p>
-            <div className="source-location">
-              <FileCode2 /> {selected.location}
-            </div>
-            <div className="confidence-readout">
-              <strong>{selected.confidence}</strong>
-              <span>
-                %<br />
-                evidence confidence
-              </span>
+            <h1 className="mt-3 max-w-4xl text-3xl font-semibold tracking-[-0.035em] text-[#1f2328]">{selected.title}</h1>
+            <p className="mt-3 max-w-3xl text-base leading-7 text-[#57606a]">{selected.summary}</p>
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
+              <code className="border border-[#d0d7de] bg-[#f6f8fa] px-3 py-2 text-xs text-[#24292f]">{selected.location}</code>
+              <span className="text-sm text-[#57606a]"><strong className="font-semibold text-[#1f2328]">{selected.confidence}%</strong> evidence confidence</span>
             </div>
           </header>
 
-          <Tabs defaultValue="evidence" className="evidence-tabs">
-            <TabsList variant="line" className="evidence-tab-list">
-              <TabsTrigger value="evidence">Evidence record</TabsTrigger>
-              <TabsTrigger value="flow">Source → sink</TabsTrigger>
-              <TabsTrigger value="revision">Revision context</TabsTrigger>
+          <Tabs defaultValue="evidence" className="mt-5 gap-0">
+            <div className="mb-1 text-base font-semibold">Evidence</div>
+            <TabsList variant="line" className="h-11 w-full justify-start gap-7 border-b border-[#d8dee4] bg-transparent p-0">
+              <TabsTrigger value="evidence" className="h-full flex-none rounded-none px-0 text-sm data-active:bg-transparent data-active:shadow-none">Record</TabsTrigger>
+              <TabsTrigger value="flow" className="h-full flex-none rounded-none px-0 text-sm data-active:bg-transparent data-active:shadow-none">Source → sink</TabsTrigger>
+              <TabsTrigger value="revision" className="h-full flex-none rounded-none px-0 text-sm data-active:bg-transparent data-active:shadow-none">Revision</TabsTrigger>
             </TabsList>
-            <TabsContent value="evidence" className="evidence-content">
-              <div className="record-table">
+            <TabsContent value="evidence" className="pt-1">
+              <div>
                 {[
                   ['01 / source', 'Untrusted input', selected.source],
                   ['02 / control', 'Visible guard', selected.guard],
                   ['03 / sink', 'Sensitive operation', selected.sink],
                 ].map(([index, title, value]) => (
-                  <div className="record-row" key={index}>
-                    <span className="record-index">{index}</span>
-                    <span className="record-label">{title}</span>
-                    <code>{value}</code>
+                  <div className="grid gap-2 border-b border-[#e6e8eb] py-4 text-sm sm:grid-cols-[110px_160px_minmax(0,1fr)]" key={index}>
+                    <span className="text-[#6e7781]">{index}</span>
+                    <span className="font-medium">{title}</span>
+                    <code className="break-all text-[#24292f]">{value}</code>
                   </div>
                 ))}
               </div>
-              <div className="boundary-note">
-                <CircleAlert />
-                <div>
-                  <strong>Evidence boundary</strong>
-                  <p>
-                    Static evidence only. Runtime reachability, hidden policy
-                    layers, and exploitability require human-controlled
-                    validation.
-                  </p>
-                </div>
+              <div className="mt-5 border-l-2 border-[#bf8700] pl-4 text-sm leading-6 text-[#57606a]">
+                <strong className="block font-medium text-[#1f2328]">Evidence boundary</strong>
+                Static evidence only. Runtime reachability, hidden policy layers, and exploitability require human-controlled validation.
               </div>
             </TabsContent>
-            <TabsContent value="flow" className="evidence-content">
-              <div className="flow-ledger">
+            <TabsContent value="flow" className="pt-1">
+              <div>
                 {[
                   ['INPUT', 'Untrusted request value', selected.source],
                   ['GUARD', 'Observed control', selected.guard],
                   ['OPERATION', 'Sensitive sink', selected.sink],
                 ].map(([kind, title, value], index) => (
-                  <div className="flow-entry" key={kind}>
-                    <span>{String(index + 1).padStart(2, '0')}</span>
-                    <div>
-                      <small>{kind}</small>
-                      <strong>{title}</strong>
-                      <code>{value}</code>
-                    </div>
+                  <div className="grid gap-2 border-b border-[#e6e8eb] py-4 text-sm sm:grid-cols-[110px_160px_minmax(0,1fr)]" key={kind}>
+                    <span className="text-[#6e7781]">{String(index + 1).padStart(2, '0')} / {kind.toLowerCase()}</span>
+                    <strong className="font-medium">{title}</strong>
+                    <code className="break-all">{value}</code>
                   </div>
                 ))}
               </div>
             </TabsContent>
-            <TabsContent value="revision" className="evidence-content">
-              <div className="revision-note">
-                <GitCompareArrows />
-                <div>
-                  <span>REVISION 7f3c1ad</span>
-                  <p>{selected.revision}</p>
-                </div>
+            <TabsContent value="revision" className="py-5">
+              <div className="text-sm leading-6 text-[#57606a]">
+                <span className="mb-2 block text-xs text-[#6e7781]">Revision 7f3c1ad</span>
+                <p>{selected.revision}</p>
               </div>
             </TabsContent>
           </Tabs>
-        </section>
-
-        <aside className="review-pane" aria-label="Review controls">
-          <section className="review-section agent-section">
-            <div className="review-section-heading">
-              <Bot />
-              <div>
-                <span>Agent memorandum</span>
-                <small>Provisional / evidence-bound</small>
-              </div>
-            </div>
-            <div className="agent-disposition">
-              <span>Suggested disposition</span>
-              <strong>{label(selected.recommendation)}</strong>
-            </div>
-            <p className="review-copy">{selected.agentReason}</p>
-            <div className="hardening-note">
-              <span>Hardening direction</span>
-              <p>{selected.hardening}</p>
-            </div>
-            <Button onClick={stage} className="stage-button">
-              Stage recommendation
-            </Button>
           </section>
 
-          <section className="review-section human-section">
-            <div className="review-section-heading">
-              <UserCheck />
-              <div>
-                <span>Human disposition</span>
-                <small>Not exposed to agent tools</small>
-              </div>
-            </div>
-            <fieldset
-              className="decision-options"
-              aria-label="Human disposition"
-            >
-              {(['validated', 'rejected', 'abstained'] as Decision[]).map(
-                (d) => (
-                  <button
-                    key={d}
-                    aria-pressed={staged === d}
-                    onClick={() => setStaged(d)}
-                    className={staged === d ? 'decision-active' : ''}
-                  >
-                    {label(d)}
-                  </button>
-                ),
-              )}
-            </fieldset>
-            <label htmlFor="rationale">
-              Reviewer rationale <span>required</span>
-            </label>
-            <Textarea
-              id="rationale"
-              value={rationale}
-              onChange={(e) => setRationale(e.target.value)}
-              placeholder="Cite the evidence supporting this disposition…"
-              className="decision-rationale"
-            />
-            <Button
-              onClick={record}
-              disabled={!staged || rationale.trim().length < 12}
-              className="record-button"
-            >
-              <ShieldQuestion /> Record human decision
-            </Button>
-          </section>
+          <section className="mt-10 border-t border-[#d8dee4]" aria-label="Review controls">
+            <div className="grid border-b border-[#d8dee4] md:grid-cols-2">
+              <section className="py-7 md:border-r md:border-[#d8dee4] md:pr-8">
+                <h2 className="text-base font-semibold">Agent recommendation</h2>
+                <p className="mt-1 text-xs text-[#6e7781]">Provisional and evidence-bound</p>
+                <div className="mt-5 flex items-center justify-between border-y border-[#e6e8eb] py-3 text-sm">
+                  <span className="text-[#57606a]">Suggested disposition</span>
+                  <strong>{label(selected.recommendation)}</strong>
+                </div>
+                <p className="mt-4 text-sm leading-6 text-[#57606a]">{selected.agentReason}</p>
+                <div className="mt-4 bg-[#f6f8fa] p-4 text-sm leading-6 text-[#57606a]">
+                  <strong className="mb-1 block font-medium text-[#1f2328]">Hardening direction</strong>
+                  {selected.hardening}
+                </div>
+                <Button variant="outline" onClick={stage} className="mt-5 h-9 rounded px-4 text-sm">
+                  Stage recommendation
+                </Button>
+              </section>
 
-          <section className="review-section audit-section">
-            <div className="audit-heading">
-              <span>Audit ledger</span>
-              <small>append-only view</small>
+              <section className="py-7 md:pl-8">
+                <h2 className="text-base font-semibold">Human decision</h2>
+                <p className="mt-1 text-xs text-[#6e7781]">Not exposed to agent tools</p>
+                <fieldset className="mt-5 grid grid-cols-3" aria-label="Human disposition">
+                  {(['validated', 'rejected', 'abstained'] as Decision[]).map((d) => (
+                    <button
+                      key={d}
+                      aria-pressed={staged === d}
+                      onClick={() => setStaged(d)}
+                      className={`h-9 border border-r-0 border-[#d0d7de] text-sm first:rounded-l last:rounded-r last:border-r ${
+                        staged === d ? 'bg-[#1f6f4a] text-white' : 'bg-white text-[#24292f] hover:bg-[#f6f8fa]'
+                      }`}
+                    >
+                      {label(d)}
+                    </button>
+                  ))}
+                </fieldset>
+                <label htmlFor="rationale" className="mt-5 block text-sm font-medium">
+                  Reviewer rationale <span className="font-normal text-[#6e7781]">required</span>
+                </label>
+                <Textarea
+                  id="rationale"
+                  value={rationale}
+                  onChange={(e) => setRationale(e.target.value)}
+                  placeholder="Cite the evidence supporting this disposition…"
+                  className="mt-2 min-h-24 rounded border-[#d0d7de] text-sm shadow-none focus-visible:border-[#1f6f4a] focus-visible:ring-0"
+                />
+                <Button
+                  onClick={record}
+                  disabled={!staged || rationale.trim().length < 12}
+                  className="mt-4 h-9 w-full rounded bg-[#1f6f4a] text-sm text-white hover:bg-[#185c3d]"
+                >
+                  Record human decision
+                </Button>
+              </section>
             </div>
-            <div className="audit-list">
-              {audit
-                .slice()
-                .reverse()
-                .map((event, index) => (
-                  <div className="audit-entry" key={`${event.time}-${index}`}>
-                    <span className={`actor-mark actor-${event.actor}`}>
-                      {event.actor === 'human' ? (
-                        <UserCheck />
-                      ) : event.actor === 'agent' ? (
-                        <Bot />
-                      ) : (
-                        <LockKeyhole />
-                      )}
-                    </span>
-                    <div>
-                      <p>{event.action}</p>
-                      <small>
-                        {event.actor} / {event.time}
-                      </small>
-                    </div>
+
+            <section className="py-7">
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-semibold">Audit log</h2>
+                <span className="text-xs text-[#6e7781]">Append-only view</span>
+              </div>
+              <div className="mt-4 divide-y divide-[#e6e8eb] border-y border-[#e6e8eb]">
+                {audit.slice().reverse().map((event, index) => (
+                  <div className="grid gap-1 py-3 text-sm sm:grid-cols-[90px_minmax(0,1fr)_110px]" key={`${event.time}-${index}`}>
+                    <span className="text-[#6e7781]">{event.actor}</span>
+                    <p>{event.action}</p>
+                    <time className="text-[#6e7781] sm:text-right">{event.time}</time>
                   </div>
                 ))}
-            </div>
+              </div>
+            </section>
           </section>
-        </aside>
+        </div>
       </div>
-
-      <footer className="review-footer">
-        <span>SecureFlow Review Room / local-first demonstration</span>
-        <strong>AI investigates. Humans decide. Evidence persists.</strong>
-      </footer>
     </main>
   );
 }
