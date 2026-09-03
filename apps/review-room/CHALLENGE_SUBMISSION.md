@@ -32,6 +32,6 @@ The demo is a React 19/Vinext application with the imperative WebMCP API. It is 
 
 ### Required links before submission
 
-- Public application: _add deployed URL_
-- Public source repository: `https://github.com/danielcadev/secureflow`
+- Public application: `https://secureflow-review-room.daniel-ca-pe207.chatgpt.site`
+- Public source repository: `https://github.com/danielcadev/secureflow/tree/main/apps/review-room`
 - Public demo video: _add YouTube URL_
