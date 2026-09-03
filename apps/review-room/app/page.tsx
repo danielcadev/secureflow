@@ -144,8 +144,8 @@ export default function Home() {
     },
   ]);
   const [webMcpStatus, setWebMcpStatus] = useState<
-    'ready' | 'unavailable' | 'error'
-  >('unavailable');
+    'checking' | 'ready' | 'unavailable' | 'error'
+  >('checking');
   const decisionsRef = useRef(decisions);
 
   useEffect(() => {
@@ -253,11 +253,9 @@ export default function Home() {
   }
 
   useEffect(() => {
-    const context = document.modelContext;
-    if (!context?.registerTool) {
-      return;
-    }
     const lifecycle = new AbortController();
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    let retries = 0;
     const candidateFor = (input: unknown) => {
       const id =
         typeof input === 'object' && input !== null && 'candidateId' in input
@@ -384,20 +382,37 @@ export default function Home() {
         },
       },
     ];
-    try {
-      Promise.all(
-        tools.map((tool) =>
-          Promise.resolve(
-            context.registerTool(tool, { signal: lifecycle.signal }),
+    const registerTools = () => {
+      if (lifecycle.signal.aborted) return;
+      const context = document.modelContext;
+      if (!context?.registerTool) {
+        if (retries < 40) {
+          retries += 1;
+          retryTimer = setTimeout(registerTools, 250);
+        } else {
+          setWebMcpStatus('unavailable');
+        }
+        return;
+      }
+      try {
+        Promise.all(
+          tools.map((tool) =>
+            Promise.resolve(
+              context.registerTool(tool, { signal: lifecycle.signal }),
+            ),
           ),
-        ),
-      )
-        .then(() => setWebMcpStatus('ready'))
-        .catch(() => setWebMcpStatus('error'));
-    } catch {
-      queueMicrotask(() => setWebMcpStatus('error'));
-    }
-    return () => lifecycle.abort();
+        )
+          .then(() => setWebMcpStatus('ready'))
+          .catch(() => setWebMcpStatus('error'));
+      } catch {
+        queueMicrotask(() => setWebMcpStatus('error'));
+      }
+    };
+    registerTools();
+    return () => {
+      if (retryTimer) clearTimeout(retryTimer);
+      lifecycle.abort();
+    };
   }, []);
 
   return (
@@ -424,7 +439,9 @@ export default function Home() {
                 ? 'WebMCP ready'
                 : webMcpStatus === 'error'
                   ? 'WebMCP error'
-                  : 'WebMCP unavailable'}
+                  : webMcpStatus === 'checking'
+                    ? 'WebMCP checking…'
+                    : 'WebMCP unavailable'}
             </span>
             <Button variant="ghost" size="sm" onClick={reset} className="h-8 px-2 text-xs">
               <RotateCcw className="size-3.5" /> Reset
