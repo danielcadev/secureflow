@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bot,
   Check,
-  ChevronRight,
   CircleAlert,
   Copy,
   Download,
@@ -16,10 +15,8 @@ import {
   Search,
   ShieldCheck,
   ShieldQuestion,
-  Sparkles,
   UserCheck,
 } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -416,390 +413,316 @@ export default function Home() {
   }, []);
 
   return (
-    <main className="min-h-screen bg-[#080c12] text-slate-100">
-      <header className="border-b border-white/8 bg-[#080c12]/90 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-4 px-5 py-4 lg:px-8">
-          <div className="flex items-center gap-3">
-            <div className="grid size-10 place-items-center rounded-xl border border-emerald-300/20 bg-emerald-300/10 text-emerald-300">
-              <ShieldCheck className="size-5" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold">SecureFlow</p>
-              <p className="text-xs text-slate-500">Review Room</p>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge
-              variant="outline"
-              className="border-emerald-300/20 bg-emerald-300/8 text-emerald-200"
-            >
-              <LockKeyhole className="size-3" /> Authorized synthetic case
-            </Badge>
-            <Badge
-              variant="outline"
-              className="border-white/10 bg-white/4 text-slate-400"
-            >
-              Offline evidence
-            </Badge>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={reset}
-              className="text-slate-400 hover:bg-white/5 hover:text-white"
-            >
-              <RotateCcw />
-              Reset
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={exportAudit}
-              className="border-white/12 bg-white/5 hover:bg-white/10"
-            >
-              <Download />
-              Export audit
-            </Button>
-          </div>
+    <main className="review-shell min-h-screen">
+      <header className="topbar">
+        <div className="brand-lockup">
+          <span className="brand-mark">
+            <ShieldCheck />
+          </span>
+          <span className="brand-name">SECUREFLOW</span>
+          <span className="brand-divider" />
+          <span className="brand-product">Review Room</span>
+        </div>
+        <div className="topbar-actions">
+          <span className="status-line status-authorized">
+            <LockKeyhole /> Authorized scope
+          </span>
+          <span className="status-line">Offline evidence</span>
+          <span
+            className={`status-line ${webMcpStatus === 'ready' ? 'status-agent' : ''}`}
+          >
+            <span className="status-dot" />
+            {webMcpStatus === 'ready'
+              ? 'WebMCP ready'
+              : webMcpStatus === 'error'
+                ? 'WebMCP error'
+                : 'WebMCP unavailable'}
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={reset}
+            className="utility-button"
+          >
+            <RotateCcw /> Reset
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={exportAudit}
+            className="utility-button"
+          >
+            <Download /> Export audit
+          </Button>
         </div>
       </header>
 
-      <section className="mx-auto max-w-[1600px] border-b border-white/8 px-5 py-5 lg:px-8">
-        <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
-          <div>
-            <p className="eyebrow">Active review</p>
-            <div className="mt-1 flex flex-wrap items-center gap-3">
-              <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-                Northstar API authorization review
-              </h1>
-              <Badge
-                className={`${webMcpStatus === 'ready' ? 'bg-violet-400/12 text-violet-200' : 'bg-white/6 text-slate-400'} hover:bg-violet-400/12`}
-              >
-                {webMcpStatus === 'ready'
-                  ? 'WebMCP agent ready'
-                  : webMcpStatus === 'error'
-                    ? 'WebMCP registration error'
-                    : 'Open in a WebMCP browser'}
-              </Badge>
-            </div>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
-              The agent investigates evidence and stages recommendations. A
-              human owns every final security decision.
-            </p>
-          </div>
-          <div className="min-w-64 rounded-xl border border-white/8 bg-white/[.025] p-3">
-            <div className="mb-2 flex justify-between text-xs">
-              <span className="text-slate-500">Human review progress</span>
-              <span className="font-mono text-slate-300">
-                {Object.keys(decisions).length} / 3
-              </span>
-            </div>
-            <Progress
-              value={(Object.keys(decisions).length / 3) * 100}
-              className="h-1.5 bg-white/8 [&>div]:bg-emerald-300"
-            />
-          </div>
+      <section className="case-masthead">
+        <div>
+          <p className="section-kicker">Active review / authorization</p>
+          <h1>Northstar API authorization review</h1>
+          <p className="case-deck">
+            Structured evidence for an explicitly authorized synthetic case. The
+            agent may investigate and stage; only the reviewer may decide.
+          </p>
         </div>
-        <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 font-mono text-xs text-slate-500">
+        <div className="case-metadata">
           <button
-            className="flex items-center gap-1.5 hover:text-slate-300"
+            className="case-id"
             onClick={() => {
               void navigator.clipboard.writeText(CASE_ID);
               setCopied(true);
               setTimeout(() => setCopied(false), 1200);
             }}
           >
-            <Fingerprint className="size-3.5" />
-            {CASE_ID}
-            {copied ? (
-              <Check className="size-3 text-emerald-300" />
-            ) : (
-              <Copy className="size-3" />
-            )}
+            <Fingerprint /> {CASE_ID} {copied ? <Check /> : <Copy />}
           </button>
-          <span>revision 7f3c1ad</span>
-          <span>scope synthetic/northstar-api</span>
+          <span>REV 7f3c1ad</span>
+          <span>SCOPE synthetic/northstar-api</span>
+        </div>
+        <div className="review-progress">
+          <div>
+            <span>Human dispositions</span>
+            <strong>{Object.keys(decisions).length} / 3</strong>
+          </div>
+          <Progress
+            value={(Object.keys(decisions).length / 3) * 100}
+            className="h-1 bg-black/10 [&>div]:bg-[#146b4d]"
+          />
         </div>
       </section>
 
-      <div className="mx-auto grid max-w-[1600px] gap-4 px-5 py-5 lg:grid-cols-[300px_minmax(420px,1fr)_360px] lg:px-8">
-        <aside className="rounded-2xl border border-white/8 bg-[#0c1119] p-3">
-          <div className="flex items-center justify-between px-2 py-2">
+      <div className="workbench">
+        <aside className="queue-pane" aria-label="Candidate queue">
+          <div className="pane-heading">
             <div>
-              <p className="eyebrow">Candidate queue</p>
-              <p className="mt-1 text-xs text-slate-500">
-                Structured, not confirmed
-              </p>
+              <p className="section-kicker">Candidate queue</p>
+              <h2>Unresolved signals</h2>
             </div>
-            <Badge variant="secondary" className="bg-white/6 text-slate-300">
-              3
-            </Badge>
+            <span className="count-cell">{candidates.length}</span>
           </div>
-          <div className="relative my-3">
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-600" />
+          <div className="queue-search">
+            <Search />
             <input
               aria-label="Search candidates"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search candidates"
-              className="h-9 w-full rounded-lg border border-white/8 bg-black/20 pl-9 pr-3 text-sm outline-none placeholder:text-slate-600 focus:border-emerald-300/40"
+              placeholder="Filter by ID or title"
             />
           </div>
-          <div className="space-y-2">
+          <div className="queue-columns" aria-hidden="true">
+            <span>Signal</span>
+            <span>Evidence</span>
+          </div>
+          <div className="candidate-list">
             {filtered.map((c) => (
               <button
                 key={c.id}
                 onClick={() => choose(c.id)}
-                className={`candidate-card ${c.id === selected.id ? 'candidate-card-active' : ''}`}
+                className={`candidate-row ${c.id === selected.id ? 'candidate-row-active' : ''}`}
               >
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-[11px] text-slate-500">
-                    {c.id}
+                <span className={`severity-rule severity-${c.severity}`} />
+                <span className="candidate-copy">
+                  <span className="candidate-id">
+                    {c.id} · {c.severity}
                   </span>
-                  <span
-                    className={`size-2 rounded-full ${c.severity === 'high' ? 'bg-rose-400' : c.severity === 'medium' ? 'bg-amber-300' : 'bg-sky-300'}`}
-                  />
-                </div>
-                <p className="mt-2 text-left text-sm font-medium leading-5 text-slate-200">
-                  {c.title}
-                </p>
-                <div className="mt-3 flex items-center justify-between text-[11px] text-slate-500">
-                  <span>{c.confidence}% evidence</span>
-                  {decisions[c.id] ? (
-                    <span className="text-emerald-300">
-                      {decisions[c.id].decision}
-                    </span>
-                  ) : (
-                    <ChevronRight className="size-3.5" />
-                  )}
-                </div>
+                  <span className="candidate-title">{c.title}</span>
+                  <span className="candidate-state">
+                    {decisions[c.id]
+                      ? `human: ${decisions[c.id].decision}`
+                      : 'awaiting review'}
+                  </span>
+                </span>
+                <strong>{c.confidence}%</strong>
               </button>
             ))}
+            {filtered.length === 0 && (
+              <p className="queue-empty">No candidates match this filter.</p>
+            )}
+          </div>
+          <div className="queue-footnote">
+            Candidates are leads, not confirmed vulnerabilities.
           </div>
         </aside>
 
-        <section className="min-w-0 rounded-2xl border border-white/8 bg-[#0c1119]">
-          <div className="border-b border-white/8 p-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-xs text-emerald-300">
-                    {selected.id}
-                  </span>
-                  <Badge
-                    variant="outline"
-                    className="border-white/10 text-slate-400"
-                  >
-                    {selected.severity}
-                  </Badge>
-                </div>
-                <h2 className="mt-2 text-xl font-semibold tracking-tight">
-                  {selected.title}
-                </h2>
-              </div>
-              <div className="text-right">
-                <p className="text-2xl font-semibold">{selected.confidence}%</p>
-                <p className="text-[11px] uppercase tracking-wider text-slate-500">
-                  evidence confidence
-                </p>
-              </div>
+        <section className="evidence-pane">
+          <header className="finding-header">
+            <div className="finding-reference">
+              <span>{selected.id}</span>
+              <span
+                className={`severity-label severity-text-${selected.severity}`}
+              >
+                {selected.severity} signal
+              </span>
             </div>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
-              {selected.summary}
-            </p>
-            <div className="mt-4 flex items-center gap-2 rounded-lg border border-white/8 bg-black/20 px-3 py-2 font-mono text-xs text-slate-400">
-              <FileCode2 className="size-4 text-violet-300" />
-              <span className="truncate">{selected.location}</span>
+            <h2>{selected.title}</h2>
+            <p>{selected.summary}</p>
+            <div className="source-location">
+              <FileCode2 /> {selected.location}
             </div>
-          </div>
-          <Tabs defaultValue="evidence" className="p-5">
-            <TabsList className="bg-black/25">
-              <TabsTrigger value="evidence">Evidence</TabsTrigger>
-              <TabsTrigger value="flow">Data flow</TabsTrigger>
-              <TabsTrigger value="revision">Revision</TabsTrigger>
+            <div className="confidence-readout">
+              <strong>{selected.confidence}</strong>
+              <span>
+                %<br />
+                evidence confidence
+              </span>
+            </div>
+          </header>
+
+          <Tabs defaultValue="evidence" className="evidence-tabs">
+            <TabsList variant="line" className="evidence-tab-list">
+              <TabsTrigger value="evidence">Evidence record</TabsTrigger>
+              <TabsTrigger value="flow">Source → sink</TabsTrigger>
+              <TabsTrigger value="revision">Revision context</TabsTrigger>
             </TabsList>
-            <TabsContent value="evidence" className="mt-5 space-y-3">
-              <div className="grid gap-3 sm:grid-cols-3">
+            <TabsContent value="evidence" className="evidence-content">
+              <div className="record-table">
                 {[
-                  ['Source', selected.source],
-                  ['Visible guard', selected.guard],
-                  ['Sensitive sink', selected.sink],
-                ].map(([k, v]) => (
-                  <div
-                    key={k}
-                    className="rounded-xl border border-white/8 bg-black/15 p-4"
-                  >
-                    <p className="eyebrow">{k}</p>
-                    <p className="mt-2 break-words font-mono text-xs leading-5 text-slate-300">
-                      {v}
-                    </p>
+                  ['01 / source', 'Untrusted input', selected.source],
+                  ['02 / control', 'Visible guard', selected.guard],
+                  ['03 / sink', 'Sensitive operation', selected.sink],
+                ].map(([index, title, value]) => (
+                  <div className="record-row" key={index}>
+                    <span className="record-index">{index}</span>
+                    <span className="record-label">{title}</span>
+                    <code>{value}</code>
                   </div>
                 ))}
               </div>
-              <div className="rounded-xl border border-amber-300/15 bg-amber-300/[.045] p-4">
-                <div className="flex gap-3">
-                  <CircleAlert className="mt-0.5 size-4 shrink-0 text-amber-300" />
-                  <div>
-                    <p className="text-sm font-medium text-amber-100">
-                      Evidence boundary
-                    </p>
-                    <p className="mt-1 text-xs leading-5 text-slate-400">
-                      Static evidence only. Runtime reachability, hidden policy
-                      layers, and exploitability still require human-controlled
-                      validation.
-                    </p>
-                  </div>
+              <div className="boundary-note">
+                <CircleAlert />
+                <div>
+                  <strong>Evidence boundary</strong>
+                  <p>
+                    Static evidence only. Runtime reachability, hidden policy
+                    layers, and exploitability require human-controlled
+                    validation.
+                  </p>
                 </div>
               </div>
             </TabsContent>
-            <TabsContent value="flow" className="mt-5">
-              <div className="space-y-2">
+            <TabsContent value="flow" className="evidence-content">
+              <div className="flow-ledger">
                 {[
-                  ['01', 'Untrusted input', selected.source],
-                  ['02', 'Observed control', selected.guard],
-                  ['03', 'Operation', selected.sink],
-                ].map(([n, k, v]) => (
-                  <div key={n} className="trace-step">
-                    <span className="font-mono text-xs text-emerald-300">
-                      {n}
-                    </span>
+                  ['INPUT', 'Untrusted request value', selected.source],
+                  ['GUARD', 'Observed control', selected.guard],
+                  ['OPERATION', 'Sensitive sink', selected.sink],
+                ].map(([kind, title, value], index) => (
+                  <div className="flow-entry" key={kind}>
+                    <span>{String(index + 1).padStart(2, '0')}</span>
                     <div>
-                      <p className="text-xs text-slate-500">{k}</p>
-                      <p className="mt-1 break-all font-mono text-sm text-slate-200">
-                        {v}
-                      </p>
+                      <small>{kind}</small>
+                      <strong>{title}</strong>
+                      <code>{value}</code>
                     </div>
                   </div>
                 ))}
               </div>
             </TabsContent>
-            <TabsContent value="revision" className="mt-5">
-              <div className="rounded-xl border border-white/8 bg-black/15 p-5">
-                <div className="flex items-center gap-2 text-violet-300">
-                  <GitCompareArrows className="size-4" />
-                  <span className="eyebrow text-violet-300">Revision note</span>
+            <TabsContent value="revision" className="evidence-content">
+              <div className="revision-note">
+                <GitCompareArrows />
+                <div>
+                  <span>REVISION 7f3c1ad</span>
+                  <p>{selected.revision}</p>
                 </div>
-                <p className="mt-3 text-sm leading-6 text-slate-300">
-                  {selected.revision}
-                </p>
               </div>
             </TabsContent>
           </Tabs>
         </section>
 
-        <aside className="space-y-4">
-          <section className="rounded-2xl border border-violet-300/15 bg-gradient-to-b from-violet-400/[.07] to-[#0c1119] p-5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="grid size-8 place-items-center rounded-lg bg-violet-300/12 text-violet-200">
-                  <Bot className="size-4" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold">Agent recommendation</p>
-                  <p className="text-[11px] text-slate-500">
-                    Provisional · evidence-bound
-                  </p>
-                </div>
+        <aside className="review-pane" aria-label="Review controls">
+          <section className="review-section agent-section">
+            <div className="review-section-heading">
+              <Bot />
+              <div>
+                <span>Agent memorandum</span>
+                <small>Provisional / evidence-bound</small>
               </div>
-              <Sparkles className="size-4 text-violet-300" />
             </div>
-            <div className="my-4 rounded-xl border border-white/8 bg-black/20 p-4">
-              <p className="eyebrow">Suggested disposition</p>
-              <p className="mt-2 text-lg font-semibold">
-                {label(selected.recommendation)}
-              </p>
-              <p className="mt-2 text-xs leading-5 text-slate-400">
-                {selected.agentReason}
-              </p>
+            <div className="agent-disposition">
+              <span>Suggested disposition</span>
+              <strong>{label(selected.recommendation)}</strong>
             </div>
-            <p className="eyebrow">Hardening direction</p>
-            <p className="mt-2 text-xs leading-5 text-slate-400">
-              {selected.hardening}
-            </p>
-            <Button
-              onClick={stage}
-              className="mt-5 w-full bg-violet-300 text-violet-950 hover:bg-violet-200"
-            >
-              <Sparkles />
-              Stage for human review
+            <p className="review-copy">{selected.agentReason}</p>
+            <div className="hardening-note">
+              <span>Hardening direction</span>
+              <p>{selected.hardening}</p>
+            </div>
+            <Button onClick={stage} className="stage-button">
+              Stage recommendation
             </Button>
           </section>
-          <section className="rounded-2xl border border-emerald-300/15 bg-[#0c1119] p-5">
-            <div className="flex items-center gap-2">
-              <UserCheck className="size-4 text-emerald-300" />
+
+          <section className="review-section human-section">
+            <div className="review-section-heading">
+              <UserCheck />
               <div>
-                <p className="text-sm font-semibold">Human decision</p>
-                <p className="text-[11px] text-slate-500">
-                  Agent tools cannot invoke this action
-                </p>
+                <span>Human disposition</span>
+                <small>Not exposed to agent tools</small>
               </div>
             </div>
-            <div className="mt-4 grid grid-cols-3 gap-2">
+            <fieldset
+              className="decision-options"
+              aria-label="Human disposition"
+            >
               {(['validated', 'rejected', 'abstained'] as Decision[]).map(
                 (d) => (
                   <button
                     key={d}
+                    aria-pressed={staged === d}
                     onClick={() => setStaged(d)}
-                    className={`rounded-lg border px-2 py-2 text-xs font-medium transition ${staged === d ? 'border-emerald-300/50 bg-emerald-300/10 text-emerald-200' : 'border-white/8 bg-white/[.025] text-slate-400 hover:border-white/20'}`}
+                    className={staged === d ? 'decision-active' : ''}
                   >
                     {label(d)}
                   </button>
                 ),
               )}
-            </div>
-            <label
-              className="mt-4 block text-xs text-slate-400"
-              htmlFor="rationale"
-            >
-              Decision rationale{' '}
-              <span className="text-slate-600">(required)</span>
+            </fieldset>
+            <label htmlFor="rationale">
+              Reviewer rationale <span>required</span>
             </label>
             <Textarea
               id="rationale"
               value={rationale}
               onChange={(e) => setRationale(e.target.value)}
-              placeholder="Cite the evidence that supports this decision…"
-              className="mt-2 min-h-24 border-white/10 bg-black/20 text-sm placeholder:text-slate-600"
+              placeholder="Cite the evidence supporting this disposition…"
+              className="decision-rationale"
             />
             <Button
               onClick={record}
               disabled={!staged || rationale.trim().length < 12}
-              className="mt-3 w-full bg-emerald-300 text-emerald-950 hover:bg-emerald-200"
+              className="record-button"
             >
-              <ShieldQuestion />
-              Record human decision
+              <ShieldQuestion /> Record human decision
             </Button>
           </section>
-          <section className="rounded-2xl border border-white/8 bg-[#0c1119] p-5">
-            <div className="flex justify-between">
-              <p className="text-sm font-semibold">Audit trail</p>
-              <span className="font-mono text-[10px] text-slate-600">
-                append-only view
-              </span>
+
+          <section className="review-section audit-section">
+            <div className="audit-heading">
+              <span>Audit ledger</span>
+              <small>append-only view</small>
             </div>
-            <div className="mt-4 max-h-48 space-y-4 overflow-auto">
+            <div className="audit-list">
               {audit
                 .slice()
                 .reverse()
-                .map((e, i) => (
-                  <div key={`${e.time}-${i}`} className="flex gap-3">
-                    <div
-                      className={`mt-0.5 grid size-6 shrink-0 place-items-center rounded-full ${e.actor === 'human' ? 'bg-emerald-300/10 text-emerald-300' : e.actor === 'agent' ? 'bg-violet-300/10 text-violet-300' : 'bg-white/5 text-slate-500'}`}
-                    >
-                      {e.actor === 'human' ? (
-                        <UserCheck className="size-3" />
-                      ) : e.actor === 'agent' ? (
-                        <Bot className="size-3" />
+                .map((event, index) => (
+                  <div className="audit-entry" key={`${event.time}-${index}`}>
+                    <span className={`actor-mark actor-${event.actor}`}>
+                      {event.actor === 'human' ? (
+                        <UserCheck />
+                      ) : event.actor === 'agent' ? (
+                        <Bot />
                       ) : (
-                        <LockKeyhole className="size-3" />
+                        <LockKeyhole />
                       )}
-                    </div>
+                    </span>
                     <div>
-                      <p className="text-xs leading-5 text-slate-300">
-                        {e.action}
-                      </p>
-                      <p className="font-mono text-[10px] text-slate-600">
-                        {e.actor} · {e.time}
-                      </p>
+                      <p>{event.action}</p>
+                      <small>
+                        {event.actor} / {event.time}
+                      </small>
                     </div>
                   </div>
                 ))}
@@ -807,9 +730,10 @@ export default function Home() {
           </section>
         </aside>
       </div>
-      <footer className="mx-auto flex max-w-[1600px] flex-wrap justify-between gap-3 border-t border-white/8 px-5 py-5 text-xs text-slate-600 lg:px-8">
-        <span>SecureFlow Review Room · local-first demonstration</span>
-        <span>AI recommends. Humans decide. Evidence persists.</span>
+
+      <footer className="review-footer">
+        <span>SecureFlow Review Room / local-first demonstration</span>
+        <strong>AI investigates. Humans decide. Evidence persists.</strong>
       </footer>
     </main>
   );
