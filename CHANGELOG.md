@@ -2,7 +2,22 @@
 
 All notable changes to SecureFlow are documented here.
 
-## 0.2.0 — Unreleased
+## 0.4.0-rc.1 — Unreleased
+
+This CodeSupply candidate is based on `6a0b976`, whose workspace declared
+`0.2.0`. Existing annotated tags `v0.2.0` (`582b233`) and `v0.3.0`
+(`333609d`) belong to a divergent line after common ancestor `520780e`.
+The candidate uses a new minor prerelease to avoid reusing either released
+version. It does not incorporate those tags' later evaluation, Review Room,
+or publication-control changes and is not a cumulative successor to `v0.3.0`.
+Existing tags remain unchanged. This entry records candidate scope, not a
+successful release gate or publication.
+
+- add a self-contained, offline CodeSupply demo using committed synthetic
+  fixtures, strict artifact verification, and a documented release gate;
+- align workspace, lockfile, and citation metadata at `0.4.0-rc.1`.
+
+Inherited changes from the baseline development line:
 
 - freeze `secureflow-run-v1`, add `secureflow-run-v2` for Engine graph,
   fingerprint, byte-location, and evidence-state provenance, and retain a
