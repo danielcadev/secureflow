@@ -42,6 +42,14 @@ jobs:
       - name: Build release binary
         run: cargo +1.92.0 build --release --locked -p secureflow
 
+      - name: Retain self-contained CodeSupply demo
+        shell: bash
+        run: |
+          bash scripts/demo-codesupply-local.sh --binary target/release/secureflow | tee target/codesupply-demo.log
+          demo_dir=$(sed -n 's/^demo artifacts retained at: //p' target/codesupply-demo.log)
+          test -n "$demo_dir"
+          cp -a "$demo_dir" target/codesupply-demo
+
       - name: Generate deterministic CycloneDX inventory
         run: python3 scripts/generate-sbom.py --output target/secureflow-sbom.cdx.json
 
@@ -52,5 +60,7 @@ jobs:
           path: |
             target/release/secureflow
             target/secureflow-sbom.cdx.json
+            target/codesupply-demo.log
+            target/codesupply-demo/
           if-no-files-found: error
           retention-days: 14

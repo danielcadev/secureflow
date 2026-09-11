@@ -1889,3 +1889,266 @@ fn web_cli_runs_an_offline_authorized_inventory_inference_and_lab() {
     }
     std::fs::remove_dir_all(&output_root).expect("remove exact temporary output directory");
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn codesupply_demo_preserves_evidence_and_rejects_substitution() {
+    use secureflow_engine_adapter::{sha256_bytes, sha256_target};
+    use std::os::unix::fs::PermissionsExt;
+
+    let repository = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .unwrap();
+    let execute_demo = || {
+        let output = Command::new("bash")
+            .arg(repository.join("scripts/demo-codesupply-local.sh"))
+            .args(["--binary", binary()])
+            .output()
+            .expect("demo starts with a prebuilt CLI");
+        assert!(
+            output.status.success(),
+            "stdout={}\nstderr={}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        assert!(stdout.ends_with("No network request, active scan, exploit, AI transmission, or human decision was created.\n"));
+        PathBuf::from(
+            stdout
+                .lines()
+                .find_map(|line| line.strip_prefix("demo artifacts retained at: "))
+                .expect("retained artifact path"),
+        )
+    };
+    let first = execute_demo();
+    let second = execute_demo();
+    assert_ne!(first, second);
+    let read_json = |root: &std::path::Path, name: &str| -> serde_json::Value {
+        serde_json::from_slice(&std::fs::read(root.join(name)).unwrap()).unwrap()
+    };
+    for root in [&first, &second] {
+        assert_eq!(
+            std::fs::metadata(root).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+        for (name, schema) in [
+            ("run.json", "secureflow-run-v2.schema.json"),
+            (
+                "catalog.core.manifest.json",
+                "secureflow-catalog-bundle-v1.schema.json",
+            ),
+            ("correlation.json", "secureflow-correlation-v2.schema.json"),
+            (
+                "orchestration.json",
+                "secureflow-orchestration-v1.schema.json",
+            ),
+        ] {
+            validate_with_schema(schema, &read_json(root, name));
+        }
+        let run = read_json(root, "run.json");
+        assert_eq!(run["engine"]["sandbox_name"], "bubblewrap");
+        assert_eq!(
+            run["target"]["root_sha256"],
+            sha256_target(&repository.join("tests/fixtures/codesupply-ready/target")).unwrap()
+        );
+        let correlation = read_json(root, "correlation.json");
+        assert_eq!(
+            correlation["linked_run"]["manifest_sha256"],
+            sha256_bytes(&std::fs::read(root.join("run.json")).unwrap())
+        );
+        assert_eq!(
+            correlation["semantics"]["causal_relationship_asserted"],
+            false
+        );
+        assert_eq!(
+            correlation["semantics"]["validation_authority"],
+            "human-only"
+        );
+        assert_eq!(
+            run["findings"][0]["human_review"],
+            serde_json::json!({"decision": "pending"})
+        );
+    }
+    for name in [
+        "fixture-inputs.json",
+        "engine-report.json",
+        "synthetic-osv.zip",
+    ] {
+        assert_eq!(
+            std::fs::read(first.join(name)).unwrap(),
+            std::fs::read(second.join(name)).unwrap()
+        );
+    }
+
+    // Negative tests operate only on the new private output directory.
+    let reject = |args: &[&str], expected_error: &str, output_name: &str| {
+        let output = Command::new(binary())
+            .current_dir(&first)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(!output.status.success(), "unexpected success: {args:?}");
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains(expected_error),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(!first.join(output_name).exists());
+    };
+    let engine = repository.join("tests/fixtures/codesupply-ready/engine.sh");
+    let target = repository.join("tests/fixtures/codesupply-ready/target");
+    reject(
+        &[
+            "scan",
+            "--binary",
+            engine.to_str().unwrap(),
+            "--authorization-reviewer",
+            "test-operator",
+            "--output",
+            "unauthorized-report.json",
+            "--manifest-output",
+            "unauthorized-run.json",
+            target.to_str().unwrap(),
+        ],
+        "authorization",
+        "unauthorized-run.json",
+    );
+    assert!(!first.join("unauthorized-report.json").exists());
+    let expected_hash =
+        std::fs::read_to_string(first.join("expected-manifest-sha256.txt")).unwrap();
+    let wrong_hash = "0".repeat(64);
+    reject(
+        &[
+            "catalog-bundle-install",
+            "--bundle",
+            "catalog.core.sqlite3.zst",
+            "--manifest",
+            "catalog.core.manifest.json",
+            "--required-profile",
+            "core",
+            "--expected-manifest-sha256",
+            &wrong_hash,
+            "--output",
+            "wrong-hash.sqlite3",
+        ],
+        "manifest hash",
+        "wrong-hash.sqlite3",
+    );
+    reject(
+        &[
+            "catalog-bundle-install",
+            "--bundle",
+            "catalog.core.sqlite3.zst",
+            "--manifest",
+            "catalog.core.manifest.json",
+            "--required-profile",
+            "malicious",
+            "--expected-manifest-sha256",
+            expected_hash.trim(),
+            "--output",
+            "wrong-profile.sqlite3",
+        ],
+        "profile",
+        "wrong-profile.sqlite3",
+    );
+    reject(
+        &[
+            "catalog-bundle-install",
+            "--bundle",
+            "catalog.core.sqlite3.zst",
+            "--manifest",
+            "catalog.core.manifest.json",
+            "--required-profile",
+            "core",
+            "--output",
+            "unpinned.sqlite3",
+        ],
+        "manifest",
+        "unpinned.sqlite3",
+    );
+    let mut substituted = std::fs::read(first.join("catalog.core.sqlite3.zst")).unwrap();
+    substituted[0] ^= 1;
+    std::fs::write(first.join("substituted.sqlite3.zst"), substituted).unwrap();
+    reject(
+        &[
+            "catalog-bundle-install",
+            "--bundle",
+            "substituted.sqlite3.zst",
+            "--manifest",
+            "catalog.core.manifest.json",
+            "--required-profile",
+            "core",
+            "--expected-manifest-sha256",
+            expected_hash.trim(),
+            "--output",
+            "substituted.sqlite3",
+        ],
+        "hash",
+        "substituted.sqlite3",
+    );
+    reject(
+        &[
+            "orchestrate-plan",
+            "--manifest",
+            "run.json",
+            "--correlation",
+            second.join("correlation.json").to_str().unwrap(),
+            "--output",
+            "cross-run.json",
+        ],
+        "advisory correlation",
+        "cross-run.json",
+    );
+    // Even the same run ID with changed retained bytes must not accept old context.
+    let mut altered = read_json(&first, "run.json");
+    altered["target"]["label"] = serde_json::json!("different synthetic label");
+    std::fs::write(
+        first.join("altered-run.json"),
+        serde_json::to_vec_pretty(&altered).unwrap(),
+    )
+    .unwrap();
+    reject(
+        &[
+            "orchestrate-plan",
+            "--manifest",
+            "altered-run.json",
+            "--correlation",
+            "correlation.json",
+            "--output",
+            "altered-plan.json",
+        ],
+        "advisory correlation",
+        "altered-plan.json",
+    );
+    let overwrite = Command::new(binary())
+        .current_dir(&first)
+        .args([
+            "catalog-bundle-install",
+            "--bundle",
+            "catalog.core.sqlite3.zst",
+            "--manifest",
+            "catalog.core.manifest.json",
+            "--required-profile",
+            "core",
+            "--expected-manifest-sha256",
+            expected_hash.trim(),
+            "--output",
+            "installed.sqlite3",
+        ])
+        .output()
+        .unwrap();
+    assert!(!overwrite.status.success());
+    assert!(String::from_utf8_lossy(&overwrite.stderr).contains("already exists"));
+    let verification = Command::new("sha256sum")
+        .current_dir(&first)
+        .args(["--check", "SHA256SUMS"])
+        .output()
+        .unwrap();
+    assert!(
+        verification.status.success(),
+        "negative cases changed original artifacts"
+    );
+    std::fs::remove_dir_all(first).unwrap();
+    std::fs::remove_dir_all(second).unwrap();
+}
