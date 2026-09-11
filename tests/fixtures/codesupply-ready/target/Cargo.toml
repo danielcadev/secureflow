@@ -1,0 +1,5 @@
+# Synthetic package context only; this crate is never built or executed.
+[package]
+name = "secureflow-fixture"
+version = "1.0.0"
+edition = "2024"

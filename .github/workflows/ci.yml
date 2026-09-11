@@ -50,6 +50,13 @@ jobs:
 
       - name: Fetch checksum-bound archives for every locked target
         run: cargo +1.92.0 fetch --locked
+      - name: Retain self-contained CodeSupply demo
+        shell: bash
+        run: |
+          bash scripts/demo-codesupply-local.sh --binary target/release/secureflow | tee target/codesupply-demo.log
+          demo_dir=$(sed -n 's/^demo artifacts retained at: //p' target/codesupply-demo.log)
+          test -n "$demo_dir"
+          cp -a "$demo_dir" target/codesupply-demo
 
       - name: Generate deterministic CycloneDX inventory
         run: |
@@ -65,5 +72,7 @@ jobs:
             target/release/secureflow
             target/secureflow-sbom.cdx.json
             target/secureflow-dependency-license-declarations.md
+            target/codesupply-demo.log
+            target/codesupply-demo/
           if-no-files-found: error
           retention-days: 14

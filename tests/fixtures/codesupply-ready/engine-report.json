@@ -1,0 +1,66 @@
+{
+  "schema_version": "secure-json-v1",
+  "engine_version": "codesupply-synthetic-v1",
+  "document_type": "scan-report",
+  "report_fingerprint": "163a3aa835c8f26b15b4aa8bf413b5a5070d81d41347304f7d88057802fd479f",
+  "findings": [
+    {
+      "finding_id": "codesupply-synthetic-candidate-v1",
+      "fingerprint": "1f831b77170563f276fb700727dbf707d4d2c41a9b5ffcf2ffd6527fb0a18191",
+      "title": "Synthetic candidate for package-context handoff",
+      "rule_id": "SYNTHETIC-001",
+      "severity": "low",
+      "confidence": "low",
+      "invariant": "Synthetic context requires an independent human decision",
+      "verification_state": "syntactic-lead",
+      "source": {
+        "path": "src/lib.rs",
+        "span": {
+          "start_line": 2,
+          "start_column": 1,
+          "end_line": 2,
+          "end_column": 2
+        }
+      },
+      "sink": {
+        "path": "src/lib.rs",
+        "span": {
+          "start_line": 3,
+          "start_column": 1,
+          "end_line": 3,
+          "end_column": 2
+        }
+      },
+      "evidence_path": [
+        {
+          "kind": "source",
+          "location": {
+            "path": "src/lib.rs",
+            "span": {
+              "start_line": 2,
+              "start_column": 1,
+              "end_line": 2,
+              "end_column": 2
+            }
+          }
+        },
+        {
+          "kind": "sink",
+          "location": {
+            "path": "src/lib.rs",
+            "span": {
+              "start_line": 3,
+              "start_column": 1,
+              "end_line": 3,
+              "end_column": 2
+            }
+          }
+        }
+      ],
+      "limitations": [
+        "Synthetic contract data, not an actual security finding.",
+        "No target behavior was analyzed or executed."
+      ]
+    }
+  ]
+}

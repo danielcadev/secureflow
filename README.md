@@ -25,6 +25,19 @@ demonstrated through a blind study and does not transfer final authority.
 Contextual judgment and vulnerability validation remain human responsibilities,
 and SecureFlow must abstain when evidence is insufficient.
 
+## CodeSupply: self-contained local demo
+
+Run `bash scripts/demo-codesupply-local.sh` to join a repository-contained
+synthetic candidate with a locally prepared, verified `core` advisory bundle,
+restore snapshot provenance in a working catalog, and produce a hash-linked
+human-review handoff. No sibling repositories are required. This demonstrates
+local composition and integrity, not vulnerability discovery or validation.
+
+The [CodeSupply walkthrough](docs/demo-codesupply.md) covers Linux/Rust
+prerequisites, retained artifacts, reproducibility, and release gates. Human
+validation stays pending; the flow makes no network request, active scan,
+exploit, AI transmission, or patch.
+
 ## SecureFlow Web: offline API inventory
 
 The implemented Web vertical seals a local scope with authorization and expiry,

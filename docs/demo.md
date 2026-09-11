@@ -1,5 +1,10 @@
 # Reproducible local demo
 
+For the self-contained public demonstration with bundled synthetic inputs, use
+[CodeSupply: local evidence to human review](demo-codesupply.md). The integration
+demo below intentionally requires sibling repositories and retains separate
+historical evidence.
+
 ## What it demonstrates
 
 The demo connects five verticals without modifying the original repositories:
