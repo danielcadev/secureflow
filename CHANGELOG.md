@@ -2,6 +2,14 @@
 
 All notable changes to SecureFlow are documented here.
 
+## 0.4.0-rc.2 — 2026-09-11
+
+- integrate the self-contained, offline CodeSupply demo, synthetic fixtures, strict artifact-link verification, tests, documentation, and CI retention on top of `71791c1`, preserving the v0.3.0 release controls and Review Room;
+- align workspace, lockfile, and citation metadata at `0.4.0-rc.2` and support explicitly marked release candidates in the verified publication workflow;
+- retain local-first operation, explicit target authorization, and human-only vulnerability validation; the demo leaves its synthetic candidate pending and makes no production-security or comparative-performance claim.
+
+The immutable `v0.4.0-rc.1` tag identifies the earlier divergent CodeSupply candidate (`cb888ec`), which did not include the newer v0.3.0 and Review Room history. This cumulative candidate reconciles its changes onto the newer main branch; it does not replace or move that tag.
+
 ## 0.3.0 — 2026-08-30
 
 - prepare a deterministic source-only archive alongside the explicitly host-specific Linux bundle, with adjacent checksums and documented verification boundaries;
