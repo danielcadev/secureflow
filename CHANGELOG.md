@@ -2,6 +2,12 @@
 
 All notable changes to SecureFlow are documented here.
 
+## 0.4.0-rc.3 — 2026-09-11
+
+- provision Bubblewrap in both hosted CI and release builds, grant only the packaged executable the AppArmor user-namespace permission required on Ubuntu 24.04, and fail early if the adapter sandbox cannot execute;
+- bind the runner setup helper into publication-control equality checks and retain mandatory CodeSupply integration coverage;
+- supersede the unpublished `v0.4.0-rc.2` candidate after its hosted sandbox gates failed; preserve both earlier candidate tags unchanged and retain the cumulative v0.3.0/Review Room history.
+
 ## 0.4.0-rc.2 — 2026-09-11
 
 - integrate the self-contained, offline CodeSupply demo, synthetic fixtures, strict artifact-link verification, tests, documentation, and CI retention on top of `71791c1`, preserving the v0.3.0 release controls and Review Room;

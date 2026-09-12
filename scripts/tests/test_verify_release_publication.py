@@ -436,6 +436,7 @@ class ReleasePublicationVerifierTests(unittest.TestCase):
                 ".github/workflows/release.yml",
                 ".github/workflows/publish-release.yml",
                 "scripts/release-local.sh",
+                "scripts/ci-bubblewrap.sh",
                 "scripts/verify_release_worktree.py",
                 "scripts/materialize_exact_tree.py",
                 "scripts/create_source_archive.py",

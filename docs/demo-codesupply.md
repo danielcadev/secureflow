@@ -133,7 +133,7 @@ separate from the original checksum set and regenerate its downstream context.
 
 CI runs the public script with the built CLI on Rust 1.92.0, alongside formatting,
 Clippy, workspace tests, and the dependency audit, and retains its artifacts.
-That CI result is evidence only for its exact revision. The v0.4.0-rc.2 GitHub
+That CI result is evidence only for its exact revision. The v0.4.0-rc.3 GitHub
 prerelease includes a separate versioned validation receipt and checksum; the
 walkthrough itself is not evidence that any gate passed.
 

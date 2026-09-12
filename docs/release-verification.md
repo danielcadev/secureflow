@@ -13,6 +13,8 @@ Local operators may set `TMPDIR` to an existing writable directory with sufficie
 
 Release candidates are published with GitHub prerelease status and are explicitly excluded from Latest; the verifier rejects a draft whose prerelease status does not match its tag. An operator may attach an additional versioned validation receipt and its checksum after the four workflow assets are verified and published. Such a receipt is supplementary operator evidence, not a GitHub-attested archive.
 
+The hosted build and CI install Bubblewrap and check the adapter’s exact sandbox flags before running tests. On Ubuntu runners with AppArmor user-namespace restrictions, `scripts/ci-bubblewrap.sh` grants that permission specifically to `/usr/bin/bwrap`; it refuses execution outside disposable GitHub-hosted Linux runners and does not disable the host-wide restriction. The helper is included in the publication-control equality check.
+
 ## Review a tagged build before publication
 
 Creating the approved tag starts construction and attestation only. After the tag workflow succeeds, record the complete build identity and download the exact retained artifact into a new directory. The following procedure rejects paginated or ambiguous artifact metadata, binds the artifact to the approved attempt, verifies the downloaded artifact ZIP against GitHub's SHA-256, and then verifies both adjacent checksums:
