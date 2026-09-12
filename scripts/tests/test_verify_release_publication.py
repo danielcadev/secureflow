@@ -337,6 +337,19 @@ class ReleasePublicationVerifierTests(unittest.TestCase):
             with self.assertRaises(VERIFIER.VerificationError):
                 VERIFIER.validate_draft_release(changed_digest, self.tag, assets, release_notes)
 
+    def test_release_candidate_cannot_be_published_as_stable(self) -> None:
+        tag = "v0.4.0-rc.2"
+        document = {
+            "isDraft": True, "isPrerelease": True, "tagName": tag,
+            "name": f"SecureFlow {tag}", "body": "candidate notes\n", "assets": [],
+        }
+        VERIFIER.validate_draft_release(document, tag, {}, "candidate notes\n")
+        for invalid in (False, None, 1, "true"):
+            with self.subTest(invalid=invalid):
+                document["isPrerelease"] = invalid
+                with self.assertRaises(VERIFIER.VerificationError):
+                    VERIFIER.validate_draft_release(document, tag, {}, "candidate notes\n")
+
     def test_release_notes_are_materialized_from_a_regular_git_blob(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repository = pathlib.Path(temporary) / "repository"
@@ -513,11 +526,12 @@ class ReleasePublicationVerifierTests(unittest.TestCase):
     def test_input_parsers_reject_ambiguous_values(self) -> None:
         self.assertEqual(VERIFIER.parse_run_id("42"), 42)
         self.assertEqual(VERIFIER.parse_tag(self.tag), "0.3.0")
+        self.assertEqual(VERIFIER.parse_tag("v0.4.0-rc.2"), "0.4.0-rc.2")
         self.assertEqual(VERIFIER.parse_artifact_digest(self.artifact_digest), self.artifact_digest)
         for value in ("0", "-1", "latest", "01"):
             with self.subTest(run_id=value), self.assertRaises(VERIFIER.VerificationError):
                 VERIFIER.parse_run_id(value)
-        for value in ("0.3.0", "v0.3", "v0.3.0-rc1", "v00.3.0", "refs/tags/v0.3.0"):
+        for value in ("0.3.0", "v0.3", "v0.3.0-rc1", "v0.3.0-rc.0", "v0.3.0-rc.01", "v0.3.0-beta.1", "v0.3.0-rc.2+meta", "v00.3.0", "refs/tags/v0.3.0"):
             with self.subTest(tag=value), self.assertRaises(VERIFIER.VerificationError):
                 VERIFIER.parse_tag(value)
         for value in ("b" * 64, "sha256:BAD", f"sha512:{'b' * 64}"):

@@ -133,8 +133,9 @@ separate from the original checksum set and regenerate its downstream context.
 
 CI runs the public script with the built CLI on Rust 1.92.0, alongside formatting,
 Clippy, workspace tests, and the dependency audit, and retains its artifacts.
-That CI result is evidence only for its exact revision. This working change is
-not a tagged release receipt.
+That CI result is evidence only for its exact revision. The v0.4.0-rc.2 GitHub
+prerelease includes a separate versioned validation receipt and checksum; the
+walkthrough itself is not evidence that any gate passed.
 
 After the maintainer commits the intended changes, including the accepted plan,
 and selects a matching version/tag, use a separate clean checkout with the

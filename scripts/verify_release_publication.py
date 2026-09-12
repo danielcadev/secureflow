@@ -34,7 +34,7 @@ MAX_JSON_BYTES = 16 * 1024 * 1024
 MAX_ARTIFACT_BYTES = 4 * 1024 * 1024 * 1024
 MAX_RELEASE_NOTES_BYTES = 1024 * 1024
 REMOTE_TAG_REF = "refs/secureflow-release-verification/remote-tag"
-TAG_PATTERN = re.compile(r"^v((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))$")
+TAG_PATTERN = re.compile(r"^v((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-rc\.[1-9][0-9]*)?)$")
 SHA256_PATTERN = re.compile(r"^sha256:([0-9a-f]{64})$")
 COMMIT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 REPOSITORY_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
@@ -66,7 +66,7 @@ def parse_artifact_digest(value: str) -> str:
 
 def parse_tag(value: str) -> str:
     match = TAG_PATTERN.fullmatch(value)
-    require(match is not None, "tag must be a stable vMAJOR.MINOR.PATCH value")
+    require(match is not None, "tag must be vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-rc.N (N >= 1)")
     assert match is not None
     return match.group(1)
 
@@ -406,7 +406,7 @@ def validate_draft_release(
     release_notes: str,
 ) -> None:
     require(document.get("isDraft") is True, "staged release is not a draft")
-    require(document.get("isPrerelease") is False, "staged release is unexpectedly a prerelease")
+    require(document.get("isPrerelease") is ("-rc." in parse_tag(tag)), "staged release prerelease state does not match the tag")
     require(document.get("tagName") == tag, "staged release tag does not match")
     require(document.get("name") == f"SecureFlow {tag}", "staged release title does not match")
     require(document.get("body") == release_notes, "staged release body does not match the selected release-note blob")

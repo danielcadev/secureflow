@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing stable release tag approved for publication (for example, v0.3.0)
+        description: Existing stable or rc.N tag approved for publication (for example, v0.4.0-rc.2)
         required: true
         type: string
       build_run_id:
@@ -52,7 +52,7 @@ jobs:
           DISPATCH_WORKFLOW_SHA: ${{ github.workflow_sha }}
         run: |
           set -euo pipefail
-          [[ "${RELEASE_TAG}" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          [[ "${RELEASE_TAG}" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rc\.[1-9][0-9]*)?$ ]]
           [[ "${BUILD_RUN_ID}" =~ ^[1-9][0-9]*$ ]]
           [[ "${BUILD_RUN_ATTEMPT}" =~ ^[1-9][0-9]*$ ]]
           [[ "${ARTIFACT_ID}" =~ ^[1-9][0-9]*$ ]]
@@ -268,12 +268,17 @@ jobs:
           tag_commit=$(git -C tag-source rev-parse --verify --end-of-options "refs/tags/${RELEASE_TAG}^{commit}")
           version=${RELEASE_TAG#v}
           release_name="secureflow-${version}-${tag_commit:0:12}"
+          release_flags=()
+          if [[ "${RELEASE_TAG}" == *-rc.* ]]; then
+            release_flags+=(--prerelease --latest=false)
+          fi
           gh release create "${RELEASE_TAG}" \
             "target/dist/${release_name}.tar.gz" \
             "target/dist/${release_name}.tar.gz.sha256" \
             "target/dist/${release_name}-source.tar.gz" \
             "target/dist/${release_name}-source.tar.gz.sha256" \
             --repo "${GITHUB_REPOSITORY}" \
+            "${release_flags[@]}" \
             --draft \
             --verify-tag \
             --title "SecureFlow ${RELEASE_TAG}" \

@@ -86,7 +86,7 @@ class ReleaseWorkflowPolicyTests(unittest.TestCase):
         self.assertGreaterEqual(self.publish.count("--artifact-id"), 5)
         self.assertGreaterEqual(self.publish.count("--artifact-digest"), 5)
         self.assertNotIn("gh run list", self.publish)
-        self.assertNotIn("latest", self.publish.lower())
+        self.assertNotIn("latest", self.publish.lower().replace("--latest=false", ""))
 
     def test_untrusted_dispatch_expressions_never_enter_shell_source(self) -> None:
         blocks = run_blocks(self.publish)
@@ -94,6 +94,8 @@ class ReleaseWorkflowPolicyTests(unittest.TestCase):
         for block in blocks:
             self.assertNotIn("${{ inputs.", block)
         self.assertIn("RELEASE_TAG: ${{ inputs.tag }}", self.publish)
+        self.assertIn("release_flags+=(--prerelease --latest=false)", self.publish)
+        self.assertIn('"${release_flags[@]}"', self.publish)
         self.assertIn("BUILD_RUN_ID: ${{ inputs.build_run_id }}", self.publish)
         self.assertIn("BUILD_RUN_ATTEMPT: ${{ inputs.build_run_attempt }}", self.publish)
         self.assertIn("ARTIFACT_ID: ${{ inputs.artifact_id }}", self.publish)
