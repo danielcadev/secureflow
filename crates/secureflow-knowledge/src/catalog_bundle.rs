@@ -316,6 +316,78 @@ pub fn install_bundle(
     Ok(verification)
 }
 
+/// A private verified database retained across the trusted-state checkpoint.
+/// Kept crate-private so callers cannot bypass the normal bundle policy.
+pub(crate) struct PreparedBundleInstall {
+    path: PathBuf,
+    guard: TemporaryDirectory,
+    descriptor: CatalogDatabaseDescriptor,
+}
+
+pub(crate) fn prepare_trusted_install(
+    opened: File,
+    bundle: &Path,
+    parsed: &ParsedCatalogBundleManifest,
+    output: &Path,
+    policy: &CatalogBundleVerificationPolicy,
+) -> Result<PreparedBundleInstall, BundleError> {
+    ensure_new_catalog_output(output)?;
+    if validate_policy(parsed, policy)? != CatalogBundleAuthenticity::ManifestSha256Pinned {
+        return Err(BundleError::ManifestAuthenticityRequired);
+    }
+    let (directory, guard) =
+        create_private_temporary_directory(output_parent(output), output, "trusted-install")?;
+    let path = directory.join("catalog.sqlite3");
+    decompress_opened(bundle, parsed, policy, &path, opened)?;
+    Ok(PreparedBundleInstall {
+        path,
+        guard,
+        descriptor: parsed.manifest.payload.clone(),
+    })
+}
+
+impl PreparedBundleInstall {
+    pub(crate) fn publish(mut self, output: &Path) -> Result<(), BundleError> {
+        ensure_new_catalog_output(output)?;
+        fs::hard_link(&self.path, output).map_err(|source| BundleError::Filesystem {
+            path: output.into(),
+            source,
+        })?;
+        // After publication preserve the output on error: the trust journal owns
+        // recovery and must never remove a conflicting or unrelated file.
+        File::open(output)
+            .and_then(|file| file.sync_all())
+            .map_err(|source| BundleError::Filesystem {
+                path: output.into(),
+                source,
+            })?;
+        sync_parent(output_parent(output))?;
+        self.guard.cleanup();
+        verify_installed_descriptor(output, &self.descriptor)?;
+        sync_parent(output_parent(output))?;
+        Ok(())
+    }
+}
+
+pub(crate) fn verify_installed_descriptor(
+    path: &Path,
+    expected: &CatalogDatabaseDescriptor,
+) -> Result<(), BundleError> {
+    for sidecar in sqlite_sidecar_paths(path) {
+        ensure_new_output(&sidecar)?;
+    }
+    // The complete descriptor was checked before publication. Exact bytes bind
+    // that result without opening SQLite again (which could create WAL/SHM files).
+    let mut file = open_regular_file(path)?;
+    let (hash, length) = hash_open_file_bounded(&mut file, path, expected.database_bytes)?;
+    if hash != expected.database_sha256 || length != expected.database_bytes {
+        return Err(BundleError::InvalidField(
+            "pending output conflicts with verified descriptor",
+        ));
+    }
+    Ok(())
+}
+
 impl CatalogBundleManifest {
     pub fn validate(&self) -> Result<(), BundleError> {
         if self.contract_version != BUNDLE_VERSION
@@ -397,9 +469,38 @@ fn decompress_and_verify(
     policy: &CatalogBundleVerificationPolicy,
     temporary_path: &Path,
 ) -> Result<CatalogBundleVerification, BundleError> {
+    let bundle = open_regular_file(bundle_path)?;
+    decompress_opened(bundle_path, parsed, policy, temporary_path, bundle)
+}
+
+pub(crate) fn verify_trusted_bundle(
+    bundle_path: &Path,
+    opened: File,
+    parsed: &ParsedCatalogBundleManifest,
+    policy: &CatalogBundleVerificationPolicy,
+) -> Result<(), BundleError> {
+    let parent = std::env::temp_dir();
+    let (directory, _guard) =
+        create_private_temporary_directory(&parent, Path::new("trusted-verify"), "verify")?;
+    decompress_opened(
+        bundle_path,
+        parsed,
+        policy,
+        &directory.join("catalog.sqlite3"),
+        opened,
+    )?;
+    Ok(())
+}
+
+fn decompress_opened(
+    bundle_path: &Path,
+    parsed: &ParsedCatalogBundleManifest,
+    policy: &CatalogBundleVerificationPolicy,
+    temporary_path: &Path,
+    mut bundle: File,
+) -> Result<CatalogBundleVerification, BundleError> {
     let authenticity = validate_policy(parsed, policy)?;
     let manifest = &parsed.manifest;
-    let mut bundle = open_regular_file(bundle_path)?;
     let observed_size = bundle
         .metadata()
         .map_err(|source| BundleError::Filesystem {
@@ -410,7 +511,8 @@ fn decompress_and_verify(
     if observed_size != manifest.compressed_bytes {
         return Err(BundleError::CompressedSizeMismatch);
     }
-    let (compressed_hash, compressed_bytes) = hash_open_file(&mut bundle, bundle_path)?;
+    let (compressed_hash, compressed_bytes) =
+        hash_open_file_bounded(&mut bundle, bundle_path, manifest.compressed_bytes)?;
     if compressed_bytes != manifest.compressed_bytes {
         return Err(BundleError::CompressedSizeMismatch);
     }
@@ -823,6 +925,14 @@ fn open_regular_file(path: &Path) -> Result<File, BundleError> {
 }
 
 fn hash_open_file(file: &mut File, path: &Path) -> Result<(String, u64), BundleError> {
+    hash_open_file_bounded(file, path, MAX_BUNDLE_DATABASE_BYTES)
+}
+
+fn hash_open_file_bounded(
+    file: &mut File,
+    path: &Path,
+    maximum: u64,
+) -> Result<(String, u64), BundleError> {
     file.seek(SeekFrom::Start(0))
         .map_err(|source| BundleError::Filesystem {
             path: path.to_owned(),
@@ -832,16 +942,23 @@ fn hash_open_file(file: &mut File, path: &Path) -> Result<(String, u64), BundleE
     let mut bytes = 0_u64;
     let mut buffer = vec![0_u8; 1024 * 1024];
     loop {
-        let read = file
-            .read(&mut buffer)
-            .map_err(|source| BundleError::Filesystem {
-                path: path.to_owned(),
-                source,
-            })?;
+        let remaining = maximum
+            .saturating_sub(bytes)
+            .saturating_add(1)
+            .min(buffer.len() as u64) as usize;
+        let read =
+            file.read(&mut buffer[..remaining])
+                .map_err(|source| BundleError::Filesystem {
+                    path: path.to_owned(),
+                    source,
+                })?;
         if read == 0 {
             break;
         }
         bytes = bytes.saturating_add(read as u64);
+        if bytes > maximum {
+            return Err(BundleError::InvalidField("actual file bytes exceed bound"));
+        }
         hasher.update(&buffer[..read]);
     }
     file.seek(SeekFrom::Start(0))

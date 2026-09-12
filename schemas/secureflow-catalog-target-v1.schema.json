@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://secureflow.dev/schemas/secureflow-catalog-target-v1.schema.json",
+  "title": "secureflow-catalog-target-v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "publisher_id",
+    "catalog_id",
+    "channel",
+    "profile",
+    "profile_policy_version",
+    "bundle_id",
+    "release_sequence",
+    "manifest_contract_version",
+    "validation_authority"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "secureflow-catalog-target-v1"
+    },
+    "publisher_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "catalog_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "channel": {
+      "$ref": "#/$defs/identifier"
+    },
+    "profile": {
+      "$ref": "#/$defs/profile"
+    },
+    "profile_policy_version": {
+      "const": "secureflow-catalog-profile-policy-v2"
+    },
+    "bundle_id": {
+      "type": "string",
+      "pattern": "^sf_catalog_bundle_[0-9a-f]{64}$"
+    },
+    "release_sequence": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "manifest_contract_version": {
+      "const": "secureflow-catalog-bundle-v1"
+    },
+    "validation_authority": {
+      "const": "external-records-require-human-validation"
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+    },
+    "profile": {
+      "enum": [
+        "core",
+        "malicious",
+        "full"
+      ]
+    }
+  }
+}

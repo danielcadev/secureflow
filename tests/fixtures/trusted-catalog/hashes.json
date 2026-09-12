@@ -1,0 +1,12 @@
+{
+  "1.root.json": "4d67f6acd1e76a20995919d13ca2f8ed34cc045eca54b74f005f17c01f2a4ace",
+  "1.snapshot.json": "d43a6b6819789c416d4058a5508bea8ed5312a8829d1d5b74a56f19a6ee5c564",
+  "1.targets.json": "c0c3b9231ab53c755b85e0e0f2e05a2b1446c362244ab48f27049210a8690274",
+  "catalog.manifest.json": "9ec0bc6e1b8ebfb636b50da5ffcac4f6af0e237f8ec2b53e6334c48b1d6231d7",
+  "catalog.sqlite3.zst": "156200cb9c19202628b364a33f30b54589270babe1b99fcdf395be53a862e386",
+  "root.canonical": "aa2a9bacb633eaff8544b4e6d9308faac831845b163476bfe25a99490c25d031",
+  "snapshot.canonical": "9457ef98da5636fbbadf119ed4fd9f29cc6217173b987fa82801dca8e6f2b33f",
+  "targets.canonical": "1db5500480e8ce198b4fb260f1585d0df8cefd79a0da14dddc26104d94aa6f12",
+  "timestamp.canonical": "3ef17db72376da4bb9a61d9a5ceced845ae2a57f0e92bc749f03b586227dc56d",
+  "timestamp.json": "d95574bcb7d2dc5d34e135c6e7e04f3788f38ad876201603579e137ecdc4873a"
+}

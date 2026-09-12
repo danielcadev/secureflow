@@ -1,0 +1,333 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://secureflow.dev/schemas/secureflow-catalog-trust-receipt-v1.schema.json",
+  "title": "secureflow-catalog-trust-receipt-v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "operation",
+    "installation",
+    "transaction_id",
+    "output",
+    "integrity",
+    "publisher_authenticity",
+    "freshness",
+    "rollback",
+    "scope",
+    "release_sequence",
+    "initial_root_sha256",
+    "current_root_sha256",
+    "metadata",
+    "manifest_sha256",
+    "manifest_bytes",
+    "database_sha256",
+    "database_bytes",
+    "policy_sha256",
+    "clock",
+    "earliest_expiry",
+    "state_generation",
+    "reserves_acceptance",
+    "validation_authority",
+    "limitations"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "secureflow-catalog-trust-receipt-v1"
+    },
+    "operation": {
+      "enum": [
+        "verify",
+        "install"
+      ]
+    },
+    "installation": {
+      "enum": [
+        "not-requested",
+        "pending",
+        "complete"
+      ]
+    },
+    "transaction_id": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/sha256"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "output": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 4096,
+          "pattern": "^/"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "integrity": {
+      "const": "verified"
+    },
+    "publisher_authenticity": {
+      "const": "tuf-root-authorized"
+    },
+    "freshness": {
+      "const": "within-local-policy-as-of"
+    },
+    "rollback": {
+      "const": "accepted-against-local-state"
+    },
+    "scope": {
+      "$ref": "#/$defs/scope"
+    },
+    "release_sequence": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "initial_root_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "current_root_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "root",
+        "targets",
+        "snapshot",
+        "timestamp"
+      ],
+      "properties": {
+        "root": {
+          "$ref": "#/$defs/roleEvidence"
+        },
+        "targets": {
+          "$ref": "#/$defs/roleEvidence"
+        },
+        "snapshot": {
+          "$ref": "#/$defs/roleEvidence"
+        },
+        "timestamp": {
+          "$ref": "#/$defs/roleEvidence"
+        }
+      }
+    },
+    "manifest_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "manifest_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2097152
+    },
+    "database_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "database_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 17179869184
+    },
+    "policy_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "clock": {
+      "$ref": "#/$defs/clock"
+    },
+    "earliest_expiry": {
+      "$ref": "#/$defs/utc"
+    },
+    "state_generation": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "reserves_acceptance": {
+      "type": "boolean"
+    },
+    "validation_authority": {
+      "const": "human-only"
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 2048
+      },
+      "minItems": 1,
+      "maxItems": 16
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "verify"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "installation": {
+            "const": "not-requested"
+          },
+          "transaction_id": {
+            "const": null
+          },
+          "output": {
+            "const": null
+          },
+          "reserves_acceptance": {
+            "const": false
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "installation": {
+            "enum": [
+              "pending",
+              "complete"
+            ]
+          },
+          "transaction_id": {
+            "$ref": "#/$defs/sha256"
+          },
+          "output": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 4096,
+            "pattern": "^/"
+          },
+          "reserves_acceptance": {
+            "const": true
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "clock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verification_time",
+        "time_source",
+        "time_reference"
+      ],
+      "properties": {
+        "verification_time": {
+          "$ref": "#/$defs/utc"
+        },
+        "time_source": {
+          "enum": [
+            "operator-attested",
+            "operator-trusted-system-clock"
+          ]
+        },
+        "time_reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        }
+      }
+    },
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+    },
+    "profile": {
+      "enum": [
+        "core",
+        "malicious",
+        "full"
+      ]
+    },
+    "roleEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "raw_sha256",
+        "signed_sha256",
+        "expires",
+        "accepted_signer_ids",
+        "threshold"
+      ],
+      "properties": {
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        },
+        "raw_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "signed_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "expires": {
+          "$ref": "#/$defs/utc"
+        },
+        "accepted_signer_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sha256"
+          },
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true
+        },
+        "threshold": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "publisher_id",
+        "catalog_id",
+        "channel",
+        "profile"
+      ],
+      "properties": {
+        "publisher_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "catalog_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "channel": {
+          "$ref": "#/$defs/identifier"
+        },
+        "profile": {
+          "$ref": "#/$defs/profile"
+        }
+      }
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "utc": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+      "format": "date-time"
+    }
+  }
+}

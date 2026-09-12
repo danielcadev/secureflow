@@ -7,6 +7,7 @@
 pub mod catalog;
 pub mod catalog_backup;
 pub mod catalog_bundle;
+pub mod catalog_trust;
 pub mod correlation;
 pub mod delta;
 pub mod snapshot;

@@ -1,0 +1,109 @@
+{
+  "contract_version": "secureflow-catalog-bundle-v1",
+  "bundle_id": "sf_catalog_bundle_a13da24fc685d1a0eb58b3a61831a83d908359574f7389f7593b3e0598163f0c",
+  "created_at": "2026-09-12T07:48:07.449531163Z",
+  "profile": "full",
+  "profile_policy_version": "secureflow-catalog-profile-policy-v2",
+  "derivation": "byte-exact-online-backup",
+  "compression": {
+    "algorithm": "zstd",
+    "level": 3,
+    "checksum": true,
+    "content_size": true,
+    "single_frame": true
+  },
+  "compressed_sha256": "156200cb9c19202628b364a33f30b54589270babe1b99fcdf395be53a862e386",
+  "compressed_bytes": 3249,
+  "payload": {
+    "database_sha256": "b29cd9069d9ef92ded48989ccb51254609d415324bbfa35efa80f774d6e834d0",
+    "database_bytes": 208896,
+    "application_id": 1397115714,
+    "schema_version": 3,
+    "stats": {
+      "schema_version": 3,
+      "sources": 0,
+      "canonical_vulnerabilities": 0,
+      "active_canonical_vulnerabilities": 0,
+      "source_records": 0,
+      "active_source_records": 0,
+      "inactive_source_records": 0,
+      "source_record_revisions": 0,
+      "snapshots": 0,
+      "deltas": 0,
+      "complete_deltas": 0,
+      "identifiers": 0,
+      "relationships": 0,
+      "affected_packages": 0,
+      "references": 0,
+      "raw_revision_bytes": 0,
+      "database_bytes": 208896,
+      "search_index_status": "ready"
+    },
+    "integrity": {
+      "quick_check": "ok",
+      "foreign_key_violations": 0,
+      "search_index_status": "ready"
+    },
+    "provenance": {
+      "schema_version": 3,
+      "complete_snapshot_ids": [],
+      "canonicalization": "exact-osv-alias-union-v1",
+      "last_canonical_rebuild_id": null
+    },
+    "composition": {
+      "policy_version": "secureflow-catalog-profile-policy-v2",
+      "active_advisory_records": 0,
+      "active_malicious_package_records": 0,
+      "active_unclassified_records": 0,
+      "inactive_records": 0,
+      "sources": []
+    }
+  },
+  "origin": {
+    "database_sha256": "b29cd9069d9ef92ded48989ccb51254609d415324bbfa35efa80f774d6e834d0",
+    "database_bytes": 208896,
+    "application_id": 1397115714,
+    "schema_version": 3,
+    "stats": {
+      "schema_version": 3,
+      "sources": 0,
+      "canonical_vulnerabilities": 0,
+      "active_canonical_vulnerabilities": 0,
+      "source_records": 0,
+      "active_source_records": 0,
+      "inactive_source_records": 0,
+      "source_record_revisions": 0,
+      "snapshots": 0,
+      "deltas": 0,
+      "complete_deltas": 0,
+      "identifiers": 0,
+      "relationships": 0,
+      "affected_packages": 0,
+      "references": 0,
+      "raw_revision_bytes": 0,
+      "database_bytes": 208896,
+      "search_index_status": "ready"
+    },
+    "integrity": {
+      "quick_check": "ok",
+      "foreign_key_violations": 0,
+      "search_index_status": "ready"
+    },
+    "provenance": {
+      "schema_version": 3,
+      "complete_snapshot_ids": [],
+      "canonicalization": "exact-osv-alias-union-v1",
+      "last_canonical_rebuild_id": null
+    },
+    "composition": {
+      "policy_version": "secureflow-catalog-profile-policy-v2",
+      "active_advisory_records": 0,
+      "active_malicious_package_records": 0,
+      "active_unclassified_records": 0,
+      "inactive_records": 0,
+      "sources": []
+    }
+  },
+  "validation_authority": "external-records-require-human-validation",
+  "authenticity": "unsigned-manifest-requires-external-sha256"
+}

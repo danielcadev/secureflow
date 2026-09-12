@@ -1,0 +1,41 @@
+{
+  "signed": {
+    "_type": "targets",
+    "spec_version": "1.0.0",
+    "version": 1,
+    "expires": "2026-10-01T00:00:00Z",
+    "publisher_note": "Unicode preserved: é / é",
+    "targets": {
+      "catalogs/advisories/stable/full.manifest.json": {
+        "length": 3383,
+        "hashes": {
+          "sha256": "9ec0bc6e1b8ebfb636b50da5ffcac4f6af0e237f8ec2b53e6334c48b1d6231d7"
+        },
+        "custom": {
+          "secureflow": {
+            "contract_version": "secureflow-catalog-target-v1",
+            "publisher_id": "synthetic",
+            "catalog_id": "advisories",
+            "channel": "stable",
+            "profile": "full",
+            "profile_policy_version": "secureflow-catalog-profile-policy-v2",
+            "bundle_id": "sf_catalog_bundle_a13da24fc685d1a0eb58b3a61831a83d908359574f7389f7593b3e0598163f0c",
+            "release_sequence": 1,
+            "manifest_contract_version": "secureflow-catalog-bundle-v1",
+            "validation_authority": "external-records-require-human-validation"
+          }
+        }
+      }
+    }
+  },
+  "signatures": [
+    {
+      "keyid": "d842deb296181e66e0c04e07e93672f772056d13436998497e11a2b8b39899b2",
+      "sig": "b3a730e2052115875916deb1164cef62b65b7e222d18e783526f90edae4aa9a599fb94d17929eb012ba6a4121053297e94f8a2cee0f2d61e49f2679dcbec6801"
+    },
+    {
+      "keyid": "0a2270fd5aa7eb50601b4352537d6dfd264a2b515c742c9038e21bae78ead21a",
+      "sig": "19154b21b562932d99c475c7f3b095550bb2cb184b838246f70db38c4f71ec36da0198938c1b93cbd10bcfde0051604de32df0b64017c060306018fc09b39005"
+    }
+  ]
+}

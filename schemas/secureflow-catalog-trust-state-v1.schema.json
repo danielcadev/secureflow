@@ -1,0 +1,868 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://secureflow.dev/schemas/secureflow-catalog-trust-state-v1.schema.json",
+  "title": "secureflow-catalog-trust-state-v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "policy",
+    "policy_sha256",
+    "roots",
+    "roles",
+    "floors",
+    "maximum_verification_time",
+    "generation",
+    "pending",
+    "completed"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "secureflow-catalog-trust-state-v1"
+    },
+    "policy": {
+      "$ref": "#/$defs/policy"
+    },
+    "policy_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "roots": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 65536
+      },
+      "minItems": 1,
+      "maxItems": 1024
+    },
+    "roles": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "targets": {
+          "$ref": "#/$defs/roleRecord"
+        },
+        "snapshot": {
+          "$ref": "#/$defs/roleRecord"
+        },
+        "timestamp": {
+          "$ref": "#/$defs/roleRecord"
+        }
+      }
+    },
+    "floors": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "core": {
+          "$ref": "#/$defs/floor"
+        },
+        "malicious": {
+          "$ref": "#/$defs/floor"
+        },
+        "full": {
+          "$ref": "#/$defs/floor"
+        }
+      }
+    },
+    "maximum_verification_time": {
+      "$ref": "#/$defs/utc"
+    },
+    "generation": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "pending": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/pending"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "completed": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/receipt"
+      },
+      "maxProperties": 4096,
+      "propertyNames": {
+        "$ref": "#/$defs/sha256"
+      }
+    }
+  },
+  "$defs": {
+    "clock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verification_time",
+        "time_source",
+        "time_reference"
+      ],
+      "properties": {
+        "verification_time": {
+          "$ref": "#/$defs/utc"
+        },
+        "time_source": {
+          "enum": [
+            "operator-attested",
+            "operator-trusted-system-clock"
+          ]
+        },
+        "time_reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        }
+      }
+    },
+    "composition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy_version",
+        "active_advisory_records",
+        "active_malicious_package_records",
+        "active_unclassified_records",
+        "inactive_records",
+        "sources"
+      ],
+      "properties": {
+        "policy_version": {
+          "const": "secureflow-catalog-profile-policy-v2"
+        },
+        "active_advisory_records": {
+          "$ref": "#/$defs/count"
+        },
+        "active_malicious_package_records": {
+          "$ref": "#/$defs/count"
+        },
+        "active_unclassified_records": {
+          "$ref": "#/$defs/count"
+        },
+        "inactive_records": {
+          "$ref": "#/$defs/count"
+        },
+        "sources": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": {
+            "$ref": "#/$defs/composition_source"
+          }
+        }
+      }
+    },
+    "composition_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "license_expression",
+        "license_evidence_sha256",
+        "locator",
+        "active_advisory_records",
+        "active_malicious_package_records",
+        "active_unclassified_records"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "license_expression": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "license_evidence_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "locator": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "active_advisory_records": {
+          "$ref": "#/$defs/count"
+        },
+        "active_malicious_package_records": {
+          "$ref": "#/$defs/count"
+        },
+        "active_unclassified_records": {
+          "$ref": "#/$defs/count"
+        }
+      }
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "database": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "database_sha256",
+        "database_bytes",
+        "application_id",
+        "schema_version",
+        "stats",
+        "integrity",
+        "provenance",
+        "composition"
+      ],
+      "properties": {
+        "database_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "database_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 17179869184
+        },
+        "application_id": {
+          "const": 1397115714
+        },
+        "schema_version": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 3
+        },
+        "stats": {
+          "$ref": "#/$defs/stats"
+        },
+        "integrity": {
+          "$ref": "#/$defs/integrity"
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        },
+        "composition": {
+          "$ref": "#/$defs/composition"
+        }
+      }
+    },
+    "floor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sequence",
+        "manifest_sha256"
+      ],
+      "properties": {
+        "sequence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "manifest_sha256": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+    },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "quick_check",
+        "foreign_key_violations",
+        "search_index_status"
+      ],
+      "properties": {
+        "quick_check": {
+          "const": "ok"
+        },
+        "foreign_key_violations": {
+          "const": 0
+        },
+        "search_index_status": {
+          "const": "ready"
+        }
+      }
+    },
+    "pending": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "receipt",
+        "descriptor"
+      ],
+      "properties": {
+        "receipt": {
+          "$ref": "#/$defs/receipt"
+        },
+        "descriptor": {
+          "$ref": "#/$defs/database"
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_version",
+        "publisher_id",
+        "publisher_label",
+        "catalog_id",
+        "channel",
+        "profiles",
+        "initial_root_sha256",
+        "minimum_root_version",
+        "minimum_sequence",
+        "bootstrap_manifest_sha256",
+        "minimum_thresholds",
+        "maximum_horizon_days",
+        "operator",
+        "authorization_reference",
+        "enrolled_at"
+      ],
+      "properties": {
+        "contract_version": {
+          "const": "secureflow-catalog-trust-policy-v1"
+        },
+        "publisher_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "publisher_label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "catalog_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "channel": {
+          "$ref": "#/$defs/identifier"
+        },
+        "profiles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/profile"
+          },
+          "minItems": 1,
+          "maxItems": 3,
+          "uniqueItems": true
+        },
+        "initial_root_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "minimum_root_version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        },
+        "minimum_sequence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "bootstrap_manifest_sha256": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "minimum_thresholds": {
+          "const": {
+            "root": 2,
+            "targets": 2,
+            "snapshot": 1,
+            "timestamp": 1
+          }
+        },
+        "maximum_horizon_days": {
+          "const": {
+            "root": 366,
+            "targets": 30,
+            "snapshot": 30,
+            "timestamp": 7
+          }
+        },
+        "operator": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "authorization_reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "enrolled_at": {
+          "$ref": "#/$defs/clock"
+        }
+      }
+    },
+    "profile": {
+      "enum": [
+        "core",
+        "malicious",
+        "full"
+      ]
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "complete_snapshot_ids",
+        "canonicalization",
+        "last_canonical_rebuild_id"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 3
+        },
+        "complete_snapshot_ids": {
+          "type": "array",
+          "maxItems": 1100000,
+          "items": {
+            "type": "string",
+            "maxLength": 256
+          }
+        },
+        "complete_delta_ids": {
+          "type": "array",
+          "maxItems": 1100000,
+          "items": {
+            "type": "string",
+            "maxLength": 256
+          }
+        },
+        "canonicalization": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "last_canonical_rebuild_id": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          ]
+        }
+      }
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_version",
+        "operation",
+        "installation",
+        "transaction_id",
+        "output",
+        "integrity",
+        "publisher_authenticity",
+        "freshness",
+        "rollback",
+        "scope",
+        "release_sequence",
+        "initial_root_sha256",
+        "current_root_sha256",
+        "metadata",
+        "manifest_sha256",
+        "manifest_bytes",
+        "database_sha256",
+        "database_bytes",
+        "policy_sha256",
+        "clock",
+        "earliest_expiry",
+        "state_generation",
+        "reserves_acceptance",
+        "validation_authority",
+        "limitations"
+      ],
+      "properties": {
+        "contract_version": {
+          "const": "secureflow-catalog-trust-receipt-v1"
+        },
+        "operation": {
+          "enum": [
+            "verify",
+            "install"
+          ]
+        },
+        "installation": {
+          "enum": [
+            "not-requested",
+            "pending",
+            "complete"
+          ]
+        },
+        "transaction_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "output": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 4096,
+              "pattern": "^/"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "integrity": {
+          "const": "verified"
+        },
+        "publisher_authenticity": {
+          "const": "tuf-root-authorized"
+        },
+        "freshness": {
+          "const": "within-local-policy-as-of"
+        },
+        "rollback": {
+          "const": "accepted-against-local-state"
+        },
+        "scope": {
+          "$ref": "#/$defs/scope"
+        },
+        "release_sequence": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "initial_root_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "current_root_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "root",
+            "targets",
+            "snapshot",
+            "timestamp"
+          ],
+          "properties": {
+            "root": {
+              "$ref": "#/$defs/roleEvidence"
+            },
+            "targets": {
+              "$ref": "#/$defs/roleEvidence"
+            },
+            "snapshot": {
+              "$ref": "#/$defs/roleEvidence"
+            },
+            "timestamp": {
+              "$ref": "#/$defs/roleEvidence"
+            }
+          }
+        },
+        "manifest_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "manifest_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2097152
+        },
+        "database_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "database_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 17179869184
+        },
+        "policy_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "clock": {
+          "$ref": "#/$defs/clock"
+        },
+        "earliest_expiry": {
+          "$ref": "#/$defs/utc"
+        },
+        "state_generation": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "reserves_acceptance": {
+          "type": "boolean"
+        },
+        "validation_authority": {
+          "const": "human-only"
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "minItems": 1,
+          "maxItems": 16
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "verify"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "installation": {
+                "const": "not-requested"
+              },
+              "transaction_id": {
+                "const": null
+              },
+              "output": {
+                "const": null
+              },
+              "reserves_acceptance": {
+                "const": false
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "installation": {
+                "enum": [
+                  "pending",
+                  "complete"
+                ]
+              },
+              "transaction_id": {
+                "$ref": "#/$defs/sha256"
+              },
+              "output": {
+                "type": "string",
+                "minLength": 2,
+                "maxLength": 4096,
+                "pattern": "^/"
+              },
+              "reserves_acceptance": {
+                "const": true
+              }
+            }
+          }
+        }
+      ]
+    },
+    "roleEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "raw_sha256",
+        "signed_sha256",
+        "expires",
+        "accepted_signer_ids",
+        "threshold"
+      ],
+      "properties": {
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        },
+        "raw_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "signed_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "expires": {
+          "$ref": "#/$defs/utc"
+        },
+        "accepted_signer_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sha256"
+          },
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true
+        },
+        "threshold": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32
+        }
+      }
+    },
+    "roleRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "raw",
+        "evidence"
+      ],
+      "properties": {
+        "raw": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2097152
+        },
+        "evidence": {
+          "$ref": "#/$defs/roleEvidence"
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "publisher_id",
+        "catalog_id",
+        "channel",
+        "profile"
+      ],
+      "properties": {
+        "publisher_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "catalog_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "channel": {
+          "$ref": "#/$defs/identifier"
+        },
+        "profile": {
+          "$ref": "#/$defs/profile"
+        }
+      }
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "stats": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "sources",
+        "canonical_vulnerabilities",
+        "active_canonical_vulnerabilities",
+        "source_records",
+        "active_source_records",
+        "inactive_source_records",
+        "source_record_revisions",
+        "snapshots",
+        "deltas",
+        "complete_deltas",
+        "identifiers",
+        "relationships",
+        "affected_packages",
+        "references",
+        "raw_revision_bytes",
+        "database_bytes",
+        "search_index_status"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 3
+        },
+        "sources": {
+          "$ref": "#/$defs/count"
+        },
+        "canonical_vulnerabilities": {
+          "$ref": "#/$defs/count"
+        },
+        "active_canonical_vulnerabilities": {
+          "$ref": "#/$defs/count"
+        },
+        "source_records": {
+          "$ref": "#/$defs/count"
+        },
+        "active_source_records": {
+          "$ref": "#/$defs/count"
+        },
+        "inactive_source_records": {
+          "$ref": "#/$defs/count"
+        },
+        "source_record_revisions": {
+          "$ref": "#/$defs/count"
+        },
+        "snapshots": {
+          "$ref": "#/$defs/count"
+        },
+        "deltas": {
+          "$ref": "#/$defs/count"
+        },
+        "complete_deltas": {
+          "$ref": "#/$defs/count"
+        },
+        "identifiers": {
+          "$ref": "#/$defs/count"
+        },
+        "relationships": {
+          "$ref": "#/$defs/count"
+        },
+        "affected_packages": {
+          "$ref": "#/$defs/count"
+        },
+        "references": {
+          "$ref": "#/$defs/count"
+        },
+        "raw_revision_bytes": {
+          "$ref": "#/$defs/count"
+        },
+        "database_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 17179869184
+        },
+        "search_index_status": {
+          "const": "ready"
+        }
+      }
+    },
+    "utc": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+      "format": "date-time"
+    }
+  }
+}
