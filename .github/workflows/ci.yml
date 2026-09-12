@@ -20,10 +20,8 @@ jobs:
       - name: Install pinned Rust toolchain
         run: rustup toolchain install 1.92.0 --profile minimal --component clippy,rustfmt
 
-      - name: Install Linux sandbox runtime
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes bubblewrap
+      - name: Prepare required Linux sandbox
+        run: bash scripts/ci-bubblewrap.sh
 
       - name: Test release evidence tooling
         run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'

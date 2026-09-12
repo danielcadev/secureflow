@@ -23,6 +23,7 @@ PUBLICATION_CONTROL_PATHS = (
     BUILD_WORKFLOW_PATH,
     PUBLICATION_WORKFLOW_PATH,
     "scripts/release-local.sh",
+    "scripts/ci-bubblewrap.sh",
     "scripts/verify_release_worktree.py",
     "scripts/materialize_exact_tree.py",
     "scripts/create_source_archive.py",

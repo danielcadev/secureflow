@@ -94,6 +94,7 @@ class ReleaseWorkflowPolicyTests(unittest.TestCase):
         for block in blocks:
             self.assertNotIn("${{ inputs.", block)
         self.assertIn("RELEASE_TAG: ${{ inputs.tag }}", self.publish)
+        self.assertIn("bash scripts/ci-bubblewrap.sh", self.build)
         self.assertIn("release_flags+=(--prerelease --latest=false)", self.publish)
         self.assertIn('"${release_flags[@]}"', self.publish)
         self.assertIn("BUILD_RUN_ID: ${{ inputs.build_run_id }}", self.publish)
