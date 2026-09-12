@@ -1,3 +1,4 @@
+mod catalog_trust_cli;
 use clap::{Parser, Subcommand, ValueEnum};
 use secureflow_ai as ai;
 use secureflow_bench_adapter as bench_adapter;
@@ -123,6 +124,20 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    CatalogTrustInit(catalog_trust_cli::Init),
+    CatalogTrustImport(catalog_trust_cli::Import),
+    CatalogTrustedVerify(catalog_trust_cli::Verify),
+    CatalogTrustedInstall(catalog_trust_cli::Install),
+    CatalogTrustStatus(catalog_trust_cli::Status),
+    CatalogTrustedPrepare(catalog_trust_cli::Prepare),
+    CatalogTrustedSign(catalog_trust_cli::Sign),
+    CatalogTrustedAssemble(catalog_trust_cli::Assemble),
+    CatalogTrustedInspect(catalog_trust_cli::Inspect),
+    CatalogTargetSchema,
+    CatalogTrustPolicySchema,
+    CatalogTrustStateSchema,
+    CatalogTrustReceiptSchema,
+
     /// Print the normative SecureFlow run schema.
     Schema {
         /// Contract schema to print. v2 is the current output contract.
@@ -289,7 +304,9 @@ enum Command {
         output: PathBuf,
     },
     /// Validate a local secureflow-run-v1 or secureflow-run-v2 manifest.
-    ValidateRun { path: PathBuf },
+    ValidateRun {
+        path: PathBuf,
+    },
     /// Export a validated run as a local Markdown report.
     ExportReport {
         /// Input secureflow-run-v1 or secureflow-run-v2 manifest.
@@ -661,7 +678,9 @@ enum Command {
         output: PathBuf,
     },
     /// Validate a local conservative correlation envelope.
-    CorrelationValidate { path: PathBuf },
+    CorrelationValidate {
+        path: PathBuf,
+    },
     /// Derive a fail-closed local phase plan from validated retained artifacts.
     OrchestratePlan {
         /// Validated SecureFlow run manifest.
@@ -696,7 +715,9 @@ enum Command {
         output: PathBuf,
     },
     /// Validate a local orchestration-plan envelope.
-    OrchestrationValidate { path: PathBuf },
+    OrchestrationValidate {
+        path: PathBuf,
+    },
     /// Import a Secure Skill review-contract 1.1 payload as contextual candidates.
     SecureReviewImport {
         /// Secure Skill review-contract 1.1 JSON payload.
@@ -716,7 +737,9 @@ enum Command {
         output: PathBuf,
     },
     /// Validate a local SecureFlow contextual-review envelope.
-    SecureReviewValidate { path: PathBuf },
+    SecureReviewValidate {
+        path: PathBuf,
+    },
     /// List contextual candidates without asserting human validation.
     SecureReviewList {
         /// Validated SecureFlow contextual-review envelope.
@@ -750,7 +773,9 @@ enum Command {
         output: PathBuf,
     },
     /// Validate a local SecureFlow benchmark-result envelope.
-    BenchmarkValidate { path: PathBuf },
+    BenchmarkValidate {
+        path: PathBuf,
+    },
     /// Summarize separate benchmark metrics and limitations.
     BenchmarkSummary {
         /// Validated SecureFlow benchmark-result envelope.
@@ -932,9 +957,13 @@ enum Command {
         output: PathBuf,
     },
     /// Validate a local redacted AI request envelope.
-    AiValidateRequest { path: PathBuf },
+    AiValidateRequest {
+        path: PathBuf,
+    },
     /// Validate a structured advisory AI response envelope.
-    AiValidateResponse { path: PathBuf },
+    AiValidateResponse {
+        path: PathBuf,
+    },
     /// Attach a measured advisory response to a derived manifest.
     AiApplyResponse {
         /// Original validated SecureFlow run manifest.
@@ -1206,6 +1235,8 @@ impl From<ReviewDecision> for HumanDecision {
 
 #[derive(Debug, Error)]
 enum CliError {
+    #[error("{0}")]
+    CatalogTrust(#[from] secureflow_knowledge::catalog_trust::TrustError),
     #[error("authorization acknowledgement is required: pass --authorized")]
     AuthorizationRequired,
     #[error("authorization reference is required for basis {0}")]
@@ -1329,6 +1360,13 @@ enum CliError {
 fn main() -> ExitCode {
     match execute(Cli::parse()) {
         Ok(()) => ExitCode::SUCCESS,
+        Err(CliError::CatalogTrust(error)) => {
+            eprintln!(
+                "{}",
+                serde_json::json!({"error_code":error.code,"message":error.message,"acceptance":"rejected","validation_authority":"human-only"})
+            );
+            ExitCode::FAILURE
+        }
         Err(error) => {
             eprintln!("secureflow: {error}");
             ExitCode::FAILURE
@@ -1338,6 +1376,35 @@ fn main() -> ExitCode {
 
 fn execute(cli: Cli) -> Result<(), CliError> {
     match cli.command {
+        Command::CatalogTrustInit(args) => Ok(catalog_trust_cli::init(args)?),
+        Command::CatalogTrustImport(args) => Ok(catalog_trust_cli::import(args)?),
+        Command::CatalogTrustedVerify(args) => Ok(catalog_trust_cli::verify(args)?),
+        Command::CatalogTrustedInstall(args) => Ok(catalog_trust_cli::install(args)?),
+        Command::CatalogTrustStatus(args) => Ok(catalog_trust_cli::status(args)?),
+        Command::CatalogTrustedPrepare(args) => Ok(catalog_trust_cli::prepare(args)?),
+        Command::CatalogTrustedSign(args) => Ok(catalog_trust_cli::sign(args)?),
+        Command::CatalogTrustedAssemble(args) => Ok(catalog_trust_cli::assemble(args)?),
+        Command::CatalogTrustedInspect(args) => Ok(catalog_trust_cli::inspect(args)?),
+        Command::CatalogTargetSchema => {
+            print!("{}", secureflow_knowledge::catalog_trust::schema("target")?);
+            Ok(())
+        }
+        Command::CatalogTrustPolicySchema => {
+            print!("{}", secureflow_knowledge::catalog_trust::schema("policy")?);
+            Ok(())
+        }
+        Command::CatalogTrustStateSchema => {
+            print!("{}", secureflow_knowledge::catalog_trust::schema("state")?);
+            Ok(())
+        }
+        Command::CatalogTrustReceiptSchema => {
+            print!(
+                "{}",
+                secureflow_knowledge::catalog_trust::schema("receipt")?
+            );
+            Ok(())
+        }
+
         Command::Schema { version } => {
             print!(
                 "{}",
