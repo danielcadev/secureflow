@@ -168,3 +168,22 @@ target-code execution, plugins, multi-user or remote services, automated
 patching, signed authorization, catalog publication, or a new contract major
 version. Those changes create new trust boundaries and are outside the current
 stabilization scope.
+
+## Offline catalog distribution
+
+The [catalog trust contract](catalog-trust-contract.md) adds an explicit publisher
+root boundary around untrusted transport bytes. Authenticated parent links bind
+metadata, exact manifest bytes and the existing bounded database verifier. Role
+separation/quorum prevents a single root or targets signer from authorizing a
+release; consecutive dual-quorum root transitions preserve authority changes.
+Retained role/parent/application floors and time reject known replay, equivocation
+and expiry. Mutating imports retain valid conservative progress on later failure;
+installation commits a pending journal before no-overwrite publication.
+
+An attacker controlling media can still withhold updates or force refusal. A
+trusted publisher can sign false advisory data or a very high sequence; signatures
+do not establish truth or permit a hidden reset. Whole-store rollback, malicious
+local account/administrator, incorrect operator time and storage that lies about
+fsync are outside the local protocol's assurance. Historic receipts never become
+permanent current acceptance. Real custody, independent review and physical
+power-loss qualification remain separate from synthetic automated tests.

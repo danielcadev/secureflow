@@ -42,3 +42,15 @@ adapter or handling of those inputs.
 
 The current assets, trust boundaries, abuse cases, controls, and residual risks
 are documented in [`docs/threat-model.md`](./docs/threat-model.md).
+
+## Catalog publisher trust
+
+Trusted catalog acceptance authenticates bytes to a locally enrolled root and
+recorded time/history. It does not validate advisory truth or grant target
+authorization. Report defects in signature binding, root continuity, scope,
+expiry, rollback floors, installation recovery or receipt interpretation through
+the private reporting channel above. The [catalog trust contract](docs/catalog-trust-contract.md)
+and [custody runbook](docs/catalog-trust-runbook.md) define invariants and limits.
+Whole-store rollback, a compromised local account/administrator, unavailable root
+quorum and withheld updates remain explicit trust limitations. Production
+qualification requires independent human review and a real custody rehearsal.

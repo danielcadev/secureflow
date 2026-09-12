@@ -148,6 +148,12 @@ bundle_root="$release_stage/$release_name"
 mkdir -p "$bundle_root/bin" "$bundle_root/evidence"
 install -m 0755 "$CARGO_TARGET_DIR/release/secureflow" "$bundle_root/bin/secureflow"
 
+python3 "$packaging_source/scripts/demo-trusted-catalog.py" \
+  --binary "$bundle_root/bin/secureflow" --output "$bundle_root/evidence/trusted-catalog-demo"
+python3 "$packaging_source/scripts/verify-trusted-catalog-demo.py" \
+  --binary "$bundle_root/bin/secureflow" --demo "$bundle_root/evidence/trusted-catalog-demo" \
+  > "$bundle_root/evidence/trusted-catalog-verification.json"
+
 (
   cd "$packaging_source"
   python3 scripts/generate-sbom.py \

@@ -52,6 +52,13 @@ class LocalReleaseIntegrationTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
+        # Test-only ceremony stubs keep packaging tests independent of Rust/crypto.
+        (self.repository / "scripts" / "demo-trusted-catalog.py").write_text(
+            "import pathlib,sys\np=pathlib.Path(sys.argv[sys.argv.index('--output')+1]);p.mkdir(mode=0o700)\n(p/'demo-receipt.json').write_text('{}')\n"
+        )
+        (self.repository / "scripts" / "verify-trusted-catalog-demo.py").write_text(
+            "import pathlib,sys\np=pathlib.Path(sys.argv[sys.argv.index('--demo')+1]);assert (p/'demo-receipt.json').is_file()\nprint('{}')\n"
+        )
         files = {
             "Cargo.toml": '[package]\nname = "secureflow"\nversion = "0.3.0"\n',
             "Cargo.lock": "# fixture\n",
@@ -171,9 +178,23 @@ class LocalReleaseIntegrationTests(unittest.TestCase):
             self.assertNotIn("/", fields[1])
         bundle = next(path for path in output.glob("*.tar.gz") if "-source" not in path.name)
         with tarfile.open(bundle, mode="r:gz") as archive:
+            self.assertTrue(any(name.endswith("evidence/trusted-catalog-verification.json") for name in archive.getnames()))
+            self.assertTrue(any(name.endswith("evidence/trusted-catalog-demo/demo-receipt.json") for name in archive.getnames()))
             self.assertFalse(
                 any(name.endswith("docs/ignored-sentinel.txt") for name in archive.getnames())
             )
+
+    def test_failed_trusted_catalog_gate_prevents_packaging(self) -> None:
+        script = self.repository / "scripts" / "verify-trusted-catalog-demo.py"
+        script.write_text("raise SystemExit('synthetic failed trust gate')\n")
+        subprocess.run(["git", "-C", self.repository, "add", str(script)], check=True)
+        subprocess.run(["git", "-C", self.repository, "commit", "--quiet", "-m", "fail gate fixture"], check=True)
+        output = self.root / "trust-gate-output"
+        result = self.run_release(output)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("synthetic failed trust gate", result.stderr)
+        self.assertFalse(output.exists())
+        self.assertEqual(list(self.release_temp.iterdir()), [])
 
     def test_mid_run_tracked_mutation_fails_before_output(self) -> None:
         output = self.root / "mutation-output"

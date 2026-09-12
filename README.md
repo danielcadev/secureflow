@@ -38,6 +38,20 @@ prerequisites, retained artifacts, reproducibility, and release gates. Human
 validation stays pending; the flow makes no network request, active scan,
 exploit, AI transmission, or patch.
 
+## Trusted catalog distribution (implementation candidate)
+
+The offline catalog trust commands authenticate exact legacy bundle bytes against
+an explicitly enrolled TUF publisher root, enforce expiry and retained rollback
+floors, and recover interrupted installation. Public signing requests support
+separate offline custodians; private keys never enter SecureFlow.
+
+Run the [synthetic lifecycle demo](docs/catalog-trust-runbook.md) for enrollment,
+rotation, root-only revocation and recovery. The [contract](docs/catalog-trust-contract.md)
+distinguishes integrity, publisher authenticity and local as-of acceptance.
+Legacy bundle commands remain unsigned-manifest workflows. Signatures do not
+validate advisories. Independent human review and real custody rehearsal remain
+[production qualification gates](docs/releases/trusted-catalog-candidate.md).
+
 ## SecureFlow Web: offline API inventory
 
 The implemented Web vertical seals a local scope with authorization and expiry,

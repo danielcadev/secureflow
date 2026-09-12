@@ -2,6 +2,13 @@
 
 All notable changes to SecureFlow are documented here.
 
+## Unreleased
+
+- add offline TUF publisher enrollment, public signing requests, consecutive root rotation and root-only revocation;
+- bind unchanged v1 manifests and bounded payload verification to explicit scope, expiry, role history and per-profile release floors;
+- add locked durable installation journals, conservative recovery, separate current-status and historical inspection, closed schemas and structured errors;
+- retain synthetic lifecycle, independent OpenSSL vectors, crash/quota tests and release-binary demo evidence; independent human security review and real custody rehearsal remain pending before production qualification.
+
 ## 0.4.0-rc.3 — 2026-09-11
 
 - provision Bubblewrap in both hosted CI and release builds, grant only the packaged executable the AppArmor user-namespace permission required on Ubuntu 24.04, and fail early if the adapter sandbox cannot execute;

@@ -28,6 +28,8 @@ PUBLICATION_CONTROL_PATHS = (
     "scripts/materialize_exact_tree.py",
     "scripts/create_source_archive.py",
     "scripts/generate-sbom.py",
+    "scripts/demo-trusted-catalog.py",
+    "scripts/verify-trusted-catalog-demo.py",
     "scripts/verify_release_publication.py",
     "scripts/lint_release_notes.py",
 )

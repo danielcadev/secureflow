@@ -56,6 +56,11 @@ jobs:
           test -n "$demo_dir"
           cp -a "$demo_dir" target/codesupply-demo
 
+      - name: Retain offline trusted catalog lifecycle
+        run: |
+          python3 scripts/demo-trusted-catalog.py --binary target/release/secureflow --output "$PWD/target/trusted-catalog-demo"
+          python3 scripts/verify-trusted-catalog-demo.py --binary target/release/secureflow --demo target/trusted-catalog-demo
+
       - name: Generate deterministic CycloneDX inventory
         run: |
           python3 scripts/generate-sbom.py \
@@ -72,5 +77,6 @@ jobs:
             target/secureflow-dependency-license-declarations.md
             target/codesupply-demo.log
             target/codesupply-demo/
+            target/trusted-catalog-demo/
           if-no-files-found: error
           retention-days: 14

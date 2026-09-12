@@ -106,3 +106,14 @@ repository or release artifacts.
 OSV ecosystem ZIPs are treated as transport. SecureFlow does not assign one
 blanket license to the aggregate. Source locator, artifact generation/hash,
 license evidence and quarantined records remain in each local snapshot.
+
+## Offline catalog trust dependencies
+
+- `tuf` 0.3.0-beta14 declares `MIT/Apache-2.0` (alternative licensing in the upstream declaration).
+- `ed25519-dalek` 2.2.0 declares BSD-3-Clause; its complete notice is retained in [docs/licenses/ed25519-dalek-2.2.0.txt](docs/licenses/ed25519-dalek-2.2.0.txt).
+- `ring` 0.17.14 declares Apache-2.0 AND ISC; its upstream licensing overview and referenced notices are retained under [docs/licenses/ring-0.17.14](docs/licenses/ring-0.17.14/README.txt).
+
+These are cryptographic/protocol dependencies, not advisory data or endorsements.
+The full locked transitive dependency declarations, versions, archive checksums
+and package provenance are generated into release evidence. Declared licensing
+does not replace a distributor's independent rights review.
