@@ -13,6 +13,19 @@ use tuf::{
 pub(crate) fn encode<T: serde::Serialize>(v: &T) -> Result<Vec<u8>> {
     serde_json::to_vec_pretty(v).map_err(|e| error("TRUST_STATE", e))
 }
+pub(crate) fn encode_state(state: &State) -> Result<Vec<u8>> {
+    validate_schema(
+        "state",
+        &serde_json::to_value(state).map_err(|e| error("TRUST_STATE", e))?,
+    )?;
+    let bytes = encode(state)?;
+    require(
+        bytes.len() <= MAX_STATE_BYTES,
+        "TRUST_STATE",
+        "state capacity exhausted; retain lineage and re-enroll explicitly",
+    )?;
+    Ok(bytes)
+}
 fn tuf_error(e: tuf::Error) -> TrustError {
     error("TRUST_SIGNATURE", e)
 }
@@ -170,16 +183,7 @@ impl Session {
             .filter(|v| *v <= MAX_SEQUENCE)
             .ok_or_else(|| error("TRUST_STATE", "generation exhausted"))?;
         self.state.maximum_verification_time = self.clock.verification_time.clone();
-        validate_schema(
-            "state",
-            &serde_json::to_value(&self.state).map_err(|e| error("TRUST_STATE", e))?,
-        )?;
-        let bytes = encode(&self.state)?;
-        require(
-            bytes.len() <= MAX_STATE_BYTES,
-            "TRUST_STATE",
-            "state capacity exhausted; retain lineage and re-enroll explicitly",
-        )?;
+        let bytes = encode_state(&self.state)?;
         self.lock.replace_state(&bytes)
     }
     pub(crate) fn read_metadata(&mut self, path: &Path, limit: usize) -> Result<Vec<u8>> {

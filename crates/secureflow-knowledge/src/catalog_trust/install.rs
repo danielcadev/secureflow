@@ -1,5 +1,5 @@
 use super::{
-    consumer::{Session, check_link, current_root, encode},
+    consumer::{Session, check_link, current_root, encode, encode_state},
     types::*,
     wire::*,
     *,
@@ -214,6 +214,13 @@ impl Session {
             "TRUST_STATE",
             "installation requires exclusive mutation lock",
         )?;
+        // Journal paths are JSON strings and must identify the exact published path.
+        let output_text = output.to_str().ok_or_else(|| {
+            error(
+                "TRUST_FILESYSTEM",
+                "installation output path must be valid UTF-8",
+            )
+        })?;
         self.state.policy.allows(scope)?;
         storage::private_dir(
             output
@@ -242,7 +249,7 @@ impl Session {
         let mut receipt = self.receipt(&target, &parsed)?;
         receipt.operation = "install".into();
         receipt.installation = "pending".into();
-        receipt.output = Some(output.to_string_lossy().into());
+        receipt.output = Some(output_text.into());
         receipt.reserves_acceptance = true;
         receipt.state_generation = self
             .state
@@ -251,6 +258,26 @@ impl Session {
             .filter(|v| *v <= MAX_SEQUENCE)
             .ok_or_else(|| error("TRUST_STATE", "generation exhausted"))?;
         receipt.transaction_id = Some(digest(&encode(&receipt)?));
+        // Reserve completion capacity under the exclusive lock before journaling
+        // or publication. Recovery must be able to commit this exact receipt.
+        let mut completed = self.state.clone();
+        let mut complete_receipt = receipt.clone();
+        complete_receipt.installation = "complete".into();
+        completed.completed.insert(
+            receipt
+                .transaction_id
+                .clone()
+                .ok_or_else(|| error("TRUST_STATE", "transaction missing"))?,
+            complete_receipt,
+        );
+        completed.pending = None;
+        completed.generation = receipt
+            .state_generation
+            .checked_add(1)
+            .filter(|v| *v <= MAX_SEQUENCE)
+            .ok_or_else(|| error("TRUST_STATE", "generation exhausted"))?;
+        completed.maximum_verification_time = self.clock.verification_time.clone();
+        encode_state(&completed)?;
         self.state.pending = Some(Pending {
             receipt: receipt.clone(),
             descriptor: parsed.manifest.payload.clone(),

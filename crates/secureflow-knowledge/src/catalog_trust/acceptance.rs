@@ -481,6 +481,116 @@ fn trusted_catalog_transaction_checkpoints_recover_conservatively() {
     }
 }
 #[test]
+fn trusted_catalog_install_history_limit_preserves_recovery() {
+    let f = Fixture::new();
+    f.enroll().unwrap();
+    let receipt = f.install("first.sqlite3").unwrap();
+    let mut session = f.session(true);
+    // Seed schema-valid synthetic history without performing thousands of installs.
+    for i in 0..4094 {
+        let mut historical = receipt.clone();
+        let id = format!("{i:064x}");
+        historical.transaction_id = Some(id.clone());
+        session.state.completed.insert(id, historical);
+    }
+    session.save().unwrap();
+    assert_eq!(session.state.completed.len(), 4095);
+    let result = session.install_with_checkpoint(
+        &f.path("metadata"),
+        &f.scope(),
+        &f.path("manifest.json"),
+        &f.path("bundle.zst"),
+        &f.path("last.sqlite3"),
+        |point| {
+            if point == "published" {
+                Err(error(
+                    "TRUST_FILESYSTEM",
+                    "injected interruption at last slot",
+                ))
+            } else {
+                Ok(())
+            }
+        },
+    );
+    assert!(result.is_err());
+    assert!(session.state.pending.is_some());
+    assert!(f.path("last.sqlite3").exists());
+    drop(session);
+    // Opening an exclusive root-only import must complete the last reserved slot.
+    f.import(true).unwrap();
+    let mut session = f.session(true);
+    assert_eq!(session.state.completed.len(), 4096);
+    assert!(session.state.pending.is_none());
+    let history = consumer::encode(&session.state.completed).unwrap();
+    let mut journaled = false;
+    let result = session.install_with_checkpoint(
+        &f.path("metadata"),
+        &f.scope(),
+        &f.path("manifest.json"),
+        &f.path("bundle.zst"),
+        &f.path("overflow.sqlite3"),
+        |point| {
+            journaled |= point == "pending-durable";
+            Ok(())
+        },
+    );
+    assert!(result.is_err());
+    assert!(!journaled);
+    assert!(!f.path("overflow.sqlite3").exists());
+    assert!(session.state.pending.is_none());
+    assert_eq!(history, consumer::encode(&session.state.completed).unwrap());
+    drop(session);
+    let state = f.state();
+    assert!(state.pending.is_none());
+    assert_eq!(history, consumer::encode(&state.completed).unwrap());
+    f.import(true).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn trusted_catalog_install_rejects_non_utf8_output_before_mutation() {
+    use std::{ffi::OsString, os::unix::ffi::OsStringExt};
+    let f = Fixture::new();
+    f.enroll().unwrap();
+    let mut session = f.session(true);
+    let before = fs::read(f.path("trust/state.json")).unwrap();
+    let memory = consumer::encode(&session.state).unwrap();
+    // Exercise both a filename and a parent component, including a would-be
+    // replacement-character alias that must never become the journal identity.
+    for bytes in [
+        b"output-\xff.sqlite3".to_vec(),
+        b"parent-\xfe/output.sqlite3".to_vec(),
+    ] {
+        let output = f.dir.path().join(OsString::from_vec(bytes));
+        let result = session.install(
+            &f.path("metadata"),
+            &f.scope(),
+            &f.path("manifest.json"),
+            &f.path("bundle.zst"),
+            &output,
+        );
+        let failure = result.unwrap_err();
+        assert_eq!(failure.code, "TRUST_FILESYSTEM");
+        assert_eq!(
+            failure.message,
+            "installation output path must be valid UTF-8"
+        );
+        assert_eq!(before, fs::read(f.path("trust/state.json")).unwrap());
+        assert_eq!(memory, consumer::encode(&session.state).unwrap());
+        assert!(!output.exists());
+        assert!(!PathBuf::from(output.to_string_lossy().as_ref()).exists());
+        if output.parent().unwrap() != f.dir.path() {
+            assert!(!output.parent().unwrap().exists());
+        }
+    }
+    drop(session);
+    assert_eq!(
+        f.install("valid-\u{00e9}.sqlite3").unwrap().installation,
+        "complete"
+    );
+}
+
+#[test]
 fn trusted_catalog_recovery_preserves_conflicting_output_and_concurrency() {
     let f = Fixture::new();
     f.enroll().unwrap();
