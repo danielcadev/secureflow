@@ -2,9 +2,16 @@
 
 ## Objective
 
-SecureFlow coordinates specialized tools without turning them into one black
-box. Every stage preserves its inputs, outputs, hashes, limitations, and
-decisions.
+SecureFlow lets maintainers investigate risks in software they are authorized
+to examine using verifiable local data, then produce reproducible evidence for
+a person to make an informed decision. It coordinates specialized tools without
+turning them into one black box: every stage preserves its inputs, outputs,
+hashes, limitations, and decisions.
+
+Analysis tools and AI can propose candidates but never establish a
+vulnerability or override the human decision. The durable responsibility of
+SecureFlow is the trust boundary: explicit authorization and scope, reproducible
+evidence and provenance, and a reviewable human handoff.
 
 ## Layers
 

@@ -4,9 +4,11 @@
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](./LICENSE-MIT)
 [![Rust 1.92](https://img.shields.io/badge/Rust-1.92-orange.svg)](./rust-toolchain.toml)
 
-SecureFlow is a local-first platform for analyzing authorized code, prioritizing
-security signals, and helping a human researcher validate vulnerabilities with
-reproducible evidence.
+SecureFlow is a local-first trust and evidence layer for authorized security
+research and software supply-chain analysis. Its objective is to let a
+maintainer investigate risks in software they are authorized to examine using
+verifiable local data, then produce reproducible evidence for a person to make
+an informed decision.
 
 The project combines separate, versioned contracts and processes for:
 
@@ -18,6 +20,12 @@ The project combines separate, versioned contracts and processes for:
 
 Human judgment is always authoritative. A candidate does not become a
 vulnerability merely because a scanner or model suggests it.
+
+SecureFlow does not compete to issue autonomous security verdicts. Tools and AI
+may produce candidates, but SecureFlow binds their use to explicit scope and
+authorization, preserves hashes and provenance, and retains the evidence needed
+for human review. As analysis becomes cheaper or more capable, that trust and
+decision boundary remains the product's purpose.
 
 The research goal is to outperform human baselines on narrow, measurable tasks
 in coverage, speed, pattern memory, and reproducibility. That must be
