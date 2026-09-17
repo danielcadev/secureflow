@@ -20,3 +20,8 @@ passed; Review Room `npm ci`, lint, production build, and `npm audit --omit=dev`
 passed with zero reported vulnerabilities. `rustfmt` and `cargo clippy` are not
 installed in this workspace's Rust toolchain, so their required release-
 environment runs remain recorded in the RC receipt.
+
+The existing Secure Skill fixture was also imported through the new case path:
+one result was retained as `contextual-candidate` with its envelope provenance
+and the explicit limitation that it is neither a Secure Engine rule nor a
+validated finding.
