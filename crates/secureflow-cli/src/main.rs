@@ -1,6 +1,7 @@
 mod catalog_trust_cli;
 use clap::{Parser, Subcommand, ValueEnum};
 use secureflow_ai as ai;
+use secureflow_case::{Candidate as CaseCandidate, CandidateClass, CaseAuthorization, CaseRevision, CaseTarget, Decision as CaseDecision, Evidence as CaseEvidence, SecurityCase, Source as CaseSource, SourceKind, StagedRecommendation, CONTRACT_VERSION as CASE_CONTRACT_VERSION, digest as case_digest, export_sarif as export_case_sarif, import_sarif as import_case_sarif};
 use secureflow_bench_adapter as bench_adapter;
 use secureflow_engine_adapter::{
     EngineConfig, MAX_ENGINE_TIMEOUT_SECONDS, SandboxMode, run, sha256_bytes, sha256_target,
@@ -48,7 +49,7 @@ use secureflow_web::{
     SourceKind as WebSourceKind, WebScopeDraft,
 };
 use std::fs;
-use std::io::Write;
+use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Duration;
@@ -101,6 +102,8 @@ const WEB_CORPUS_SCHEMA: &str =
     include_str!("../../../schemas/secureflow-web-development-corpus-v1.schema.json");
 const WEB_CORPUS_RESULT_SCHEMA: &str =
     include_str!("../../../schemas/secureflow-web-corpus-result-v1.schema.json");
+const SECURITY_CASE_SCHEMA: &str =
+    include_str!("../../../schemas/secureflow-security-case-v1.schema.json");
 
 const MAX_MANIFEST_BYTES: u64 = 32 * 1024 * 1024;
 const MAX_LICENSE_EVIDENCE_BYTES: u64 = 1024 * 1024;
@@ -124,6 +127,29 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Print the normative universal Security Case schema.
+    CaseSchema,
+    /// Create an additive universal Security Case from a validated run manifest.
+    CaseCreate {
+        #[arg(long)] run_manifest: PathBuf,
+        #[arg(long)] output: PathBuf,
+    },
+    /// Validate a local universal Security Case.
+    CaseValidate { path: PathBuf },
+    /// Inspect a local Security Case without changing it.
+    CaseInspect { path: PathBuf, #[arg(long, value_enum, default_value_t = OutputFormat::Text)] format: OutputFormat },
+    /// List Security Case candidates and their human-decision state.
+    CaseList { path: PathBuf, #[arg(long, value_enum, default_value_t = OutputFormat::Text)] format: OutputFormat },
+    /// Import an existing validated Secure Skill envelope as contextual candidates.
+    CaseImportSecureReview { #[arg(long)] case: PathBuf, #[arg(long)] envelope: PathBuf, #[arg(long)] output: PathBuf },
+    /// Import SARIF 2.1.0 results as external-tool candidates.
+    CaseImportSarif { #[arg(long)] case: PathBuf, #[arg(long)] sarif: PathBuf, #[arg(long)] source_name: String, #[arg(long)] source_version: String, #[arg(long)] output: PathBuf },
+    /// Record one final human decision in a derived Security Case.
+    CaseDecide { #[arg(long)] case: PathBuf, #[arg(long)] candidate_id: String, #[arg(long, value_enum)] decision: ReviewDecision, #[arg(long)] reviewer: String, #[arg(long)] rationale: String, #[arg(long)] evidence_reference: Option<String>, #[arg(long)] output: PathBuf },
+    /// Export case candidates to a minimal SARIF 2.1.0 document.
+    CaseExportSarif { #[arg(long)] case: PathBuf, #[arg(long)] output: PathBuf },
+    /// Serve a provider-neutral local MCP bridge over stdio; it cannot decide cases.
+    CaseMcp { #[arg(long)] case: PathBuf, #[arg(long)] stage_output: PathBuf },
     CatalogTrustInit(catalog_trust_cli::Init),
     CatalogTrustImport(catalog_trust_cli::Import),
     CatalogTrustedVerify(catalog_trust_cli::Verify),
@@ -1235,6 +1261,8 @@ impl From<ReviewDecision> for HumanDecision {
 
 #[derive(Debug, Error)]
 enum CliError {
+    #[error("Security Case contract failed: {0}")]
+    SecurityCase(#[from] secureflow_case::CaseError),
     #[error("{0}")]
     CatalogTrust(#[from] secureflow_knowledge::catalog_trust::TrustError),
     #[error("authorization acknowledgement is required: pass --authorized")]
@@ -1376,6 +1404,46 @@ fn main() -> ExitCode {
 
 fn execute(cli: Cli) -> Result<(), CliError> {
     match cli.command {
+        Command::CaseSchema => { print!("{SECURITY_CASE_SCHEMA}"); Ok(()) }
+        Command::CaseCreate { run_manifest, output } => {
+            ensure_output_distinct(&output, &[&run_manifest])?;
+            let (run_bytes, run) = load_manifest(&run_manifest)?;
+            let case = case_from_run(&run, &run_bytes)?;
+            write_atomic(&output, &serde_json::to_vec_pretty(&case)?)?;
+            println!("security case created: case={} candidates={} authority=human-only", output.display(), case.candidates.len());
+            Ok(())
+        }
+        Command::CaseValidate { path } => { load_security_case(&path)?; println!("valid {CASE_CONTRACT_VERSION}: {}", path.display()); Ok(()) }
+        Command::CaseInspect { path, format } => {
+            let case = load_security_case(&path)?;
+            match format { OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&case)?), OutputFormat::Text => println!("case={} target={} revision={} sources={} evidence={} candidates={} staged={} decisions={} final_authority=human-only", case.case_id, terminal_safe(&case.target.label), case.target.revision.as_ref().map(|r| r.value.as_str()).unwrap_or("unrecorded"), case.sources.len(), case.evidence.len(), case.candidates.len(), case.staged_recommendations.len(), case.decisions.len()) }
+            Ok(())
+        }
+        Command::CaseList { path, format } => { let case = load_security_case(&path)?; print_case_candidates(&case, format)?; Ok(()) }
+        Command::CaseImportSecureReview { case, envelope, output } => {
+            ensure_output_distinct(&output, &[&case, &envelope])?;
+            let mut case = load_security_case(&case)?; let envelope = load_secure_review_envelope(&envelope)?;
+            import_secure_review_into_case(&mut case, &envelope)?;
+            write_atomic(&output, &serde_json::to_vec_pretty(&case)?)?;
+            println!("contextual candidates imported: case={} count={} validation_authority=human-only", output.display(), envelope.review.findings.len()); Ok(())
+        }
+        Command::CaseImportSarif { case, sarif, source_name, source_version, output } => {
+            ensure_output_distinct(&output, &[&case, &sarif])?;
+            let mut case = load_security_case(&case)?; let bytes = read_bounded_file(&sarif, MAX_MANIFEST_BYTES)?;
+            let count = import_case_sarif(&mut case, &bytes, checked_review_field(source_name.trim(), "source_name", 200)?, checked_review_field(source_version.trim(), "source_version", 200)?)?;
+            write_atomic(&output, &serde_json::to_vec_pretty(&case)?)?;
+            println!("SARIF candidates imported: case={} count={} classification=external-tool-candidate", output.display(), count); Ok(())
+        }
+        Command::CaseDecide { case, candidate_id, decision, reviewer, rationale, evidence_reference, output } => {
+            ensure_output_distinct(&output, &[&case])?;
+            let mut case = load_security_case(&case)?;
+            if !case.candidates.iter().any(|candidate| candidate.candidate_id == candidate_id) { return Err(CliError::FindingNotFound(candidate_id)); }
+            case.add_human_decision(candidate_id, match decision { ReviewDecision::Validated => CaseDecision::Validated, ReviewDecision::Rejected => CaseDecision::Rejected, ReviewDecision::Abstained => CaseDecision::Abstained }, checked_review_field(reviewer.trim(), "reviewer", 200)?, checked_review_field(rationale.trim(), "rationale", 3000)?, evidence_reference.as_deref().map(str::trim).filter(|value| !value.is_empty()).map(|value| checked_review_field(value, "evidence_reference", 300)).transpose()?, OffsetDateTime::now_utc().format(&Rfc3339)?)?;
+            write_atomic(&output, &serde_json::to_vec_pretty(&case)?)?;
+            println!("human decision recorded: case={} final_authority=human-only", output.display()); Ok(())
+        }
+        Command::CaseExportSarif { case, output } => { ensure_output_distinct(&output, &[&case])?; let case = load_security_case(&case)?; write_atomic(&output, &serde_json::to_vec_pretty(&export_case_sarif(&case)?)?)?; println!("SARIF exported: {} candidates_remain_unvalidated_unless_human_decision_recorded", output.display()); Ok(()) }
+        Command::CaseMcp { case, stage_output } => { ensure_output_distinct(&stage_output, &[&case])?; serve_case_mcp(load_security_case(&case)?, &stage_output) }
         Command::CatalogTrustInit(args) => Ok(catalog_trust_cli::init(args)?),
         Command::CatalogTrustImport(args) => Ok(catalog_trust_cli::import(args)?),
         Command::CatalogTrustedVerify(args) => Ok(catalog_trust_cli::verify(args)?),
@@ -3844,6 +3912,111 @@ fn read_bounded_file(path: &Path, maximum: u64) -> Result<Vec<u8>, CliError> {
 fn load_secure_review_envelope(path: &Path) -> Result<SecureReviewEnvelope, CliError> {
     let bytes = read_bounded(path, MAX_REVIEW_BYTES)?;
     Ok(parse_envelope(&bytes)?)
+}
+
+fn load_security_case(path: &Path) -> Result<SecurityCase, CliError> {
+    let bytes = read_bounded_file(path, MAX_MANIFEST_BYTES)?;
+    Ok(SecurityCase::parse(&bytes)?)
+}
+
+fn enum_text<T: serde::Serialize>(value: &T) -> Result<String, CliError> {
+    serde_json::to_value(value)?
+        .as_str()
+        .map(str::to_owned)
+        .ok_or(CliError::Json(serde_json::Error::io(std::io::Error::other("expected enum string"))))
+}
+
+fn case_from_run(run: &RunManifest, run_bytes: &[u8]) -> Result<SecurityCase, CliError> {
+    let source_id = SecurityCase::derived_id("sf_source_", run.engine.report_sha256.as_bytes());
+    let evidence_id = SecurityCase::derived_id("sf_evidence_", run_bytes);
+    let target = CaseTarget {
+        label: run.target.label.clone(), root_sha256: run.target.root_sha256.clone(),
+        revision: run.target.revision.as_ref().map(|revision| CaseRevision { kind: enum_text(&revision.kind).unwrap_or_else(|_| "unknown".into()), value: revision.value.clone() }),
+        authorization: CaseAuthorization { status: "authorized".into(), basis: enum_text(&run.target.authorization.basis)?, reviewer: run.target.authorization.reviewer.clone(), reference: run.target.authorization.reference.clone(), expires_at: run.target.authorization.expires_at.clone() },
+    };
+    let candidates = run.findings.iter().map(|finding| Ok(CaseCandidate {
+        candidate_id: SecurityCase::derived_id("sf_candidate_", format!("{source_id}|{}", finding.finding_id).as_bytes()), source_id: source_id.clone(), class: CandidateClass::EngineCandidate,
+        title: finding.title.clone(), severity: finding.severity.as_ref().map(enum_text).transpose()?, confidence: enum_text(&finding.confidence)?, evidence_ids: vec![evidence_id.clone()], limitations: finding.limitations.clone(),
+    })).collect::<Result<Vec<_>, CliError>>()?;
+    let case = SecurityCase { contract_version: CASE_CONTRACT_VERSION.into(), case_id: SecurityCase::case_id_for(&run.target.root_sha256), created_at: run.created_at.clone(), target,
+        sources: vec![CaseSource { source_id: source_id.clone(), kind: SourceKind::SecureEngine, name: run.engine.name.clone(), version: run.engine.version.clone(), artifact_sha256: run.engine.report_sha256.clone(), methodology: Some("existing validated secureflow run manifest".into()) }],
+        evidence: vec![CaseEvidence { evidence_id, source_id, sha256: case_digest(run_bytes), description: "validated retained SecureFlow run manifest".into(), relative_path: None }], candidates, staged_recommendations: vec![], decisions: vec![] };
+    case.validate()?; Ok(case)
+}
+
+fn import_secure_review_into_case(case: &mut SecurityCase, envelope: &SecureReviewEnvelope) -> Result<(), CliError> {
+    if envelope.target_sha256 != case.target.root_sha256 { return Err(CliError::ArtifactLinkMismatch("Secure Skill review target")); }
+    let bytes = serde_json::to_vec(envelope)?;
+    let source_id = SecurityCase::derived_id("sf_source_", envelope.import_id.as_bytes());
+    let evidence_id = SecurityCase::derived_id("sf_evidence_", &bytes);
+    case.sources.push(CaseSource { source_id: source_id.clone(), kind: SourceKind::SecureSkillContextual, name: envelope.source.name.clone(), version: envelope.source.version.clone(), artifact_sha256: envelope.payload_sha256.clone(), methodology: Some(format!("Secure Skill review contract {}; contextual only", envelope.source.review_contract_schema)) });
+    case.evidence.push(CaseEvidence { evidence_id: evidence_id.clone(), source_id: source_id.clone(), sha256: case_digest(&bytes), description: "validated Secure Skill contextual-review envelope".into(), relative_path: None });
+    for finding in &envelope.review.findings {
+        case.candidates.push(CaseCandidate { candidate_id: SecurityCase::derived_id("sf_candidate_", format!("{source_id}|{}", finding.id).as_bytes()), source_id: source_id.clone(), class: CandidateClass::ContextualCandidate, title: finding.title.clone(), severity: Some(review_severity_label(finding.severity).into()), confidence: review_confidence_label(finding.confidence).into(), evidence_ids: vec![evidence_id.clone()], limitations: vec!["Contextual Secure Skill signal; it is not a Secure Engine rule or a validated finding.".into()] });
+    }
+    case.validate()?; Ok(())
+}
+
+fn print_case_candidates(case: &SecurityCase, format: OutputFormat) -> Result<(), CliError> {
+    match format {
+        OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&serde_json::json!({"case_id": case.case_id, "candidates": case.candidates, "decisions": case.decisions, "validation_authority": "human-only"}))?),
+        OutputFormat::Text => for candidate in &case.candidates { let decision = case.decisions.iter().find(|decision| decision.candidate_id == candidate.candidate_id).map(|decision| format!("{:?}", decision.decision).to_lowercase()).unwrap_or_else(|| "pending".into()); println!("{}\t{:?}\t{}\t{}", candidate.candidate_id, candidate.class, decision, terminal_safe(&candidate.title)); },
+    }; Ok(())
+}
+
+fn serve_case_mcp(mut case: SecurityCase, stage_output: &Path) -> Result<(), CliError> {
+    let stdin = std::io::stdin(); let mut stdout = std::io::stdout().lock();
+    for line in BufReader::new(stdin.lock()).lines() {
+        let line = line.map_err(|source| CliError::Read { path: PathBuf::from("<stdin>"), source })?;
+        let request: serde_json::Value = match serde_json::from_str(&line) { Ok(value) => value, Err(_) => { writeln!(stdout, "{}", serde_json::json!({"jsonrpc":"2.0","error":{"code":-32700,"message":"parse error"},"id":null})).map_err(|source| CliError::Write { path: PathBuf::from("<stdout>"), source })?; stdout.flush().map_err(|source| CliError::Write { path: PathBuf::from("<stdout>"), source })?; continue; } };
+        let id = request.get("id").cloned().unwrap_or(serde_json::Value::Null);
+        let method = request.get("method").and_then(serde_json::Value::as_str).unwrap_or("");
+        let params = request.get("params").cloned().unwrap_or_else(|| serde_json::json!({}));
+        let result = match method {
+            "initialize" => Ok(serde_json::json!({"protocolVersion":"2024-11-05","serverInfo":{"name":"secureflow-case","version":env!("CARGO_PKG_VERSION")},"capabilities":{"tools":{}}})),
+            "tools/list" => Ok(serde_json::json!({"tools":[
+                {"name":"read_case","description":"Read the authorized local Security Case; candidates remain unvalidated.","inputSchema":{"type":"object","additionalProperties":false}},
+                {"name":"investigate_candidate","description":"Read one evidence-bound candidate without changing its decision.","inputSchema":{"type":"object","required":["candidate_id"],"properties":{"candidate_id":{"type":"string"}},"additionalProperties":false}},
+                {"name":"stage_recommendation","description":"Stage an agent recommendation in a derived case. It cannot record a final human decision.","inputSchema":{"type":"object","required":["candidate_id","agent_name","recommendation","rationale"],"properties":{"candidate_id":{"type":"string"},"agent_name":{"type":"string"},"recommendation":{"enum":["validated","rejected","abstained"]},"rationale":{"type":"string"}},"additionalProperties":false}}
+            ]})),
+            "tools/call" => mcp_tool_call(&mut case, &params, stage_output),
+            _ => Err("method not found".into()),
+        };
+        let response = match result { Ok(result) => serde_json::json!({"jsonrpc":"2.0","id":id,"result":result}), Err(message) => serde_json::json!({"jsonrpc":"2.0","id":id,"error":{"code":-32602,"message":message}}) };
+        writeln!(stdout, "{}", response).map_err(|source| CliError::Write { path: PathBuf::from("<stdout>"), source })?; stdout.flush().map_err(|source| CliError::Write { path: PathBuf::from("<stdout>"), source })?;
+    }; Ok(())
+}
+
+fn mcp_tool_call(case: &mut SecurityCase, params: &serde_json::Value, stage_output: &Path) -> Result<serde_json::Value, String> {
+    let name = params.get("name").and_then(serde_json::Value::as_str).ok_or("missing tool name")?;
+    let arguments = params.get("arguments").cloned().unwrap_or_else(|| serde_json::json!({}));
+    match name {
+        "read_case" => {
+            let text = serde_json::to_string_pretty(case).map_err(|_| "serialization failed")?;
+            Ok(serde_json::json!({"content":[{"type":"text","text":text}]}))
+        }
+        "investigate_candidate" => {
+            let candidate_id = arguments.get("candidate_id").and_then(serde_json::Value::as_str).ok_or("missing candidate_id")?;
+            let candidate = case.candidates.iter().find(|candidate| candidate.candidate_id == candidate_id).ok_or("candidate not found")?;
+            let text = serde_json::to_string_pretty(&serde_json::json!({"candidate":candidate,"evidence":candidate.evidence_ids,"final_authority":"human-only"})).map_err(|_| "serialization failed")?;
+            Ok(serde_json::json!({"content":[{"type":"text","text":text}]}))
+        }
+        "stage_recommendation" => {
+            let candidate_id = arguments.get("candidate_id").and_then(serde_json::Value::as_str).ok_or("missing candidate_id")?.to_owned();
+            if !case.candidates.iter().any(|candidate| candidate.candidate_id == candidate_id) { return Err("candidate not found".into()); }
+            let agent_name = arguments.get("agent_name").and_then(serde_json::Value::as_str).filter(|value| !value.trim().is_empty()).ok_or("missing agent_name")?.to_owned();
+            let recommendation = arguments.get("recommendation").and_then(serde_json::Value::as_str).filter(|value| matches!(*value, "validated" | "rejected" | "abstained")).ok_or("recommendation must be validated, rejected, or abstained")?.to_owned();
+            let rationale = arguments.get("rationale").and_then(serde_json::Value::as_str).filter(|value| !value.trim().is_empty()).ok_or("missing rationale")?.to_owned();
+            let created_at = OffsetDateTime::now_utc().format(&Rfc3339).map_err(|_| "timestamp failed")?;
+            let stage_id = SecurityCase::derived_id("sf_stage_", format!("{candidate_id}|{agent_name}|{created_at}").as_bytes());
+            case.staged_recommendations.push(StagedRecommendation { stage_id: stage_id.clone(), candidate_id, agent_name, recommendation, rationale, created_at });
+            case.validate().map_err(|error| error.to_string())?;
+            let bytes = serde_json::to_vec_pretty(case).map_err(|_| "serialization failed")?;
+            write_atomic(stage_output, &bytes).map_err(|error| error.to_string())?;
+            Ok(serde_json::json!({"content":[{"type":"text","text":format!("staged {stage_id}; no human decision was recorded")}]}))
+        }
+        _ => Err("unknown tool".into()),
+    }
 }
 
 fn load_benchmark_envelope(path: &Path) -> Result<bench_adapter::BenchmarkEnvelope, CliError> {

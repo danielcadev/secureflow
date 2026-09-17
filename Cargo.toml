@@ -2,6 +2,7 @@
 resolver = "3"
 members = [
     "crates/secureflow-model",
+    "crates/secureflow-case",
     "crates/secureflow-engine-adapter",
     "crates/secureflow-secure-adapter",
     "crates/secureflow-bench-adapter",

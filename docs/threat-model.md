@@ -2,6 +2,22 @@
 
 Status: design baseline for SecureFlow v0.3.0.
 
+## Security Case v1 boundary
+
+`secureflow-security-case-v1` is local by default and binds its target hash,
+authorization, revision, source provenance, evidence hashes, candidates, staged
+agent recommendations, and human decisions. Inputs are untrusted until parsed
+against the strict contract. References must resolve within the case; duplicate
+identifiers and duplicate final decisions fail closed.
+
+Secure Engine candidates, Secure Skill contextual candidates, and SARIF imports
+remain distinct classes. In particular, a contextual signal or external-tool
+result cannot become a Secure Engine rule or a vulnerability through import.
+The only final decisions are `validated`, `rejected`, and `abstained`, recorded
+with a human reviewer and rationale by `case-decide`. The MCP bridge deliberately
+offers read, investigate, and stage only; it has no tool or dispatch route to
+record a decision. It runs over local stdio and has no provider transport.
+
 This document models threats to SecureFlow itself. It does not claim that
 SecureFlow proves an analyzed target secure, and it does not authorize testing
 of a third-party system.

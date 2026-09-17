@@ -1303,12 +1303,14 @@ dependencies = [
  "jsonschema",
  "secureflow-ai",
  "secureflow-bench-adapter",
+ "secureflow-case",
  "secureflow-engine-adapter",
  "secureflow-knowledge",
  "secureflow-model",
  "secureflow-orchestrator",
  "secureflow-secure-adapter",
  "secureflow-web",
+ "serde",
  "serde_json",
  "thiserror",
  "time",
@@ -1337,6 +1339,17 @@ dependencies = [
  "thiserror",
  "time",
  "toml",
+]
+
+[[package]]
+name = "secureflow-case"
+version = "0.4.0-rc.3"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "thiserror",
+ "time",
 ]
 
 [[package]]
