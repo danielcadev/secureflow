@@ -56,8 +56,11 @@ cd ../..
 bash plugins/secureflow/scripts/open-review-room.sh
 ```
 
-The launcher binds to `127.0.0.1` and opens `http://127.0.0.1:3001/`. Use
-`--no-open`, `--port`, or `--app-dir` when needed. Review Room loads a local
+The launcher binds to `127.0.0.1` and prints its loopback URL without launching
+an external browser. In Codex desktop, SecureFlow opens that URL in the
+right-side browser panel. Pass
+`--system-browser` only when an external browser is explicitly desired; use
+`--port` or `--app-dir` when needed. Review Room loads a local
 Security Case through the browser file picker and registers its existing
 WebMCP tools. Artifact-derived content remains untrusted and agent staging only
 prepares the visible form.

@@ -2,11 +2,11 @@
 set -euo pipefail
 
 port=3001
-open_browser=1
+open_system_browser=0
 app_dir="${SECUREFLOW_REVIEW_ROOM_DIR:-}"
 
 usage() {
-  echo "usage: open-review-room.sh [--app-dir PATH] [--port PORT] [--no-open]" >&2
+  echo "usage: open-review-room.sh [--app-dir PATH] [--port PORT] [--system-browser]" >&2
 }
 
 while (($#)); do
@@ -21,8 +21,14 @@ while (($#)); do
       port=$2
       shift 2
       ;;
+    --system-browser)
+      open_system_browser=1
+      shift
+      ;;
     --no-open)
-      open_browser=0
+      # Retained for compatibility. Not opening an external browser is now the
+      # safe default so Codex can present the URL in its own browser panel.
+      open_system_browser=0
       shift
       ;;
     -h|--help)
@@ -64,7 +70,7 @@ command -v npm >/dev/null 2>&1 || {
 
 url="http://127.0.0.1:$port/"
 echo "SecureFlow Review Room: $url" >&2
-if ((open_browser)); then
+if ((open_system_browser)); then
   if command -v xdg-open >/dev/null 2>&1; then
     (sleep 2; xdg-open "$url" >/dev/null 2>&1 || true) &
   elif command -v open >/dev/null 2>&1; then

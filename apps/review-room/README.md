@@ -13,7 +13,10 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000` in a browser with imperative WebMCP support.
+From Codex desktop, open `http://localhost:3000` in the Codex side browser. The
+SecureFlow skill uses this surface by default so local cases do not depend on a
+Chrome extension or file-URL permission. For a manual external-browser session,
+open the loopback URL yourself.
 
 ## WebMCP tools
 

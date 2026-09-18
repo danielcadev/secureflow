@@ -23,9 +23,16 @@ candidate is a vulnerability.
    named person using the explicit `secureflow case-decide` CLI flow can record
    `validated`, `rejected`, or `abstained` as the final decision.
 5. When visual review helps, run `plugins/secureflow/scripts/open-review-room.sh`
-   from a SecureFlow source checkout. Review Room accepts multiple component
-   cases. Its WebMCP tools may investigate and stage the visible form, but a
-   browser draft is neither a final human verdict nor remediation authority.
+   from a SecureFlow source checkout. In Codex desktop, keep the server running
+   and open its printed loopback URL in the Codex side browser with
+   `open_in_codex` and `placement: "right"`. This is the default presentation:
+   do not use Chrome, Computer Use, `xdg-open`, a browser extension, or ask the
+   user to enable local-file access. Use `--system-browser` only when the user
+   explicitly requests an external browser. If the Codex browser panel is not
+   available, return the loopback URL for manual opening rather than switching
+   surfaces silently. Review Room accepts multiple component cases. Its WebMCP
+   tools may investigate and stage the visible form, but a browser draft is
+   neither a final human verdict nor remediation authority.
 
 ## Remediating reviewed findings
 
