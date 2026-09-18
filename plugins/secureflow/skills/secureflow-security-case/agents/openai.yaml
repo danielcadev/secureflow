@@ -1,0 +1,6 @@
+interface:
+  display_name: "SecureFlow Security Case"
+  short_description: "Investigate security evidence without autonomous verdicts"
+  default_prompt: "Use $secureflow-security-case to inspect this authorized Security Case and stage an evidence-backed recommendation."
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,40 @@
+{
+  "name": "secureflow",
+  "version": "1.0.0-rc.2",
+  "description": "Investigate authorized local Security Cases through SecureFlow without granting an agent final vulnerability authority.",
+  "author": {
+    "name": "Daniel Castrillon",
+    "url": "https://github.com/danielcadev"
+  },
+  "homepage": "https://github.com/danielcadev/secureflow",
+  "repository": "https://github.com/danielcadev/secureflow",
+  "license": "MIT OR Apache-2.0",
+  "keywords": [
+    "application security",
+    "evidence",
+    "local-first",
+    "mcp",
+    "security case"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "SecureFlow",
+    "shortDescription": "Evidence-bound security investigation",
+    "longDescription": "SecureFlow connects Codex to authorized local Security Cases. Agents may validate structure, inspect evidence and stage recommendations, while final vulnerability decisions remain human-only.",
+    "developerName": "Daniel Castrillon",
+    "category": "Engineering",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/danielcadev/secureflow",
+    "defaultPrompt": [
+      "Inspect this authorized Security Case and summarize the evidence.",
+      "Investigate this candidate and stage an abstention if evidence is insufficient.",
+      "Open Review Room for this local Security Case."
+    ],
+    "brandColor": "#14B8A6"
+  },
+  "mcpServers": "./.mcp.json"
+}

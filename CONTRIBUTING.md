@@ -3,6 +3,15 @@
 SecureFlow accepts narrowly scoped changes that preserve its local-first,
 authorized-use, human-validation model.
 
+Unless a submission is conspicuously marked otherwise before it is submitted,
+contributions accepted into this repository are licensed under the same
+MIT-or-Apache-2.0 terms as the project. Submit only work you are entitled to
+contribute. Do not include employer-owned source, confidential material,
+credentials, private research targets, customer data, unpublished commercial
+plans, or third-party code without compatible licensing and attribution.
+Software licensing does not grant rights in the SecureFlow name or branding;
+see [`TRADEMARKS.md`](./TRADEMARKS.md).
+
 ## Development setup
 
 The repository pins Rust 1.92. Run the same gates as CI:

@@ -69,6 +69,8 @@ class LocalReleaseIntegrationTests(unittest.TestCase):
             "CITATION.cff": 'version: "0.3.0"\n',
             "LICENSE-MIT": "MIT\n",
             "LICENSE-APACHE": "Apache\n",
+            "NOTICE": "SecureFlow fixture notice\n",
+            "TRADEMARKS.md": "# Fixture branding policy\n",
             "THIRD_PARTY_NOTICES.md": "notices\n",
             ".gitignore": "docs/ignored-sentinel.txt\n",
             "docs/tracked.md": "tracked docs\n",
@@ -178,6 +180,9 @@ class LocalReleaseIntegrationTests(unittest.TestCase):
             self.assertNotIn("/", fields[1])
         bundle = next(path for path in output.glob("*.tar.gz") if "-source" not in path.name)
         with tarfile.open(bundle, mode="r:gz") as archive:
+            names = archive.getnames()
+            self.assertTrue(any(name.endswith("/NOTICE") for name in names))
+            self.assertTrue(any(name.endswith("/TRADEMARKS.md") for name in names))
             self.assertTrue(any(name.endswith("evidence/trusted-catalog-verification.json") for name in archive.getnames()))
             self.assertTrue(any(name.endswith("evidence/trusted-catalog-demo/demo-receipt.json") for name in archive.getnames()))
             self.assertFalse(

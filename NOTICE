@@ -1,0 +1,10 @@
+SecureFlow
+Copyright 2026 Daniel Castrillón and SecureFlow contributors.
+
+SecureFlow source code is licensed under the MIT License or the Apache License,
+Version 2.0, at your option. The SecureFlow name, logo, and other project
+branding are not granted under those software licenses. See TRADEMARKS.md.
+
+Release checksums, attestations, Git history, and CITATION.cff record project
+provenance. They establish artifact identity and authorship history, not a
+guarantee that the software is free of defects or security vulnerabilities.

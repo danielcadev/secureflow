@@ -4,6 +4,11 @@
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](./LICENSE-MIT)
 [![Rust 1.92](https://img.shields.io/badge/Rust-1.92-orange.svg)](./rust-toolchain.toml)
 
+Copyright 2026 Daniel Castrillón and SecureFlow contributors. The source is
+available under MIT or Apache-2.0; those licenses do not grant rights to imply
+endorsement or use the SecureFlow name and branding for a confusingly similar
+distribution. See [`NOTICE`](./NOTICE) and [`TRADEMARKS.md`](./TRADEMARKS.md).
+
 SecureFlow is a local-first trust and evidence layer for authorized security
 research and software supply-chain analysis. Its objective is to let a
 maintainer investigate risks in software they are authorized to examine using
@@ -48,6 +53,8 @@ cargo run -p secureflow -- case-mcp \
 The MCP bridge is local stdio only and offers read, investigate, and stage
 capabilities. It has no method that records a final decision. Run
 `bash scripts/demo-security-case-local.sh` for an offline reproducible demo.
+For an install-once Codex plugin, multi-case MCP entry point, and local Review
+Room launcher, see the [universal installation guide](docs/universal-installation.md).
 The published JSON Schema checks structural shape only. Cross-record references,
 identifier uniqueness, candidate authority, and decision semantics are enforced
 by `secureflow case-validate`; CI acceptance must run that command rather than

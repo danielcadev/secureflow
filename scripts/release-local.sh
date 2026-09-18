@@ -173,6 +173,8 @@ cp -a \
   "$bundle_root/source/CITATION.cff" \
   "$bundle_root/source/LICENSE-MIT" \
   "$bundle_root/source/LICENSE-APACHE" \
+  "$bundle_root/source/NOTICE" \
+  "$bundle_root/source/TRADEMARKS.md" \
   "$bundle_root/source/THIRD_PARTY_NOTICES.md" \
   "$bundle_root/source/docs" \
   "$bundle_root/source/schemas" \
@@ -189,6 +191,8 @@ source_archive_args=(
   --require-path README.md
   --require-path LICENSE-MIT
   --require-path LICENSE-APACHE
+  --require-path NOTICE
+  --require-path TRADEMARKS.md
   --require-path CHANGELOG.md
   --require-path SECURITY.md
   --require-path CITATION.cff
