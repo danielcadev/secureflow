@@ -2,6 +2,8 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://secureflow.dev/schemas/secureflow-security-case-v1.schema.json",
   "title": "SecureFlow Security Case v1",
+  "$comment": "This schema validates structural shape only. Semantic acceptance, including reference integrity, identifier uniqueness, one-decision-per-candidate, and source-kind-to-candidate-class authority, requires `secureflow case-validate`.",
+  "description": "Structural JSON shape for a SecureFlow Security Case. Passing this schema alone does not establish semantic validity; use `secureflow case-validate` for acceptance.",
   "type": "object",
   "additionalProperties": false,
   "required": ["contract_version", "case_id", "created_at", "target", "sources", "evidence", "candidates", "staged_recommendations", "decisions"],

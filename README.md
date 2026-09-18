@@ -48,6 +48,10 @@ cargo run -p secureflow -- case-mcp \
 The MCP bridge is local stdio only and offers read, investigate, and stage
 capabilities. It has no method that records a final decision. Run
 `bash scripts/demo-security-case-local.sh` for an offline reproducible demo.
+The published JSON Schema checks structural shape only. Cross-record references,
+identifier uniqueness, candidate authority, and decision semantics are enforced
+by `secureflow case-validate`; CI acceptance must run that command rather than
+treating schema validation alone as semantic acceptance.
 
 The research goal is to outperform human baselines on narrow, measurable tasks
 in coverage, speed, pattern memory, and reproducibility. That must be

@@ -21,8 +21,12 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  parseSecurityCaseFile,
+  type Decision,
+  type SecurityCase,
+} from '@/lib/security-case';
 
-type Decision = 'validated' | 'rejected' | 'abstained';
 type Candidate = {
   id: string;
   severity: 'high' | 'medium' | 'low';
@@ -64,27 +68,11 @@ declare global {
 }
 
 const STORAGE_KEY = 'secureflow-review-room-v1';
-type CaseDocument = {
-  contract_version: string;
-  case_id: string;
-  target: { label: string; revision?: { value: string } };
-  candidates: Array<{
-    candidate_id: string;
-    class: string;
-    title: string;
-    severity?: string;
-    confidence: string;
-    evidence_ids: string[];
-    limitations: string[];
-  }>;
-  decisions: Array<{ candidate_id: string; decision: Decision; rationale: string }>;
-};
-
 const severityFor = (value?: string): Candidate['severity'] =>
   value === 'high' || value === 'medium' || value === 'low' ? value : 'low';
 const confidenceFor = (value: string) =>
   value === 'high' ? 75 : value === 'medium' ? 50 : value === 'low' ? 25 : 0;
-const candidateFromCase = (candidate: CaseDocument['candidates'][number]): Candidate => ({
+const candidateFromCase = (candidate: SecurityCase['candidates'][number]): Candidate => ({
   id: candidate.candidate_id,
   severity: severityFor(candidate.severity),
   title: candidate.title,
@@ -111,7 +99,7 @@ const label = (d: Decision) =>
   d === 'validated' ? 'Validate' : d === 'rejected' ? 'Reject' : 'Abstain';
 
 export default function Home() {
-  const [caseDocument, setCaseDocument] = useState<CaseDocument | null>(null);
+  const [caseDocument, setCaseDocument] = useState<SecurityCase | null>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [loadError, setLoadError] = useState('');
@@ -240,11 +228,7 @@ export default function Home() {
     if (!file) return;
     setLoadError('');
     try {
-      const parsed = JSON.parse(await file.text()) as CaseDocument;
-      if (parsed.contract_version !== 'secureflow-security-case-v1')
-        throw new Error('Select a secureflow-security-case-v1 JSON file.');
-      if (!parsed.case_id || !Array.isArray(parsed.candidates) || !Array.isArray(parsed.decisions))
-        throw new Error('The Security Case is missing required review fields.');
+      const parsed = await parseSecurityCaseFile(file);
       const loaded = parsed.candidates.map(candidateFromCase);
       setCaseDocument(parsed);
       setCandidates(loaded);
@@ -292,7 +276,7 @@ export default function Home() {
           properties: {},
           additionalProperties: false,
         },
-        annotations: { readOnlyHint: true, untrustedContentHint: false },
+        annotations: { readOnlyHint: true, untrustedContentHint: true },
         execute: () => ({
           caseId: caseDocument?.case_id,
           contract: caseDocument?.contract_version,
@@ -311,7 +295,7 @@ export default function Home() {
         description:
           'Select a candidate in the visible review room and return its evidence boundary, source, visible guard, and sink.',
         inputSchema: schema,
-        annotations: { readOnlyHint: true, untrustedContentHint: false },
+        annotations: { readOnlyHint: true, untrustedContentHint: true },
         execute: (input) => {
           const c = candidateFor(input);
           setSelectedId(c.id);
@@ -334,11 +318,15 @@ export default function Home() {
         description:
           'Select a candidate and return the supplied revision note without claiming exploitability.',
         inputSchema: schema,
-        annotations: { readOnlyHint: true, untrustedContentHint: false },
+        annotations: { readOnlyHint: true, untrustedContentHint: true },
         execute: (input) => {
           const c = candidateFor(input);
           setSelectedId(c.id);
-          return { id: c.id, revision: '7f3c1ad', note: c.revision };
+          return {
+            id: c.id,
+            revision: caseDocument?.target.revision?.value ?? 'unrecorded',
+            note: c.revision,
+          };
         },
       },
       {
@@ -347,7 +335,7 @@ export default function Home() {
         description:
           'Return an evidence-bound hardening direction for a candidate. This does not confirm a vulnerability or modify code.',
         inputSchema: schema,
-        annotations: { readOnlyHint: true, untrustedContentHint: false },
+        annotations: { readOnlyHint: true, untrustedContentHint: true },
         execute: (input) => {
           const c = candidateFor(input);
           setSelectedId(c.id);
@@ -365,7 +353,7 @@ export default function Home() {
         description:
           'Stage a provisional recommendation and rationale in the visible human decision form. This cannot record or finalize a security decision.',
         inputSchema: schema,
-        annotations: { readOnlyHint: false, untrustedContentHint: false },
+        annotations: { readOnlyHint: false, untrustedContentHint: true },
         execute: (input) => {
           const c = candidateFor(input);
           setSelectedId(c.id);
@@ -635,7 +623,9 @@ export default function Home() {
               <div className="revision-note">
                 <GitCompareArrows />
                 <div>
-                  <span>REVISION 7f3c1ad</span>
+                  <span>
+                    REVISION {caseDocument.target.revision?.value ?? 'unrecorded'}
+                  </span>
                   <p>{selected.revision}</p>
                 </div>
               </div>

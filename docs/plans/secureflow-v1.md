@@ -15,10 +15,11 @@ only, and exposes no final-decision method.
 
 ## Gates and acceptance tests
 
-1. **Universal Security Case** — Add a strict versioned schema and local
-   validator. A case must bind authorization, target hash, revision, source
-   provenance, evidence hashes, candidate class, and decisions. Tests reject
-   unknown fields, unbound sources, bad hashes, and non-human decisions.
+1. **Universal Security Case** — Add a strict versioned structural schema and
+   local semantic validator. A case must bind authorization, target hash,
+   revision, source provenance, evidence hashes, candidate class, and decisions.
+   Tests reject unknown fields, unbound sources, bad hashes, and non-human
+   decisions. Schema conformance alone is not semantic acceptance.
 2. **Manual-first workflow** — Add CLI create, inspect, import, list, decide,
    validate, and export commands. Tests prove a decision is derived from the
    input, requires a named human, and does not mutate it. Review Room loads
@@ -33,7 +34,8 @@ only, and exposes no final-decision method.
    can record a human decision.
 5. **Ecosystem/CI** — Add minimal SARIF 2.1.0 import/export. Imported SARIF
    results are external-tool candidates, never validated findings. The CLI is
-   non-interactive and schema validation is suitable for CI.
+   non-interactive; CI must use `case-validate` for semantic acceptance, with
+   JSON Schema validation limited to structural interoperability checks.
 6. **Qualification** — Publish migration/compatibility notes, update the
    threat model, add a reproducible offline demo and RC readiness receipt.
    Run focused Rust tests, formatting, clippy, Review Room lint/build, and

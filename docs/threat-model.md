@@ -11,12 +11,25 @@ against the strict contract. References must resolve within the case; duplicate
 identifiers and duplicate final decisions fail closed.
 
 Secure Engine candidates, Secure Skill contextual candidates, and SARIF imports
-remain distinct classes. In particular, a contextual signal or external-tool
-result cannot become a Secure Engine rule or a vulnerability through import.
-The only final decisions are `validated`, `rejected`, and `abstained`, recorded
-with a human reviewer and rationale by `case-decide`. The MCP bridge deliberately
+remain distinct classes. Candidate authority is exhaustive and fail closed:
+`secure-engine` may originate only `engine-candidate`,
+`secure-skill-contextual` only `contextual-candidate`, and `external-sarif` only
+`external-tool-candidate`. An `agent` source cannot originate a v1 candidate;
+agent input remains a staged recommendation attached to an existing candidate.
+In particular, a contextual signal, external-tool result, or agent recommendation
+cannot become a Secure Engine rule or a vulnerability through import. The only
+final decisions are `validated`, `rejected`, and `abstained`, recorded with a
+human reviewer and rationale by `case-decide`. The MCP bridge deliberately
 offers read, investigate, and stage only; it has no tool or dispatch route to
 record a decision. It runs over local stdio and has no provider transport.
+
+Review Room applies the same closed-world identifier, hash, enum, timestamp,
+reference, uniqueness, decision, and candidate-authority checks before rendering
+a local case. It rejects files larger than 32 MiB before reading their contents
+and decodes accepted bytes as fatal UTF-8 rather than replacing malformed input.
+All WebMCP tools that return or stage artifact-derived data mark that content as
+untrusted. The browser audit remains a local UI artifact and is not a Core human
+decision.
 
 This document models threats to SecureFlow itself. It does not claim that
 SecureFlow proves an analyzed target secure, and it does not authorize testing

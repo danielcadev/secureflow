@@ -30,6 +30,7 @@ There is deliberately no WebMCP tool that records a final security decision.
 ## Verification
 
 ```bash
+npm test
 npm run lint
 npm run build
 npm audit --omit=dev
@@ -54,6 +55,9 @@ secureflow case-validate /tmp/case.json
 ```
 
 Select `/tmp/case.json` in the opening screen. The app rejects other contracts with an accessible inline error.
+It decodes bounded local bytes as strict UTF-8 and applies semantic validation;
+the standalone JSON Schema is a structural interoperability check, not a
+replacement for `secureflow case-validate`.
 
 ## License
 
