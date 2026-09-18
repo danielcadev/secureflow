@@ -4,6 +4,11 @@
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](./LICENSE-MIT)
 [![Rust 1.92](https://img.shields.io/badge/Rust-1.92-orange.svg)](./rust-toolchain.toml)
 
+Copyright 2026 Daniel Castrillón and SecureFlow contributors. The source is
+available under MIT or Apache-2.0; those licenses do not grant rights to imply
+endorsement or use the SecureFlow name and branding for a confusingly similar
+distribution. See [`NOTICE`](./NOTICE) and [`TRADEMARKS.md`](./TRADEMARKS.md).
+
 SecureFlow is a local-first trust and evidence layer for authorized security
 research and software supply-chain analysis. Its objective is to let a
 maintainer investigate risks in software they are authorized to examine using
