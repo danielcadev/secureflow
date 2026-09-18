@@ -26,6 +26,29 @@ candidate is a vulnerability.
    from a SecureFlow source checkout. Review Room and its WebMCP tools may stage
    the visible form but cannot submit a human verdict.
 
+## Creating a case from a repository
+
+The MCP server does not scan, create, or import cases. When the user explicitly
+authorizes a repository analysis and no case exists:
+
+1. Keep every output outside the target tree in a directory named for the
+   target repository or component. Never reuse an unrelated project's case
+   directory.
+2. Run `secureflow scan` with the required sandbox and explicit authorization
+   metadata. Capture the command result in the task transcript.
+3. Only after both the raw report and run manifest exist and the scan reports
+   completion, run `secureflow case-create --run-manifest <manifest> --output
+   <new-case>`, then `secureflow case-validate <new-case>`.
+4. If the Engine times out, is signalled, exceeds output/resources, reports
+   truncated analysis, produces malformed output, or creates no run manifest,
+   stop the SecureFlow case flow. Do not retry with `--sandbox disabled`, do not
+   import a direct Engine artifact, and do not synthesize candidates or a case.
+   Report the operational failure and its bounded stderr. A manual review may
+   continue separately, but must not be described as SecureFlow evidence.
+5. For a large monorepository, narrow the authorized target to meaningful
+   components and create a separate case from each successful run. Do not claim
+   repository-wide coverage from component cases.
+
 If MCP is unavailable, use the equivalent `secureflow case-validate`,
 `case-list`, and `case-inspect` CLI commands. Preserve case files, hashes,
 provenance, and original inputs.

@@ -70,6 +70,16 @@ and process exit codes 2 or greater are operational failures. Exit 0 means a
 completed scan with no findings; exit 1 means a completed scan with findings.
 Neither is a security verdict.
 
+An Engine report that declares `analysis.truncated = true` is also rejected.
+SecureFlow never turns a resource-limited partial analysis into a successful
+zero-candidate run. Process failures retain a terminal-safe, 4,096-character
+stderr tail in the CLI error. On `SIGABRT`, output exhaustion, or another
+resource failure, narrow the authorized target to a repository component and
+retry with the required sandbox. Disabling the sandbox is not a resource fix
+and is not an automatic fallback. A failed scan writes neither the raw report
+nor the run manifest, so `case-create` has no input and no Security Case may be
+claimed for that attempt.
+
 The child runs without a shell or stdin and with a cleared environment. The
 adapter retains bounded stdout/stderr, hashes the binary before and after the
 run, applies process and Linux resource limits, and can require Bubblewrap with
@@ -95,6 +105,12 @@ SecureFlow always passes explicit exclusions for root and nested
 exclusion, so vendored JavaScript dependencies neither consume scan capacity
 nor cause a run to fail because an excluded dependency changed. Source files,
 tests, fixtures, and other project-owned content remain in scope.
+
+Large monorepositories may exceed a legacy Engine's full-report resource
+envelope. In that case, run separate authorized component scans and create one
+Security Case per successful run manifest. Do not import an ad-hoc direct
+Engine report as though the failed SecureFlow boundary had accepted it, and do
+not claim repository-wide coverage from component cases.
 
 The full graph requirement is non-default and explicit:
 

@@ -1922,6 +1922,115 @@ fn scan_fails_closed_when_the_target_changes_during_execution() {
 
 #[cfg(unix)]
 #[test]
+fn scan_preserves_bounded_process_diagnostics_without_writing_evidence() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let suffix = std::process::id();
+    let root = std::env::temp_dir().join(format!("secureflow-cli-abort-target-{suffix}"));
+    let engine = std::env::temp_dir().join(format!("secureflow-cli-abort-engine-{suffix}.sh"));
+    let report = std::env::temp_dir().join(format!("secureflow-cli-abort-report-{suffix}.json"));
+    let manifest =
+        std::env::temp_dir().join(format!("secureflow-cli-abort-manifest-{suffix}.json"));
+    let _ = std::fs::remove_dir_all(&root);
+    for path in [&engine, &report, &manifest] {
+        let _ = std::fs::remove_file(path);
+    }
+    std::fs::create_dir(&root).expect("temporary target should be created");
+    std::fs::write(root.join("source.ts"), "export const value = 1;\n")
+        .expect("temporary target should be writable");
+    std::fs::write(
+        &engine,
+        "#!/bin/sh\nprintf '\\033[31mmemory allocation failed\\033[0m\\n' >&2\nkill -ABRT $$\n",
+    )
+    .expect("temporary engine should be writable");
+    let mut permissions = std::fs::metadata(&engine)
+        .expect("temporary engine metadata")
+        .permissions();
+    permissions.set_mode(0o700);
+    std::fs::set_permissions(&engine, permissions).expect("temporary engine should be executable");
+
+    let output = Command::new(binary())
+        .arg("scan")
+        .args(["--binary"])
+        .arg(&engine)
+        .arg(&root)
+        .arg("--authorized")
+        .args(["--authorization-reviewer", "test-runner"])
+        .args(["--sandbox", "disabled"])
+        .args(["--output"])
+        .arg(&report)
+        .args(["--manifest-output"])
+        .arg(&manifest)
+        .output()
+        .expect("CLI should start");
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("memory allocation failed"));
+    assert!(stderr.contains("no evidence was accepted"));
+    assert!(stderr.contains("do not retry by disabling the sandbox"));
+    assert!(!stderr.contains('\u{1b}'));
+    assert!(!report.exists());
+    assert!(!manifest.exists());
+
+    std::fs::remove_dir_all(root).expect("temporary target should be removable");
+    std::fs::remove_file(engine).expect("temporary engine should be removable");
+}
+
+#[cfg(unix)]
+#[test]
+fn scan_rejects_truncated_analysis_without_writing_evidence() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let suffix = std::process::id();
+    let root = std::env::temp_dir().join(format!("secureflow-cli-truncated-target-{suffix}"));
+    let engine = std::env::temp_dir().join(format!("secureflow-cli-truncated-engine-{suffix}.sh"));
+    let report =
+        std::env::temp_dir().join(format!("secureflow-cli-truncated-report-{suffix}.json"));
+    let manifest =
+        std::env::temp_dir().join(format!("secureflow-cli-truncated-manifest-{suffix}.json"));
+    let _ = std::fs::remove_dir_all(&root);
+    for path in [&engine, &report, &manifest] {
+        let _ = std::fs::remove_file(path);
+    }
+    std::fs::create_dir(&root).expect("temporary target should be created");
+    std::fs::write(root.join("source.ts"), "export const value = 1;\n")
+        .expect("temporary target should be writable");
+    std::fs::write(
+        &engine,
+        "#!/bin/sh\nprintf '%s\\n' '{\"schema_version\":\"secure-json-v1\",\"engine_version\":\"test\",\"document_type\":\"scan-report\",\"analysis\":{\"truncated\":true},\"findings\":[],\"report_fingerprint\":\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\"}'\n",
+    )
+    .expect("temporary engine should be writable");
+    let mut permissions = std::fs::metadata(&engine)
+        .expect("temporary engine metadata")
+        .permissions();
+    permissions.set_mode(0o700);
+    std::fs::set_permissions(&engine, permissions).expect("temporary engine should be executable");
+
+    let output = Command::new(binary())
+        .arg("scan")
+        .args(["--binary"])
+        .arg(&engine)
+        .arg(&root)
+        .arg("--authorized")
+        .args(["--authorization-reviewer", "test-runner"])
+        .args(["--sandbox", "disabled"])
+        .args(["--output"])
+        .arg(&report)
+        .args(["--manifest-output"])
+        .arg(&manifest)
+        .output()
+        .expect("CLI should start");
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("analysis was truncated"));
+    assert!(!report.exists());
+    assert!(!manifest.exists());
+
+    std::fs::remove_dir_all(root).expect("temporary target should be removable");
+    std::fs::remove_file(engine).expect("temporary engine should be removable");
+}
+
+#[cfg(unix)]
+#[test]
 fn scan_records_explicit_authorization_and_target_revision() {
     use std::os::unix::fs::PermissionsExt;
 

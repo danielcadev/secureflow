@@ -40,6 +40,7 @@ pub const DEFAULT_MAX_TARGET_DEPTH: usize = 256;
 pub const MAX_ENGINE_BINARY_BYTES: u64 = 1024 * 1024 * 1024;
 pub const MAX_ENGINE_TIMEOUT_SECONDS: u64 = 3600;
 pub const FULL_GRAPH_MAX_OUTPUT_BYTES: usize = 256 * 1024 * 1024;
+const MAX_PROCESS_DIAGNOSTIC_CHARS: usize = 4_096;
 #[cfg(target_os = "linux")]
 pub const BUBBLEWRAP_PATH: &str = "/usr/bin/bwrap";
 
@@ -171,7 +172,10 @@ impl EngineOutput {
             return Err(AdapterError::TimedOut);
         }
         if !matches!(self.status.code(), Some(0 | 1)) || self.stdout.is_empty() {
-            return Err(AdapterError::ProcessFailed(self.status.to_string()));
+            return Err(AdapterError::ProcessFailed {
+                status: self.status.to_string(),
+                stderr: process_diagnostic(&self.stderr),
+            });
         }
         let report = import_secure_json_report(&self.stdout)?;
         if self.require_full_graph
@@ -218,11 +222,17 @@ pub enum AdapterError {
     Spawn(#[source] io::Error),
     #[error("engine configuration is invalid: {0}")]
     InvalidConfig(&'static str),
-    #[error("engine process failed: {0}")]
-    ProcessFailed(String),
-    #[error("engine process timed out")]
+    #[error(
+        "engine process failed: {status}; bounded stderr: {stderr}; no evidence was accepted—narrow the authorized target or use a compatible compact-output Engine; do not retry by disabling the sandbox"
+    )]
+    ProcessFailed { status: String, stderr: String },
+    #[error(
+        "engine process timed out; no evidence was accepted—narrow the authorized target and retry without disabling the sandbox"
+    )]
     TimedOut,
-    #[error("engine output exceeded configured limit")]
+    #[error(
+        "engine output exceeded the configured limit; no evidence was accepted—narrow the authorized target or use a compatible compact-output Engine; do not retry by disabling the sandbox"
+    )]
     OutputLimit,
     #[error("engine output reader failed: {0}")]
     OutputRead(#[source] io::Error),
@@ -236,6 +246,10 @@ pub enum AdapterError {
     WrongSchema,
     #[error("engine report is incompatible: {0}")]
     IncompatibleReport(&'static str),
+    #[error(
+        "engine analysis was truncated by a configured limit; narrow the authorized target and retry without disabling the sandbox"
+    )]
+    TruncatedAnalysis,
     #[error("required Linux Bubblewrap sandbox is unavailable: {0}")]
     SandboxUnavailable(String),
     #[error("invalid finding at index {index}: {message}")]
@@ -1411,6 +1425,15 @@ pub fn import_secure_json_report(bytes: &[u8]) -> Result<ImportedEngineReport, A
             "document_type must be scan-report",
         ));
     }
+    if object
+        .get("analysis")
+        .and_then(serde_json::Value::as_object)
+        .and_then(|analysis| analysis.get("truncated"))
+        .and_then(serde_json::Value::as_bool)
+        == Some(true)
+    {
+        return Err(AdapterError::TruncatedAnalysis);
+    }
     let engine_version = object
         .get("engine_version")
         .and_then(serde_json::Value::as_str)
@@ -1485,6 +1508,37 @@ fn join_output(
         .join()
         .map_err(|_| AdapterError::OutputReaderPanicked)?
         .map_err(AdapterError::OutputRead)
+}
+
+fn process_diagnostic(stderr: &[u8]) -> String {
+    if stderr.is_empty() {
+        return "not provided".into();
+    }
+    let start = stderr
+        .len()
+        .saturating_sub(MAX_PROCESS_DIAGNOSTIC_CHARS * 4);
+    let diagnostic = String::from_utf8_lossy(&stderr[start..]);
+    let mut sanitized = String::with_capacity(diagnostic.len());
+    for character in diagnostic.chars() {
+        if character == '\n' || character == '\r' || character == '\t' || !character.is_control() {
+            sanitized.push(character);
+        }
+    }
+    let count = sanitized.chars().count();
+    let bounded = if count > MAX_PROCESS_DIAGNOSTIC_CHARS {
+        sanitized
+            .chars()
+            .skip(count - MAX_PROCESS_DIAGNOSTIC_CHARS)
+            .collect::<String>()
+    } else {
+        sanitized
+    };
+    let sanitized = bounded.trim();
+    if sanitized.is_empty() {
+        "not provided".into()
+    } else {
+        sanitized.into()
+    }
 }
 
 #[cfg(test)]
@@ -1686,6 +1740,27 @@ mod tests {
     }
 
     #[test]
+    fn truncated_analysis_is_rejected_instead_of_becoming_an_empty_run() {
+        let mut report: serde_json::Value =
+            serde_json::from_str(EMPTY_REPORT).expect("empty fixture");
+        report["analysis"] = serde_json::json!({"truncated": true});
+        assert!(matches!(
+            import_secure_json_report(&serde_json::to_vec(&report).expect("fixture bytes")),
+            Err(AdapterError::TruncatedAnalysis)
+        ));
+    }
+
+    #[test]
+    fn process_diagnostic_is_bounded_and_strips_terminal_controls() {
+        let mut stderr = vec![b'x'; MAX_PROCESS_DIAGNOSTIC_CHARS + 64];
+        stderr.extend_from_slice(b"\x1b[31mallocation failed\x1b[0m\n");
+        let diagnostic = process_diagnostic(&stderr);
+        assert!(diagnostic.contains("allocation failed"));
+        assert!(!diagnostic.contains('\u{1b}'));
+        assert!(diagnostic.chars().count() <= MAX_PROCESS_DIAGNOSTIC_CHARS);
+    }
+
+    #[test]
     fn configuration_hash_binds_resource_limits() {
         let first = EngineConfig::default_scan("/bin/secure", "/tmp/fixture");
         let mut second = first.clone();
@@ -1866,7 +1941,7 @@ mod tests {
         let output = run(&config).expect("process boundary should retain the result");
         assert!(matches!(
             output.report_json(),
-            Err(AdapterError::ProcessFailed(_))
+            Err(AdapterError::ProcessFailed { .. })
         ));
         std::fs::remove_file(path).expect("temporary engine should be removable");
     }
