@@ -1,7 +1,7 @@
 {
   "name": "secureflow",
-  "version": "1.0.0-rc.3",
-  "description": "Investigate authorized local Security Cases through SecureFlow without granting an agent final vulnerability authority.",
+  "version": "1.1.0-rc.1",
+  "description": "Investigate authorized local Security Cases and hand off explicitly selected fixes without granting an agent final vulnerability authority.",
   "author": {
     "name": "Daniel Castrillon",
     "url": "https://github.com/danielcadev"
@@ -19,8 +19,8 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "SecureFlow",
-    "shortDescription": "Evidence-bound security investigation",
-    "longDescription": "SecureFlow connects Codex to authorized local Security Cases. Agents may validate structure, inspect evidence and stage recommendations, while final vulnerability decisions remain human-only.",
+    "shortDescription": "Evidence-bound review and remediation",
+    "longDescription": "SecureFlow connects Codex to authorized local Security Cases. Agents may inspect evidence, stage recommendations and implement explicitly authorized remediation handoffs, while final vulnerability decisions remain human-only.",
     "developerName": "Daniel Castrillon",
     "category": "Engineering",
     "capabilities": [
@@ -33,6 +33,7 @@
       "Inspect this authorized Security Case and summarize the evidence.",
       "Investigate this candidate and stage an abstention if evidence is insufficient.",
       "Open Review Room for this local Security Case."
+      ,"Fix only the human-validated candidates selected in this authorized remediation handoff."
     ],
     "brandColor": "#14B8A6"
   },

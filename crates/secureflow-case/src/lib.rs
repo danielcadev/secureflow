@@ -4,6 +4,8 @@
 //! Candidate authority is retained explicitly and only a named human decision
 //! may be final.
 
+pub mod remediation;
+
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};

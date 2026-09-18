@@ -1,3 +1,4 @@
+use secureflow_case::digest as case_digest;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
@@ -125,6 +126,127 @@ fn security_case_is_additive_and_human_decisions_are_derived() {
     validate_with_schema("secureflow-security-case-v1.schema.json", &decided);
     std::fs::remove_file(case_path).expect("case should be removable");
     std::fs::remove_file(decided_path).expect("decision should be removable");
+}
+
+#[test]
+fn remediation_handoff_requires_exact_human_validated_cases() {
+    let suffix = std::process::id();
+    let case_path = std::env::temp_dir().join(format!("secureflow-remediation-case-{suffix}.json"));
+    let decided_path =
+        std::env::temp_dir().join(format!("secureflow-remediation-decided-{suffix}.json"));
+    let draft_path =
+        std::env::temp_dir().join(format!("secureflow-remediation-draft-{suffix}.json"));
+    let authorized_path =
+        std::env::temp_dir().join(format!("secureflow-remediation-authorized-{suffix}.json"));
+    for path in [&case_path, &decided_path, &draft_path, &authorized_path] {
+        let _ = std::fs::remove_file(path);
+    }
+
+    let create = Command::new(binary())
+        .args(["case-create", "--run-manifest"])
+        .arg(finding_fixture())
+        .args(["--output"])
+        .arg(&case_path)
+        .output()
+        .expect("case create should start");
+    assert!(create.status.success());
+    let case: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&case_path).unwrap()).unwrap();
+    let candidate_id = case["candidates"][0]["candidate_id"].as_str().unwrap();
+    let decide = Command::new(binary())
+        .args(["case-decide", "--case"])
+        .arg(&case_path)
+        .args([
+            "--candidate-id",
+            candidate_id,
+            "--decision",
+            "validated",
+            "--reviewer",
+            "Daniel",
+            "--rationale",
+            "The retained evidence confirms this candidate for scoped remediation.",
+            "--output",
+        ])
+        .arg(&decided_path)
+        .output()
+        .expect("case decide should start");
+    assert!(
+        decide.status.success(),
+        "{}",
+        String::from_utf8_lossy(&decide.stderr)
+    );
+    let decided_bytes = std::fs::read(&decided_path).unwrap();
+    let decided: serde_json::Value = serde_json::from_slice(&decided_bytes).unwrap();
+    let draft = serde_json::json!({
+        "contract_version": "secureflow-remediation-handoff-v1",
+        "handoff_id": "sf_handoff_0000000000000000",
+        "created_at": "2026-09-18T13:00:00Z",
+        "status": "draft",
+        "cases": [{
+            "case_id": decided["case_id"],
+            "case_sha256": case_digest(&decided_bytes),
+            "target_root_sha256": decided["target"]["root_sha256"],
+            "candidate_ids": [candidate_id]
+        }],
+        "scope": {
+            "allowed_paths": ["src/auth.rs"],
+            "prohibited_actions": ["merge", "deploy"],
+            "merge_authorized": false,
+            "deploy_authorized": false
+        }
+    });
+    validate_with_schema("secureflow-remediation-handoff-v1.schema.json", &draft);
+    std::fs::write(&draft_path, serde_json::to_vec_pretty(&draft).unwrap()).unwrap();
+
+    let rejected = Command::new(binary())
+        .args(["remediation-authorize", "--draft"])
+        .arg(&draft_path)
+        .args(["--case"])
+        .arg(&case_path)
+        .args([
+            "--reviewer",
+            "Daniel",
+            "--rationale",
+            "Authorize only the selected local fix.",
+            "--output",
+        ])
+        .arg(&authorized_path)
+        .output()
+        .expect("authorization should start");
+    assert!(!rejected.status.success());
+    assert!(!authorized_path.exists());
+
+    let authorized = Command::new(binary())
+        .args(["remediation-authorize", "--draft"])
+        .arg(&draft_path)
+        .args(["--case"])
+        .arg(&decided_path)
+        .args([
+            "--reviewer",
+            "Daniel",
+            "--rationale",
+            "Authorize only the selected local fix.",
+            "--output",
+        ])
+        .arg(&authorized_path)
+        .output()
+        .expect("authorization should start");
+    assert!(
+        authorized.status.success(),
+        "{}",
+        String::from_utf8_lossy(&authorized.stderr)
+    );
+    let handoff: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&authorized_path).unwrap()).unwrap();
+    assert_eq!(handoff["status"], "authorized");
+    assert_eq!(handoff["authorization"]["reviewer"], "Daniel");
+    assert_eq!(handoff["scope"]["merge_authorized"], false);
+    assert_eq!(handoff["scope"]["deploy_authorized"], false);
+    validate_with_schema("secureflow-remediation-handoff-v1.schema.json", &handoff);
+
+    for path in [&case_path, &decided_path, &draft_path, &authorized_path] {
+        std::fs::remove_file(path).unwrap();
+    }
 }
 
 #[test]

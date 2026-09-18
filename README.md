@@ -60,6 +60,13 @@ identifier uniqueness, candidate authority, and decision semantics are enforced
 by `secureflow case-validate`; CI acceptance must run that command rather than
 treating schema validation alone as semantic acceptance.
 
+Review Room can load several component cases and export a scoped remediation
+draft for selected validated candidates. `secureflow remediation-authorize`
+binds that draft to exact decided-case hashes and a named human while keeping
+merge and deployment unauthorized. See the
+[handoff contract](docs/contracts/secureflow-remediation-handoff-v1.md) and the
+[Unified Review Room milestone](docs/plans/unified-review-room.md).
+
 The research goal is to outperform human baselines on narrow, measurable tasks
 in coverage, speed, pattern memory, and reproducibility. That must be
 demonstrated through a blind study and does not transfer final authority.

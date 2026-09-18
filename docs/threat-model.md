@@ -33,6 +33,17 @@ All WebMCP tools that return or stage artifact-derived data mark that content as
 untrusted. The browser audit remains a local UI artifact and is not a Core human
 decision.
 
+`secureflow-remediation-handoff-v1` adds a second, independent authority
+boundary after review. A browser may export only a draft. CLI authorization
+requires every exact source-case hash, target identity and revision to match,
+and every selected candidate to have a final human `validated` decision.
+Allowed paths must be normalized and repository-relative. The contract rejects
+merge or deployment authority, so a request to patch cannot silently expand to
+publication. The local operator identity is still declarative rather than
+cryptographically authenticated, and an authorized coding agent can still make
+an incorrect change inside the permitted path set; tests, re-scan, diff review,
+and the user's separate merge decision remain required controls.
+
 This document models threats to SecureFlow itself. It does not claim that
 SecureFlow proves an analyzed target secure, and it does not authorize testing
 of a third-party system.

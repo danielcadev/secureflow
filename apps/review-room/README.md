@@ -1,6 +1,6 @@
 # SecureFlow Review Room
 
-SecureFlow Review Room is an agent-native security review workspace for explicitly authorized code. It loads a local `secureflow-security-case-v1` document produced by SecureFlow Core; it does not embed review fixtures or contact a target. A browser agent can inspect structured evidence, compare retained context, draft hardening guidance, and stage a recommendation. Only a person can record the final `validated`, `rejected`, or `abstained` decision through the Core CLI.
+SecureFlow Review Room is an agent-native security review workspace for explicitly authorized code. It loads one or more local `secureflow-security-case-v1` documents produced by SecureFlow Core; it does not embed review fixtures or contact a target. A browser agent can inspect structured evidence and stage a recommendation. A person can select reviewed candidates and export a scoped `secureflow-remediation-handoff-v1` draft, but only the Core CLI can persist a final decision or authorize remediation.
 
 The browser's export is a local review-room audit draft, not a replacement for a Security Case or a final decision record. Use `secureflow case-decide` to create the derived, human-authoritative case artifact.
 
@@ -19,13 +19,14 @@ Open `http://localhost:3000` in a browser with imperative WebMCP support.
 
 | Tool                         | Effect                                                       |
 | ---------------------------- | ------------------------------------------------------------ |
-| `list_candidates`            | Reads all candidates and existing human dispositions.        |
-| `inspect_evidence`           | Selects a candidate and returns its evidence boundary.       |
-| `compare_revision`           | Selects a candidate and returns the supplied revision note.  |
-| `draft_hardening`            | Returns evidence-bound remediation guidance.                 |
-| `stage_agent_recommendation` | Prepares the visible human review form but cannot submit it. |
+| `list_security_cases`         | Reads exact loaded component identities and coverage.        |
+| `list_candidates`             | Reads candidates and existing human dispositions.            |
+| `inspect_evidence`            | Selects a candidate and returns its evidence boundary.       |
+| `stage_agent_recommendation`  | Prepares the visible human review form but cannot submit it. |
+| `prepare_remediation_handoff` | Reads the selection and reports the required next gate.      |
 
-There is deliberately no WebMCP tool that records a final security decision.
+There is deliberately no WebMCP tool that records a final security decision,
+authorizes remediation, or edits code.
 
 ## Verification
 
@@ -54,10 +55,23 @@ secureflow case-create --run-manifest /path/to/run.json --output /tmp/case.json
 secureflow case-validate /tmp/case.json
 ```
 
-Select `/tmp/case.json` in the opening screen. The app rejects other contracts with an accessible inline error.
+Select one case or a set of component case files in the opening screen. The app
+rejects duplicate identities and other contracts with an accessible inline error.
 It decodes bounded local bytes as strict UTF-8 and applies semantic validation;
 the standalone JSON Schema is a structural interoperability check, not a
 replacement for `secureflow case-validate`.
+
+After persisting selected `validated` decisions with `case-decide`, export a fix
+handoff from Review Room and authorize it with the exact decided case files:
+
+```bash
+secureflow remediation-authorize \
+  --draft /path/to/handoff-draft.json \
+  --case /path/to/decided-case.json \
+  --reviewer "Your name" \
+  --rationale "Fix only the selected candidates in the listed paths." \
+  --output /path/to/handoff-authorized.json
+```
 
 ## License
 

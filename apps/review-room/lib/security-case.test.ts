@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   MAX_SECURITY_CASE_BYTES,
+  createRemediationDraft,
+  loadSecurityCaseFile,
   parseSecurityCase,
   parseSecurityCaseFile,
   SECURITY_CASE_CONTRACT,
@@ -124,6 +126,50 @@ void test('bounded file parsing preserves Unicode and rejects malformed UTF-8', 
     /32 MiB/,
   );
   assert.equal(read, false, 'oversized files must be rejected before reading');
+});
+
+void test('loads an exact case hash and creates a scoped remediation draft', async () => {
+  const value = fixture();
+  value.decisions = [
+    {
+      ...decision(value.candidates[0].candidate_id, 'validated'),
+      decision: 'validated',
+    },
+  ];
+  const bytes = new TextEncoder().encode(JSON.stringify(value));
+  const loaded = await loadSecurityCaseFile({
+    name: 'component.json',
+    size: bytes.byteLength,
+    arrayBuffer: async () => bytes.slice().buffer,
+  });
+  assert.match(loaded.sha256, /^[0-9a-f]{64}$/);
+  const key = `${value.case_id}:${value.candidates[0].candidate_id}`;
+  const draft = await createRemediationDraft(
+    [loaded],
+    [key],
+    ['src/auth.ts'],
+    '2026-09-18T13:00:00Z',
+  );
+  assert.equal(draft.status, 'draft');
+  assert.deepEqual(draft.cases[0].candidate_ids, [value.candidates[0].candidate_id]);
+  assert.deepEqual(draft.scope.allowed_paths, ['src/auth.ts']);
+  assert.equal(draft.scope.merge_authorized, false);
+  assert.equal(draft.scope.deploy_authorized, false);
+});
+
+void test('remediation drafts reject empty and escaping path scopes', async () => {
+  const value = fixture();
+  const bytes = new TextEncoder().encode(JSON.stringify(value));
+  const loaded = await loadSecurityCaseFile({
+    size: bytes.byteLength,
+    arrayBuffer: async () => bytes.slice().buffer,
+  });
+  const key = `${value.case_id}:${value.candidates[0].candidate_id}`;
+  await assert.rejects(createRemediationDraft([loaded], [key], []), /at least one/);
+  await assert.rejects(
+    createRemediationDraft([loaded], [key], ['../outside']),
+    /repository-relative/,
+  );
 });
 
 void test('rejects malformed JSON and unknown fields', () => {

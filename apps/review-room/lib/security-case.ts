@@ -78,6 +78,32 @@ type SecurityCaseFile = {
   arrayBuffer: () => Promise<ArrayBuffer>;
 };
 
+export type LoadedSecurityCase = {
+  document: SecurityCase;
+  fileName: string;
+  sha256: string;
+};
+
+export type RemediationHandoffDraft = {
+  contract_version: 'secureflow-remediation-handoff-v1';
+  handoff_id: string;
+  created_at: string;
+  status: 'draft';
+  cases: Array<{
+    case_id: string;
+    case_sha256: string;
+    target_root_sha256: string;
+    revision?: { kind: string; value: string };
+    candidate_ids: string[];
+  }>;
+  scope: {
+    allowed_paths: string[];
+    prohibited_actions: string[];
+    merge_authorized: false;
+    deploy_authorized: false;
+  };
+};
+
 const encoder = new TextEncoder();
 const idPattern = /^sf_(?:case|source|evidence|candidate|stage|decision)_[a-z0-9_]{16,}$/;
 const shaPattern = /^[0-9a-f]{64}$/;
@@ -511,6 +537,12 @@ export function parseSecurityCase(input: unknown): SecurityCase {
 }
 
 export async function parseSecurityCaseFile(file: SecurityCaseFile): Promise<SecurityCase> {
+  return (await loadSecurityCaseFile(file)).document;
+}
+
+export async function loadSecurityCaseFile(
+  file: SecurityCaseFile & { name?: string },
+): Promise<LoadedSecurityCase> {
   if (file.size > MAX_SECURITY_CASE_BYTES) {
     throw new Error('The Security Case exceeds the 32 MiB local file limit.');
   }
@@ -524,5 +556,98 @@ export async function parseSecurityCaseFile(file: SecurityCaseFile): Promise<Sec
   } catch {
     throw new Error('The Security Case is not valid UTF-8.');
   }
-  return parseSecurityCase(text);
+  const hash = await crypto.subtle.digest('SHA-256', bytes);
+  const sha256 = Array.from(new Uint8Array(hash), (byte) =>
+    byte.toString(16).padStart(2, '0'),
+  ).join('');
+  return {
+    document: parseSecurityCase(text),
+    fileName: file.name ?? 'security-case.json',
+    sha256,
+  };
+}
+
+export async function createRemediationDraft(
+  loadedCases: LoadedSecurityCase[],
+  selectedKeys: string[],
+  allowedPaths: string[],
+  createdAt = new Date().toISOString(),
+): Promise<RemediationHandoffDraft> {
+  if (loadedCases.length === 0 || loadedCases.length > 1024) {
+    throw new Error('A remediation draft requires 1 to 1024 loaded cases.');
+  }
+  if (selectedKeys.length > 1024 * 4096) {
+    throw new Error('The remediation selection exceeds the contract limit.');
+  }
+  const normalizedPaths = [
+    ...new Set(
+      allowedPaths
+        .map((path) => path.trim().replace(/\/+$/, ''))
+        .filter(Boolean),
+    ),
+  ];
+  if (normalizedPaths.length === 0) {
+    throw new Error('Add at least one repository-relative path to the remediation scope.');
+  }
+  if (normalizedPaths.length > 4096) {
+    throw new Error('The remediation scope exceeds 4096 allowed paths.');
+  }
+  if (
+    normalizedPaths.some(
+      (path) =>
+        path.startsWith('/') ||
+        path.includes('\\') ||
+        path
+          .split('/')
+          .some((part) => part.length === 0 || part === '.' || part === '..'),
+    )
+  ) {
+    throw new Error('Remediation paths must be normalized repository-relative paths.');
+  }
+  const selected = new Set(selectedKeys);
+  const cases = loadedCases.flatMap((loaded) => {
+    const candidateIds = loaded.document.candidates
+      .filter((candidate) =>
+        selected.has(`${loaded.document.case_id}:${candidate.candidate_id}`),
+      )
+      .map((candidate) => candidate.candidate_id);
+    if (candidateIds.length === 0) return [];
+    const entry: RemediationHandoffDraft['cases'][number] = {
+      case_id: loaded.document.case_id,
+      case_sha256: loaded.sha256,
+      target_root_sha256: loaded.document.target.root_sha256,
+      candidate_ids: candidateIds,
+    };
+    if (loaded.document.target.revision) {
+      entry.revision = loaded.document.target.revision;
+    }
+    return [entry];
+  });
+  if (cases.length === 0) {
+    throw new Error('Select at least one validated candidate for remediation.');
+  }
+  const preimage = new TextEncoder().encode(JSON.stringify({ cases, normalizedPaths, createdAt }));
+  const hash = await crypto.subtle.digest('SHA-256', preimage);
+  const suffix = Array.from(new Uint8Array(hash), (byte) =>
+    byte.toString(16).padStart(2, '0'),
+  ).join('').slice(0, 32);
+  return {
+    contract_version: 'secureflow-remediation-handoff-v1',
+    handoff_id: `sf_handoff_${suffix}`,
+    created_at: createdAt,
+    status: 'draft',
+    cases,
+    scope: {
+      allowed_paths: normalizedPaths,
+      prohibited_actions: [
+        'merge',
+        'deploy',
+        'publish',
+        'network access',
+        'active exploitation',
+      ],
+      merge_authorized: false,
+      deploy_authorized: false,
+    },
+  };
 }

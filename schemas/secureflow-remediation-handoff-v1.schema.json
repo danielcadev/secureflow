@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://secureflow.dev/schemas/secureflow-remediation-handoff-v1.schema.json",
+  "title": "SecureFlow remediation handoff v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "handoff_id", "created_at", "status", "cases", "scope"],
+  "properties": {
+    "contract_version": { "const": "secureflow-remediation-handoff-v1" },
+    "handoff_id": { "$ref": "#/$defs/handoffId" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "status": { "enum": ["draft", "authorized"] },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1024,
+      "items": { "$ref": "#/$defs/caseSelection" }
+    },
+    "scope": { "$ref": "#/$defs/scope" },
+    "authorization": { "$ref": "#/$defs/authorization" }
+  },
+  "$defs": {
+    "handoffId": {
+      "type": "string",
+      "pattern": "^sf_handoff_[a-z0-9_]{16,}$",
+      "maxLength": 100
+    },
+    "caseId": {
+      "type": "string",
+      "pattern": "^sf_case_[a-z0-9_]{16,}$",
+      "maxLength": 100
+    },
+    "candidateId": {
+      "type": "string",
+      "pattern": "^sf_candidate_[a-z0-9_]{16,}$",
+      "maxLength": 100
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "revision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "value"],
+      "properties": {
+        "kind": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "value": { "type": "string", "minLength": 1, "maxLength": 200 }
+      }
+    },
+    "caseSelection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["case_id", "case_sha256", "target_root_sha256", "candidate_ids"],
+      "properties": {
+        "case_id": { "$ref": "#/$defs/caseId" },
+        "case_sha256": { "$ref": "#/$defs/sha256" },
+        "target_root_sha256": { "$ref": "#/$defs/sha256" },
+        "revision": { "$ref": "#/$defs/revision" },
+        "candidate_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4096,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/candidateId" }
+        }
+      }
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//).+$"
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allowed_paths", "prohibited_actions", "merge_authorized", "deploy_authorized"],
+      "properties": {
+        "allowed_paths": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4096,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/relativePath" }
+        },
+        "prohibited_actions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 100 }
+        },
+        "merge_authorized": { "const": false },
+        "deploy_authorized": { "const": false }
+      }
+    },
+    "authorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reviewer", "rationale", "authorized_at"],
+      "properties": {
+        "reviewer": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "rationale": { "type": "string", "minLength": 1, "maxLength": 3000 },
+        "authorized_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "draft" } } },
+      "then": { "not": { "required": ["authorization"] } }
+    },
+    {
+      "if": { "properties": { "status": { "const": "authorized" } } },
+      "then": { "required": ["authorization"] }
+    }
+  ]
+}

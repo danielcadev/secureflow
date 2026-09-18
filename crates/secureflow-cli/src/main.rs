@@ -2,6 +2,9 @@ mod catalog_trust_cli;
 use clap::{Parser, Subcommand, ValueEnum};
 use secureflow_ai as ai;
 use secureflow_bench_adapter as bench_adapter;
+use secureflow_case::remediation::{
+    CONTRACT_VERSION as REMEDIATION_CONTRACT_VERSION, RemediationHandoff,
+};
 use secureflow_case::{
     CONTRACT_VERSION as CASE_CONTRACT_VERSION, Candidate as CaseCandidate, CandidateClass,
     CaseAuthorization, CaseRevision, CaseTarget, Decision as CaseDecision,
@@ -109,6 +112,8 @@ const WEB_CORPUS_RESULT_SCHEMA: &str =
     include_str!("../../../schemas/secureflow-web-corpus-result-v1.schema.json");
 const SECURITY_CASE_SCHEMA: &str =
     include_str!("../../../schemas/secureflow-security-case-v1.schema.json");
+const REMEDIATION_HANDOFF_SCHEMA: &str =
+    include_str!("../../../schemas/secureflow-remediation-handoff-v1.schema.json");
 
 const MAX_MANIFEST_BYTES: u64 = 32 * 1024 * 1024;
 const MAX_LICENSE_EVIDENCE_BYTES: u64 = 1024 * 1024;
@@ -209,6 +214,25 @@ enum Command {
         case: PathBuf,
         #[arg(long)]
         stage_output: PathBuf,
+    },
+    /// Print the structural remediation handoff schema.
+    RemediationSchema,
+    /// Validate a remediation draft or authorized handoff.
+    RemediationValidate {
+        path: PathBuf,
+    },
+    /// Bind a remediation draft to exact human-validated Security Cases.
+    RemediationAuthorize {
+        #[arg(long)]
+        draft: PathBuf,
+        #[arg(long, required = true)]
+        case: Vec<PathBuf>,
+        #[arg(long)]
+        reviewer: String,
+        #[arg(long)]
+        rationale: String,
+        #[arg(long)]
+        output: PathBuf,
     },
     /// Serve the install-once MCP bridge over stdio; case paths are supplied per call.
     Mcp,
@@ -1616,6 +1640,51 @@ fn execute(cli: Cli) -> Result<(), CliError> {
         Command::CaseMcp { case, stage_output } => {
             ensure_output_distinct(&stage_output, &[&case])?;
             serve_case_mcp(load_security_case(&case)?, &stage_output)
+        }
+        Command::RemediationSchema => {
+            print!("{REMEDIATION_HANDOFF_SCHEMA}");
+            Ok(())
+        }
+        Command::RemediationValidate { path } => {
+            load_remediation_handoff(&path)?;
+            println!("valid {REMEDIATION_CONTRACT_VERSION}: {}", path.display());
+            Ok(())
+        }
+        Command::RemediationAuthorize {
+            draft,
+            case,
+            reviewer,
+            rationale,
+            output,
+        } => {
+            let mut inputs: Vec<&Path> = Vec::with_capacity(case.len() + 1);
+            inputs.push(&draft);
+            inputs.extend(case.iter().map(PathBuf::as_path));
+            ensure_output_distinct(&output, &inputs)?;
+            let mut handoff = load_remediation_handoff(&draft)?;
+            let mut loaded = Vec::with_capacity(case.len());
+            for path in &case {
+                let bytes = read_bounded_file(path, MAX_MANIFEST_BYTES)?;
+                let parsed = SecurityCase::parse(&bytes)?;
+                loaded.push((bytes, parsed));
+            }
+            let borrowed: Vec<(&[u8], &SecurityCase)> = loaded
+                .iter()
+                .map(|(bytes, parsed)| (bytes.as_slice(), parsed))
+                .collect();
+            handoff.authorize(
+                &borrowed,
+                checked_review_field(reviewer.trim(), "reviewer", 200)?,
+                checked_review_field(rationale.trim(), "rationale", 3000)?,
+                OffsetDateTime::now_utc().format(&Rfc3339)?,
+            )?;
+            write_atomic(&output, &serde_json::to_vec_pretty(&handoff)?)?;
+            println!(
+                "remediation authorized: handoff={} cases={} merge=false deploy=false",
+                output.display(),
+                handoff.cases.len()
+            );
+            Ok(())
         }
         Command::Mcp => serve_universal_mcp(),
         Command::CatalogTrustInit(args) => Ok(catalog_trust_cli::init(args)?),
@@ -4091,6 +4160,11 @@ fn load_secure_review_envelope(path: &Path) -> Result<SecureReviewEnvelope, CliE
 fn load_security_case(path: &Path) -> Result<SecurityCase, CliError> {
     let bytes = read_bounded_file(path, MAX_MANIFEST_BYTES)?;
     Ok(SecurityCase::parse(&bytes)?)
+}
+
+fn load_remediation_handoff(path: &Path) -> Result<RemediationHandoff, CliError> {
+    let bytes = read_bounded_file(path, MAX_MANIFEST_BYTES)?;
+    Ok(RemediationHandoff::parse(&bytes)?)
 }
 
 fn enum_text<T: serde::Serialize>(value: &T) -> Result<String, CliError> {

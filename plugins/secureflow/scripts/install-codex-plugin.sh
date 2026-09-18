@@ -10,7 +10,7 @@ command -v codex >/dev/null 2>&1 || {
   exit 1
 }
 command -v secureflow >/dev/null 2>&1 || {
-  echo "secureflow: install the secureflow 1.0.0-rc.3 binary on PATH first" >&2
+  echo "secureflow: install the secureflow 1.1.0-rc.1 binary on PATH first" >&2
   exit 1
 }
 

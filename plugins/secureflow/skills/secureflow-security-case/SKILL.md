@@ -1,6 +1,6 @@
 ---
 name: secureflow-security-case
-description: Investigate authorized local security findings through SecureFlow Security Cases, including evidence inspection, candidate triage, agent recommendations, and Review Room handoff. Use when the user mentions SecureFlow, a Security Case, SARIF review, or wants a security investigation preserved without an autonomous verdict.
+description: Investigate and remediate explicitly authorized local security findings through SecureFlow Security Cases, Review Room, and scoped remediation handoffs. Use when the user mentions SecureFlow, a Security Case, SARIF review, asks to review candidates visually, or asks to fix selected reviewed findings.
 ---
 
 # SecureFlow Security Case
@@ -23,8 +23,35 @@ candidate is a vulnerability.
    named person using the explicit `secureflow case-decide` CLI flow can record
    `validated`, `rejected`, or `abstained` as the final decision.
 5. When visual review helps, run `plugins/secureflow/scripts/open-review-room.sh`
-   from a SecureFlow source checkout. Review Room and its WebMCP tools may stage
-   the visible form but cannot submit a human verdict.
+   from a SecureFlow source checkout. Review Room accepts multiple component
+   cases. Its WebMCP tools may investigate and stage the visible form, but a
+   browser draft is neither a final human verdict nor remediation authority.
+
+## Remediating reviewed findings
+
+Use this mode only when the user explicitly asks to fix an exact visible or
+listed selection. A phrase such as “fix these” is sufficient only when the
+selected candidate IDs and allowed repository paths are already unambiguous;
+otherwise ask the user to identify them.
+
+1. Persist each selected disposition with `secureflow case-decide`. Only
+   `validated` candidates are eligible for remediation; never turn an agent
+   recommendation or browser draft into a verdict without the user's explicit
+   review.
+2. Export or create a `secureflow-remediation-handoff-v1` draft, then run
+   `secureflow remediation-authorize` with every exact decided case. Stop if a
+   case hash, target identity, revision, candidate decision, or path boundary
+   does not match.
+3. After authorization, use the `secure` workflow to confirm the security
+   boundary and `codex-security:fix-finding` for the bounded implementation.
+   Work in an isolated branch or worktree and modify only the handoff's allowed
+   paths plus the smallest necessary tests or documentation.
+4. Run targeted tests, lint/type checks, and a SecureFlow re-scan when the
+   authorized scanner can complete without weakening its sandbox. Report a
+   failed or truncated re-scan as incomplete evidence, never as a clean result.
+5. Return the diff, commands, results, residual risk, and candidate status for
+   Review Room. The handoff never authorizes merge, deployment, publication,
+   exploitation, network access, or unrelated cleanup.
 
 ## Creating a case from a repository
 
