@@ -1,8 +1,8 @@
 # SecureFlow Review Room
 
-SecureFlow Review Room is an agent-native security review workspace for explicitly authorized code. A browser agent can inspect structured evidence, compare revisions, draft hardening guidance, and stage a recommendation. Only a person can record the final `validated`, `rejected`, or `abstained` decision.
+SecureFlow Review Room is an agent-native security review workspace for explicitly authorized code. It loads a local `secureflow-security-case-v1` document produced by SecureFlow Core; it does not embed review fixtures or contact a target. A browser agent can inspect structured evidence, compare retained context, draft hardening guidance, and stage a recommendation. Only a person can record the final `validated`, `rejected`, or `abstained` decision through the Core CLI.
 
-This vertical demo uses three synthetic candidates and performs no network requests to a target. State is stored in the browser and can be exported as an audit JSON document.
+The browser's export is a local review-room audit draft, not a replacement for a Security Case or a final decision record. Use `secureflow case-decide` to create the derived, human-authoritative case artifact.
 
 ## Run locally
 
@@ -30,16 +30,34 @@ There is deliberately no WebMCP tool that records a final security decision.
 ## Verification
 
 ```bash
+npm test
 npm run lint
 npm run build
 npm audit --omit=dev
 ```
 
-The WebMCP contracts were also exercised in a supported browser: valid read and stage calls changed the same visible state as the UI, and an invalid candidate ID failed without recording a decision.
+The WebMCP integration mirrors the loaded case state: valid read and stage calls
+change the visible draft only, and an invalid candidate ID fails without
+recording a decision.
 
 ## Evidence boundary
 
-The demo shows a workflow contract, not scanner accuracy or autonomous vulnerability validation. Its fixtures are synthetic, its findings are candidates, and its confidence values are illustrative. SecureFlow must abstain when the available evidence does not justify a conclusion.
+Review Room shows a workflow contract, not scanner accuracy or autonomous
+vulnerability validation. Loaded findings remain candidates and its display of
+confidence is not a vulnerability verdict. SecureFlow must abstain when the
+available evidence does not justify a conclusion.
+
+## Load a case
+
+```bash
+secureflow case-create --run-manifest /path/to/run.json --output /tmp/case.json
+secureflow case-validate /tmp/case.json
+```
+
+Select `/tmp/case.json` in the opening screen. The app rejects other contracts with an accessible inline error.
+It decodes bounded local bytes as strict UTF-8 and applies semantic validation;
+the standalone JSON Schema is a structural interoperability check, not a
+replacement for `secureflow case-validate`.
 
 ## License
 

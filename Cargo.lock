@@ -1297,18 +1297,20 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
 name = "secureflow"
-version = "0.4.0-rc.3"
+version = "1.0.0-rc.1"
 dependencies = [
  "clap",
  "jsonschema",
  "secureflow-ai",
  "secureflow-bench-adapter",
+ "secureflow-case",
  "secureflow-engine-adapter",
  "secureflow-knowledge",
  "secureflow-model",
  "secureflow-orchestrator",
  "secureflow-secure-adapter",
  "secureflow-web",
+ "serde",
  "serde_json",
  "thiserror",
  "time",
@@ -1316,7 +1318,7 @@ dependencies = [
 
 [[package]]
 name = "secureflow-ai"
-version = "0.4.0-rc.3"
+version = "1.0.0-rc.1"
 dependencies = [
  "secureflow-model",
  "serde",
@@ -1328,7 +1330,7 @@ dependencies = [
 
 [[package]]
 name = "secureflow-bench-adapter"
-version = "0.4.0-rc.3"
+version = "1.0.0-rc.1"
 dependencies = [
  "jsonschema",
  "serde",
@@ -1340,8 +1342,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "secureflow-case"
+version = "1.0.0-rc.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "thiserror",
+ "time",
+]
+
+[[package]]
 name = "secureflow-engine-adapter"
-version = "0.4.0-rc.3"
+version = "1.0.0-rc.1"
 dependencies = [
  "libc",
  "secureflow-model",
@@ -1352,7 +1365,7 @@ dependencies = [
 
 [[package]]
 name = "secureflow-knowledge"
-version = "0.4.0-rc.3"
+version = "1.0.0-rc.1"
 dependencies = [
  "chrono",
  "ed25519-dalek",
@@ -1374,7 +1387,7 @@ dependencies = [
 
 [[package]]
 name = "secureflow-model"
-version = "0.4.0-rc.3"
+version = "1.0.0-rc.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -1383,7 +1396,7 @@ dependencies = [
 
 [[package]]
 name = "secureflow-orchestrator"
-version = "0.4.0-rc.3"
+version = "1.0.0-rc.1"
 dependencies = [
  "secureflow-model",
  "serde",
@@ -1395,7 +1408,7 @@ dependencies = [
 
 [[package]]
 name = "secureflow-secure-adapter"
-version = "0.4.0-rc.3"
+version = "1.0.0-rc.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -1406,7 +1419,7 @@ dependencies = [
 
 [[package]]
 name = "secureflow-web"
-version = "0.4.0-rc.3"
+version = "1.0.0-rc.1"
 dependencies = [
  "jsonschema",
  "serde",

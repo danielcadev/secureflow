@@ -4,6 +4,12 @@ All notable changes to SecureFlow are documented here.
 
 ## Unreleased
 
+## 1.0.0-rc.1 — 2026-09-18
+
+- add the local-first `secureflow-security-case-v1` evidence and decision boundary with strict Core and Review Room semantic validation, exact source-to-candidate authority, bounded strict UTF-8 browser loading, and human-only final decisions;
+- import validated Secure Skill reviews as contextual candidates and SARIF 2.1.0 results as external-tool candidates without promoting either to a vulnerability verdict;
+- add a provider-neutral local stdio MCP bridge limited to reading cases, investigating retained candidates, and staging non-authoritative agent recommendations;
+- add the Review Room local case workflow with untrusted artifact annotations, loaded revision context, local audit drafts, and no agent-accessible decision route;
 - add offline TUF publisher enrollment, public signing requests, consecutive root rotation and root-only revocation;
 - bind unchanged v1 manifests and bounded payload verification to explicit scope, expiry, role history and per-profile release floors;
 - add locked durable installation journals, conservative recovery, separate current-status and historical inspection, closed schemas and structured errors;

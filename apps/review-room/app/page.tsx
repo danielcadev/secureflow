@@ -21,8 +21,12 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  parseSecurityCaseFile,
+  type Decision,
+  type SecurityCase,
+} from '@/lib/security-case';
 
-type Decision = 'validated' | 'rejected' | 'abstained';
 type Candidate = {
   id: string;
   severity: 'high' | 'medium' | 'low';
@@ -63,67 +67,27 @@ declare global {
   }
 }
 
-const CASE_ID = 'SF-DEMO-042';
 const STORAGE_KEY = 'secureflow-review-room-v1';
-const candidates: Candidate[] = [
-  {
-    id: 'AUTHZ-014',
-    severity: 'high',
-    title: 'Tenant boundary missing from project lookup',
-    summary:
-      'A URL-controlled project ID reaches a record lookup that is not visibly constrained to the active organization.',
-    location: 'app/api/projects/[projectId]/route.ts:42',
-    confidence: 86,
-    recommendation: 'validated',
-    agentReason:
-      'The code path has session authentication but no visible tenant predicate. Human validation must confirm that project IDs are obtainable and no repository-level policy is hidden.',
-    hardening:
-      'Bind the lookup to session.organizationId and add negative tests using two tenants with cross-owned project IDs.',
-    source: 'request.params.projectId',
-    guard: 'requireSession(request)',
-    sink: 'prisma.project.findUnique({ where: { id } })',
-    revision:
-      'Guard changed from requireUser() to requireSession(), but the data query remained unchanged.',
-  },
-  {
-    id: 'WEBHOOK-009',
-    severity: 'medium',
-    title: 'Signature check may use reconstructed payload',
-    summary:
-      'The handler parses JSON and later verifies a signature over serialized data without retaining the original request bytes.',
-    location: 'app/api/webhooks/billing/route.ts:27',
-    confidence: 68,
-    recommendation: 'abstained',
-    agentReason:
-      'This is suspicious, but validity depends on the provider signature contract. The supplied evidence omits the protocol specification and a known-good signed fixture.',
-    hardening:
-      'Preserve raw request bytes, document the provider contract, and test a known-good and mutated payload.',
-    source: 'await request.json()',
-    guard: 'verifySignature(JSON.stringify(payload))',
-    sink: 'applySubscriptionUpdate(payload)',
-    revision:
-      'New endpoint. No earlier revision or protocol test was supplied.',
-  },
-  {
-    id: 'CACHE-003',
-    severity: 'low',
-    title: 'Personalized response cache heuristic',
-    summary:
-      'A generic scanner flagged a personalized response, while response controls explicitly disable shared caching.',
-    location: 'app/api/me/route.ts:18',
-    confidence: 91,
-    recommendation: 'rejected',
-    agentReason:
-      'The complete response includes private, no-store, Vary: Cookie, and force-dynamic. The candidate is a useful negative control, not a vulnerability.',
-    hardening:
-      'Keep the cache regression test and preserve the explicit response headers.',
-    source: 'session.user',
-    guard: "Cache-Control: 'private, no-store'",
-    sink: 'Response.json(profile)',
-    revision:
-      'Current revision added explicit private caching controls and a regression test.',
-  },
-];
+const severityFor = (value?: string): Candidate['severity'] =>
+  value === 'high' || value === 'medium' || value === 'low' ? value : 'low';
+const confidenceFor = (value: string) =>
+  value === 'high' ? 75 : value === 'medium' ? 50 : value === 'low' ? 25 : 0;
+const candidateFromCase = (candidate: SecurityCase['candidates'][number]): Candidate => ({
+  id: candidate.candidate_id,
+  severity: severityFor(candidate.severity),
+  title: candidate.title,
+  summary: `${candidate.class} retained in the loaded Security Case.`,
+  location: candidate.evidence_ids.join(', ') || 'No linked evidence identifier',
+  confidence: confidenceFor(candidate.confidence),
+  recommendation: 'abstained',
+  agentReason:
+    'No agent recommendation is authoritative. A human reviewer must assess the retained evidence and limitations.',
+  hardening: 'Review the retained evidence and document any safe follow-up separately.',
+  source: candidate.class,
+  guard: 'Not asserted by the universal case',
+  sink: candidate.evidence_ids.join(', ') || 'No linked evidence identifier',
+  revision: candidate.limitations.join(' ') || 'No additional revision context retained.',
+});
 
 const clock = () =>
   new Intl.DateTimeFormat('en', {
@@ -135,7 +99,10 @@ const label = (d: Decision) =>
   d === 'validated' ? 'Validate' : d === 'rejected' ? 'Reject' : 'Abstain';
 
 export default function Home() {
-  const [selectedId, setSelectedId] = useState(candidates[0].id);
+  const [caseDocument, setCaseDocument] = useState<SecurityCase | null>(null);
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [selectedId, setSelectedId] = useState('');
+  const [loadError, setLoadError] = useState('');
   const [query, setQuery] = useState('');
   const [staged, setStaged] = useState<Decision | null>(null);
   const [rationale, setRationale] = useState('');
@@ -145,13 +112,8 @@ export default function Home() {
   const [audit, setAudit] = useState<AuditEvent[]>([
     {
       actor: 'system',
-      action: 'Authorization and synthetic scope verified',
+      action: 'Waiting for a local Security Case',
       time: '09:41:02',
-    },
-    {
-      actor: 'agent',
-      action: 'Imported three structured candidates',
-      time: '09:41:08',
     },
   ]);
   const [copied, setCopied] = useState(false);
@@ -185,7 +147,7 @@ export default function Home() {
       candidates.filter((c) =>
         `${c.id} ${c.title}`.toLowerCase().includes(query.toLowerCase()),
       ),
-    [query],
+    [query, candidates],
   );
 
   function choose(id: string) {
@@ -195,6 +157,7 @@ export default function Home() {
     setRationale(d?.rationale ?? '');
   }
   function stage() {
+    if (!selected) return;
     setStaged(selected.recommendation);
     setRationale(selected.agentReason);
     setAudit((a) => [
@@ -207,7 +170,7 @@ export default function Home() {
     ]);
   }
   function record() {
-    if (!staged || rationale.trim().length < 12) return;
+    if (!selected || !staged || rationale.trim().length < 12) return;
     setDecisions((d) => ({
       ...d,
       [selected.id]: { decision: staged, rationale: rationale.trim() },
@@ -228,12 +191,9 @@ export default function Home() {
     setAudit([
       {
         actor: 'system',
-        action: 'Authorization and synthetic scope verified',
-        time: clock(),
-      },
-      {
-        actor: 'agent',
-        action: 'Imported three structured candidates',
+        action: caseDocument
+          ? 'Loaded Security Case retained; local review draft reset'
+          : 'Waiting for a local Security Case',
         time: clock(),
       },
     ]);
@@ -244,9 +204,9 @@ export default function Home() {
       [
         JSON.stringify(
           {
-            schema: 'secureflow-review-v1',
-            caseId: CASE_ID,
-            scope: 'synthetic-authorized',
+            schema: 'secureflow-review-room-audit-v1',
+            caseId: caseDocument?.case_id,
+            contract: caseDocument?.contract_version,
             decisions,
             audit,
           },
@@ -259,9 +219,25 @@ export default function Home() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${CASE_ID.toLowerCase()}-audit.json`;
+    a.download = `${(caseDocument?.case_id ?? 'secureflow').toLowerCase()}-audit.json`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function loadCase(file: File | undefined) {
+    if (!file) return;
+    setLoadError('');
+    try {
+      const parsed = await parseSecurityCaseFile(file);
+      const loaded = parsed.candidates.map(candidateFromCase);
+      setCaseDocument(parsed);
+      setCandidates(loaded);
+      setSelectedId(loaded[0]?.id ?? '');
+      setDecisions(Object.fromEntries(parsed.decisions.map((decision) => [decision.candidate_id, { decision: decision.decision, rationale: decision.rationale }])));
+      setAudit([{ actor: 'system', action: `Loaded ${parsed.case_id}; ${loaded.length} evidence-bound candidates`, time: clock() }]);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'Could not read the Security Case.');
+    }
   }
 
   useEffect(() => {
@@ -300,10 +276,10 @@ export default function Home() {
           properties: {},
           additionalProperties: false,
         },
-        annotations: { readOnlyHint: true, untrustedContentHint: false },
+        annotations: { readOnlyHint: true, untrustedContentHint: true },
         execute: () => ({
-          caseId: CASE_ID,
-          scope: 'synthetic-authorized',
+          caseId: caseDocument?.case_id,
+          contract: caseDocument?.contract_version,
           candidates: candidates.map((c) => ({
             id: c.id,
             severity: c.severity,
@@ -319,7 +295,7 @@ export default function Home() {
         description:
           'Select a candidate in the visible review room and return its evidence boundary, source, visible guard, and sink.',
         inputSchema: schema,
-        annotations: { readOnlyHint: true, untrustedContentHint: false },
+        annotations: { readOnlyHint: true, untrustedContentHint: true },
         execute: (input) => {
           const c = candidateFor(input);
           setSelectedId(c.id);
@@ -342,11 +318,15 @@ export default function Home() {
         description:
           'Select a candidate and return the supplied revision note without claiming exploitability.',
         inputSchema: schema,
-        annotations: { readOnlyHint: true, untrustedContentHint: false },
+        annotations: { readOnlyHint: true, untrustedContentHint: true },
         execute: (input) => {
           const c = candidateFor(input);
           setSelectedId(c.id);
-          return { id: c.id, revision: '7f3c1ad', note: c.revision };
+          return {
+            id: c.id,
+            revision: caseDocument?.target.revision?.value ?? 'unrecorded',
+            note: c.revision,
+          };
         },
       },
       {
@@ -355,7 +335,7 @@ export default function Home() {
         description:
           'Return an evidence-bound hardening direction for a candidate. This does not confirm a vulnerability or modify code.',
         inputSchema: schema,
-        annotations: { readOnlyHint: true, untrustedContentHint: false },
+        annotations: { readOnlyHint: true, untrustedContentHint: true },
         execute: (input) => {
           const c = candidateFor(input);
           setSelectedId(c.id);
@@ -373,7 +353,7 @@ export default function Home() {
         description:
           'Stage a provisional recommendation and rationale in the visible human decision form. This cannot record or finalize a security decision.',
         inputSchema: schema,
-        annotations: { readOnlyHint: false, untrustedContentHint: false },
+        annotations: { readOnlyHint: false, untrustedContentHint: true },
         execute: (input) => {
           const c = candidateFor(input);
           setSelectedId(c.id);
@@ -410,7 +390,27 @@ export default function Home() {
       queueMicrotask(() => setWebMcpStatus('error'));
     }
     return () => lifecycle.abort();
-  }, []);
+  }, [candidates, caseDocument]);
+
+  if (!selected || !caseDocument) {
+    return (
+      <main className="review-shell min-h-screen">
+        <section className="case-masthead max-w-3xl mx-auto mt-16">
+          <p className="section-kicker">Local evidence / Security Case</p>
+          <h1>Load a Security Case</h1>
+          <p className="case-deck">
+            Review Room consumes a local <code>secureflow-security-case-v1</code>{' '}
+            document. It does not ship synthetic candidates or contact a target.
+          </p>
+          <label className="utility-button inline-flex mt-6 cursor-pointer" htmlFor="case-file">
+            <FileCode2 /> Choose Security Case JSON
+          </label>
+          <input id="case-file" className="sr-only" type="file" accept="application/json,.json" onChange={(event) => void loadCase(event.target.files?.[0])} />
+          {loadError && <p className="mt-4 text-sm text-red-700" role="alert">{loadError}</p>}
+        </section>
+      </main>
+    );
+  }
 
   return (
     <main className="review-shell min-h-screen">
@@ -460,9 +460,9 @@ export default function Home() {
       <section className="case-masthead">
         <div>
           <p className="section-kicker">Active review / authorization</p>
-          <h1>Northstar API authorization review</h1>
+          <h1>{caseDocument.target.label}</h1>
           <p className="case-deck">
-            Structured evidence for an explicitly authorized synthetic case. The
+            Structured evidence for an explicitly authorized local case. The
             agent may investigate and stage; only the reviewer may decide.
           </p>
         </div>
@@ -470,23 +470,23 @@ export default function Home() {
           <button
             className="case-id"
             onClick={() => {
-              void navigator.clipboard.writeText(CASE_ID);
+              void navigator.clipboard.writeText(caseDocument.case_id);
               setCopied(true);
               setTimeout(() => setCopied(false), 1200);
             }}
           >
-            <Fingerprint /> {CASE_ID} {copied ? <Check /> : <Copy />}
+            <Fingerprint /> {caseDocument.case_id} {copied ? <Check /> : <Copy />}
           </button>
-          <span>REV 7f3c1ad</span>
-          <span>SCOPE synthetic/northstar-api</span>
+          <span>REV {caseDocument.target.revision?.value ?? 'unrecorded'}</span>
+          <span>SCOPE authorized local target</span>
         </div>
         <div className="review-progress">
           <div>
             <span>Human dispositions</span>
-            <strong>{Object.keys(decisions).length} / 3</strong>
+            <strong>{Object.keys(decisions).length} / {candidates.length}</strong>
           </div>
           <Progress
-            value={(Object.keys(decisions).length / 3) * 100}
+            value={candidates.length ? (Object.keys(decisions).length / candidates.length) * 100 : 0}
             className="h-1 bg-black/10 [&>div]:bg-[#146b4d]"
           />
         </div>
@@ -623,7 +623,9 @@ export default function Home() {
               <div className="revision-note">
                 <GitCompareArrows />
                 <div>
-                  <span>REVISION 7f3c1ad</span>
+                  <span>
+                    REVISION {caseDocument.target.revision?.value ?? 'unrecorded'}
+                  </span>
                   <p>{selected.revision}</p>
                 </div>
               </div>

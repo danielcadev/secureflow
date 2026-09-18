@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://secureflow.dev/schemas/secureflow-security-case-v1.schema.json",
+  "title": "SecureFlow Security Case v1",
+  "$comment": "This schema validates structural shape only. Semantic acceptance, including reference integrity, identifier uniqueness, one-decision-per-candidate, and source-kind-to-candidate-class authority, requires `secureflow case-validate`.",
+  "description": "Structural JSON shape for a SecureFlow Security Case. Passing this schema alone does not establish semantic validity; use `secureflow case-validate` for acceptance.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "case_id", "created_at", "target", "sources", "evidence", "candidates", "staged_recommendations", "decisions"],
+  "properties": {
+    "contract_version": { "const": "secureflow-security-case-v1" },
+    "case_id": { "type": "string", "pattern": "^sf_case_[a-z0-9_]{16,}$" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "target": { "$ref": "#/$defs/target" },
+    "sources": { "type": "array", "items": { "$ref": "#/$defs/source" } },
+    "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidence" } },
+    "candidates": { "type": "array", "items": { "$ref": "#/$defs/candidate" } },
+    "staged_recommendations": { "type": "array", "items": { "$ref": "#/$defs/stage" } },
+    "decisions": { "type": "array", "items": { "$ref": "#/$defs/decision" } }
+  },
+  "$defs": {
+    "sha": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "target": { "type": "object", "additionalProperties": false, "required": ["label", "root_sha256", "authorization"], "properties": { "label": {"type":"string"}, "root_sha256": {"$ref":"#/$defs/sha"}, "revision": {"type":"object", "additionalProperties":false, "required":["kind","value"], "properties":{"kind":{"type":"string"},"value":{"type":"string"}}}, "authorization": {"type":"object", "additionalProperties":false, "required":["status","basis","reviewer"], "properties":{"status":{"const":"authorized"},"basis":{"type":"string"},"reviewer":{"type":"string"},"reference":{"type":"string"},"expires_at":{"type":"string","format":"date-time"}}} } },
+    "source": { "type":"object", "additionalProperties":false, "required":["source_id","kind","name","version","artifact_sha256"], "properties":{"source_id":{"type":"string","pattern":"^sf_source_[a-z0-9_]{16,}$"},"kind":{"enum":["secure-engine","secure-skill-contextual","external-sarif","agent"]},"name":{"type":"string"},"version":{"type":"string"},"artifact_sha256":{"$ref":"#/$defs/sha"},"methodology":{"type":"string"}} },
+    "evidence": { "type":"object", "additionalProperties":false, "required":["evidence_id","source_id","sha256","description"], "properties":{"evidence_id":{"type":"string","pattern":"^sf_evidence_[a-z0-9_]{16,}$"},"source_id":{"type":"string"},"sha256":{"$ref":"#/$defs/sha"},"description":{"type":"string"},"relative_path":{"type":"string"}} },
+    "candidate": { "type":"object", "additionalProperties":false, "required":["candidate_id","source_id","class","title","confidence","evidence_ids","limitations"], "properties":{"candidate_id":{"type":"string","pattern":"^sf_candidate_[a-z0-9_]{16,}$"},"source_id":{"type":"string"},"class":{"enum":["engine-candidate","contextual-candidate","external-tool-candidate"]},"title":{"type":"string"},"severity":{"type":"string"},"confidence":{"type":"string"},"evidence_ids":{"type":"array","items":{"type":"string"}},"limitations":{"type":"array","items":{"type":"string"}}} },
+    "stage": { "type":"object", "additionalProperties":false, "required":["stage_id","candidate_id","agent_name","recommendation","rationale","created_at"], "properties":{"stage_id":{"type":"string","pattern":"^sf_stage_[a-z0-9_]{16,}$"},"candidate_id":{"type":"string"},"agent_name":{"type":"string"},"recommendation":{"type":"string"},"rationale":{"type":"string"},"created_at":{"type":"string","format":"date-time"}} },
+    "decision": { "type":"object", "additionalProperties":false, "required":["decision_id","candidate_id","decision","reviewer","rationale","decided_at"], "properties":{"decision_id":{"type":"string","pattern":"^sf_decision_[a-z0-9_]{16,}$"},"candidate_id":{"type":"string"},"decision":{"enum":["validated","rejected","abstained"]},"reviewer":{"type":"string"},"rationale":{"type":"string"},"decided_at":{"type":"string","format":"date-time"},"evidence_reference":{"type":"string"}} }
+  }
+}

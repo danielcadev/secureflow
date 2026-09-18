@@ -27,6 +27,32 @@ authorization, preserves hashes and provenance, and retains the evidence needed
 for human review. As analysis becomes cheaper or more capable, that trust and
 decision boundary remains the product's purpose.
 
+## Universal Security Case (v1 implementation candidate)
+
+`secureflow-security-case-v1` is the additive, agent-agnostic evidence and
+decision boundary for an authorized target and exact revision. It can retain
+Secure Engine candidates, provenance-bound Secure Skill contextual reviews, and
+SARIF-compatible external results without conflating their authority. Only a
+named human can add a final `validated`, `rejected`, or `abstained` decision.
+
+```bash
+cargo run -p secureflow -- case-create \
+  --run-manifest /tmp/secureflow-run.json \
+  --output /tmp/security-case.json
+cargo run -p secureflow -- case-validate /tmp/security-case.json
+cargo run -p secureflow -- case-mcp \
+  --case /tmp/security-case.json \
+  --stage-output /tmp/security-case-staged.json
+```
+
+The MCP bridge is local stdio only and offers read, investigate, and stage
+capabilities. It has no method that records a final decision. Run
+`bash scripts/demo-security-case-local.sh` for an offline reproducible demo.
+The published JSON Schema checks structural shape only. Cross-record references,
+identifier uniqueness, candidate authority, and decision semantics are enforced
+by `secureflow case-validate`; CI acceptance must run that command rather than
+treating schema validation alone as semantic acceptance.
+
 The research goal is to outperform human baselines on narrow, measurable tasks
 in coverage, speed, pattern memory, and reproducibility. That must be
 demonstrated through a blind study and does not transfer final authority.

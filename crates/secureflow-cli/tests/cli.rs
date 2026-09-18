@@ -60,6 +60,157 @@ fn finding_fixture() -> PathBuf {
         .join("../../tests/fixtures/minimal-run-with-finding.json")
 }
 
+#[test]
+fn security_case_is_additive_and_human_decisions_are_derived() {
+    let case_path =
+        std::env::temp_dir().join(format!("secureflow-case-{}.json", std::process::id()));
+    let decided_path = std::env::temp_dir().join(format!(
+        "secureflow-case-decided-{}.json",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_file(&case_path);
+    let _ = std::fs::remove_file(&decided_path);
+    let original = std::fs::read(finding_fixture()).expect("fixture should be readable");
+    let create = Command::new(binary())
+        .args(["case-create", "--run-manifest"])
+        .arg(finding_fixture())
+        .args(["--output"])
+        .arg(&case_path)
+        .output()
+        .expect("case create should start");
+    assert!(
+        create.status.success(),
+        "{}",
+        String::from_utf8_lossy(&create.stderr)
+    );
+    assert_eq!(
+        std::fs::read(finding_fixture()).expect("fixture should remain readable"),
+        original
+    );
+    let case: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&case_path).expect("case should be readable"))
+            .expect("case should be JSON");
+    validate_with_schema("secureflow-security-case-v1.schema.json", &case);
+    let candidate_id = case["candidates"][0]["candidate_id"]
+        .as_str()
+        .expect("candidate id");
+    let decide = Command::new(binary())
+        .args(["case-decide", "--case"])
+        .arg(&case_path)
+        .args([
+            "--candidate-id",
+            candidate_id,
+            "--decision",
+            "abstained",
+            "--reviewer",
+            "Daniel",
+            "--rationale",
+            "The retained evidence is insufficient for a final conclusion.",
+            "--output",
+        ])
+        .arg(&decided_path)
+        .output()
+        .expect("case decision should start");
+    assert!(
+        decide.status.success(),
+        "{}",
+        String::from_utf8_lossy(&decide.stderr)
+    );
+    let decided: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(&decided_path).expect("derived case should be readable"),
+    )
+    .expect("derived case should be JSON");
+    assert_eq!(decided["decisions"][0]["decision"], "abstained");
+    validate_with_schema("secureflow-security-case-v1.schema.json", &decided);
+    std::fs::remove_file(case_path).expect("case should be removable");
+    std::fs::remove_file(decided_path).expect("decision should be removable");
+}
+
+#[test]
+fn security_case_schema_is_structural_and_semantic_validation_fails_closed() {
+    let schema_output = Command::new(binary())
+        .arg("case-schema")
+        .output()
+        .expect("case schema should start");
+    assert!(schema_output.status.success());
+    let schema: serde_json::Value =
+        serde_json::from_slice(&schema_output.stdout).expect("case schema should be JSON");
+    assert!(
+        schema["$comment"]
+            .as_str()
+            .expect("schema comment")
+            .contains("structural shape only")
+    );
+    assert!(
+        schema["description"]
+            .as_str()
+            .expect("schema description")
+            .contains("case-validate")
+    );
+
+    let help = Command::new(binary())
+        .args(["case-schema", "--help"])
+        .output()
+        .expect("case schema help should start");
+    assert!(help.status.success());
+    let help = String::from_utf8_lossy(&help.stdout);
+    assert!(help.contains("structural Security Case schema"));
+    assert!(help.contains("case-validate"));
+
+    let case_path = std::env::temp_dir().join(format!(
+        "secureflow-case-semantic-negative-{}.json",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_file(&case_path);
+    let create = Command::new(binary())
+        .args(["case-create", "--run-manifest"])
+        .arg(finding_fixture())
+        .args(["--output"])
+        .arg(&case_path)
+        .output()
+        .expect("case create should start");
+    assert!(
+        create.status.success(),
+        "{}",
+        String::from_utf8_lossy(&create.stderr)
+    );
+    let mut case: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&case_path).expect("case should be readable"))
+            .expect("case should be JSON");
+    case["sources"][0]["kind"] = serde_json::json!("agent");
+    validate_with_schema("secureflow-security-case-v1.schema.json", &case);
+    std::fs::write(
+        &case_path,
+        serde_json::to_vec_pretty(&case).expect("case should serialize"),
+    )
+    .expect("semantic-negative case should be writable");
+
+    let validate = Command::new(binary())
+        .arg("case-validate")
+        .arg(&case_path)
+        .output()
+        .expect("case validation should start");
+    assert!(!validate.status.success());
+    assert!(
+        String::from_utf8_lossy(&validate.stderr)
+            .contains("candidate class does not match source kind")
+    );
+    std::fs::remove_file(case_path).expect("case should be removable");
+}
+
+#[test]
+fn case_mcp_exposes_staging_but_not_final_decisions() {
+    let output = Command::new(binary())
+        .arg("case-mcp")
+        .arg("--help")
+        .output()
+        .expect("MCP help should start");
+    assert!(output.status.success());
+    let help = String::from_utf8_lossy(&output.stdout);
+    assert!(help.contains("cannot decide cases"));
+    assert!(!help.contains("record-final-decision"));
+}
+
 fn prospective_protocol_fixture() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/fixtures/prospective-protocol-draft.json")
