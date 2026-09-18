@@ -48,6 +48,8 @@ cargo run -p secureflow -- case-mcp \
 The MCP bridge is local stdio only and offers read, investigate, and stage
 capabilities. It has no method that records a final decision. Run
 `bash scripts/demo-security-case-local.sh` for an offline reproducible demo.
+For an install-once Codex plugin, multi-case MCP entry point, and local Review
+Room launcher, see the [universal installation guide](docs/universal-installation.md).
 The published JSON Schema checks structural shape only. Cross-record references,
 identifier uniqueness, candidate authority, and decision semantics are enforced
 by `secureflow case-validate`; CI acceptance must run that command rather than

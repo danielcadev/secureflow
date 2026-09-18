@@ -19,9 +19,11 @@ agent input remains a staged recommendation attached to an existing candidate.
 In particular, a contextual signal, external-tool result, or agent recommendation
 cannot become a Secure Engine rule or a vulnerability through import. The only
 final decisions are `validated`, `rejected`, and `abstained`, recorded with a
-human reviewer and rationale by `case-decide`. The MCP bridge deliberately
-offers read, investigate, and stage only; it has no tool or dispatch route to
-record a decision. It runs over local stdio and has no provider transport.
+human reviewer and rationale by `case-decide`. Both MCP entry points deliberately
+offer validate/read, investigate, and stage only; neither has a tool or dispatch
+route to record a decision. The install-once entry point accepts local case and
+distinct staging paths per call, so the host must apply its normal local-tool
+consent policy. Both run over local stdio and have no provider transport.
 
 Review Room applies the same closed-world identifier, hash, enum, timestamp,
 reference, uniqueness, decision, and candidate-authority checks before rendering

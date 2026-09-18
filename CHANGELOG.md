@@ -4,6 +4,13 @@ All notable changes to SecureFlow are documented here.
 
 ## Unreleased
 
+## 1.0.0-rc.2 — 2026-09-18
+
+- add an install-once, multi-case stdio MCP entry point with explicit read-only annotations, per-call local paths, bounded semantic validation, evidence inspection, and derived recommendation staging while retaining `case-decide` as CLI-only human authority;
+- package SecureFlow as a Codex plugin with a narrowly routed Security Case skill, project marketplace, portable MCP configuration, and reproducible installer;
+- add a localhost-only Review Room launcher that reuses the existing WebMCP boundary and refuses to install dependencies or build assets implicitly;
+- retain the `v1.0.0-rc.1` tag unchanged; this candidate adds distribution and discovery surfaces without target transport, autonomous scanning, exploitation, provider transmission, or autonomous vulnerability validation.
+
 ## 1.0.0-rc.1 — 2026-09-18
 
 - add the local-first `secureflow-security-case-v1` evidence and decision boundary with strict Core and Review Room semantic validation, exact source-to-candidate authority, bounded strict UTF-8 browser loading, and human-only final decisions;

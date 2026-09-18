@@ -1,5 +1,6 @@
+use std::io::Write;
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 fn binary() -> &'static str {
     env!("CARGO_BIN_EXE_secureflow")
@@ -209,6 +210,111 @@ fn case_mcp_exposes_staging_but_not_final_decisions() {
     let help = String::from_utf8_lossy(&output.stdout);
     assert!(help.contains("cannot decide cases"));
     assert!(!help.contains("record-final-decision"));
+}
+
+#[test]
+fn universal_mcp_discovers_cases_per_call_and_only_stages_recommendations() {
+    let case_path = std::env::temp_dir().join(format!(
+        "secureflow-universal-mcp-case-{}.json",
+        std::process::id()
+    ));
+    let staged_path = std::env::temp_dir().join(format!(
+        "secureflow-universal-mcp-staged-{}.json",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_file(&case_path);
+    let _ = std::fs::remove_file(&staged_path);
+    let create = Command::new(binary())
+        .args(["case-create", "--run-manifest"])
+        .arg(finding_fixture())
+        .args(["--output"])
+        .arg(&case_path)
+        .output()
+        .expect("case create should start");
+    assert!(
+        create.status.success(),
+        "{}",
+        String::from_utf8_lossy(&create.stderr)
+    );
+    let case: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&case_path).expect("case should be readable"))
+            .expect("case should be JSON");
+    let candidate_id = case["candidates"][0]["candidate_id"]
+        .as_str()
+        .expect("candidate id");
+    let case_path_argument = case_path.to_string_lossy().into_owned();
+    let staged_path_argument = staged_path.to_string_lossy().into_owned();
+
+    let mut child = Command::new(binary())
+        .arg("mcp")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("universal MCP should start");
+    let requests = [
+        serde_json::json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}),
+        serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}),
+        serde_json::json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"validate_case","arguments":{"case_path":&case_path_argument}}}),
+        serde_json::json!({"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"investigate_candidate","arguments":{"case_path":&case_path_argument,"candidate_id":candidate_id}}}),
+        serde_json::json!({"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"stage_agent_recommendation","arguments":{"case_path":&case_path_argument,"output_path":&staged_path_argument,"candidate_id":candidate_id,"agent_name":"integration-test","recommendation":"abstained","rationale":"Evidence remains insufficient for a human verdict."}}}),
+        serde_json::json!({"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"stage_agent_recommendation","arguments":{"case_path":&case_path_argument,"output_path":&staged_path_argument,"candidate_id":candidate_id,"agent_name":"integration-test","recommendation":"validated","rationale":"This must not replace the existing derived case."}}}),
+    ];
+    {
+        let stdin = child.stdin.as_mut().expect("MCP stdin");
+        for request in requests {
+            writeln!(stdin, "{request}").expect("request should be writable");
+        }
+    }
+    drop(child.stdin.take());
+    let output = child.wait_with_output().expect("MCP should finish");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let responses = String::from_utf8(output.stdout).expect("MCP output should be UTF-8");
+    let responses = responses
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).expect("valid response"))
+        .collect::<Vec<_>>();
+    assert_eq!(responses.len(), 6);
+    let tools = responses[1]["result"]["tools"]
+        .as_array()
+        .expect("tool list");
+    assert_eq!(tools.len(), 4);
+    assert!(tools.iter().all(|tool| tool["name"] != "case_decide"));
+    assert_eq!(
+        tools[0]["annotations"]["readOnlyHint"],
+        serde_json::json!(true)
+    );
+    assert!(
+        responses[2]["result"]["content"][0]["text"]
+            .as_str()
+            .expect("validation text")
+            .contains("human-only")
+    );
+
+    let staged: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&staged_path).expect("staged case should exist"))
+            .expect("staged case should be JSON");
+    assert_eq!(
+        staged["staged_recommendations"].as_array().unwrap().len(),
+        1
+    );
+    assert_eq!(staged["decisions"].as_array().unwrap().len(), 0);
+    assert_eq!(
+        staged["staged_recommendations"][0]["recommendation"],
+        serde_json::json!("abstained")
+    );
+    assert!(
+        responses[5]["error"]["message"]
+            .as_str()
+            .expect("overwrite error")
+            .contains("destination already exists")
+    );
+    validate_with_schema("secureflow-security-case-v1.schema.json", &staged);
+    std::fs::remove_file(case_path).expect("case should be removable");
+    std::fs::remove_file(staged_path).expect("staged case should be removable");
 }
 
 fn prospective_protocol_fixture() -> PathBuf {
