@@ -18,6 +18,18 @@ SecureFlow skill uses this surface by default so local cases do not depend on a
 Chrome extension or file-URL permission. For a manual external-browser session,
 open the loopback URL yourself.
 
+The plugin launcher can preload an explicitly validated component set:
+
+```bash
+bash plugins/secureflow/scripts/open-review-room.sh \
+  --case /path/to/component-a/security-case.json \
+  --case /path/to/component-b/security-case.json
+```
+
+It serves only those files through a tokenized, loopback-only session and prints
+the complete URL for the Codex side browser. Without `--case`, the manual file
+picker remains available.
+
 ## WebMCP tools
 
 | Tool                         | Effect                                                       |

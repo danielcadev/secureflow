@@ -4,8 +4,10 @@ import {
   MAX_SECURITY_CASE_BYTES,
   createRemediationDraft,
   loadSecurityCaseFile,
+  loadReviewSessionPayload,
   parseSecurityCase,
   parseSecurityCaseFile,
+  reviewSessionEndpoint,
   SECURITY_CASE_CONTRACT,
   type CandidateClass,
   type SecurityCase,
@@ -155,6 +157,42 @@ void test('loads an exact case hash and creates a scoped remediation draft', asy
   assert.deepEqual(draft.scope.allowed_paths, ['src/auth.ts']);
   assert.equal(draft.scope.merge_authorized, false);
   assert.equal(draft.scope.deploy_authorized, false);
+});
+
+void test('loads a bounded local review session and rejects invalid endpoints', async () => {
+  const first = fixture();
+  const second = fixture();
+  second.case_id = identifier('case', 'second');
+  const encode = (value: SecurityCase) =>
+    Buffer.from(JSON.stringify(value), 'utf8').toString('base64');
+  const loaded = await loadReviewSessionPayload({
+    contract_version: 'secureflow-review-session-v1',
+    cases: [
+      { name: 'first.json', bytes_base64: encode(first) },
+      { name: 'second.json', bytes_base64: encode(second) },
+    ],
+  });
+  assert.deepEqual(loaded.map((entry) => entry.fileName), [
+    'first.json',
+    'second.json',
+  ]);
+  const token = 'a'.repeat(64);
+  assert.equal(
+    reviewSessionEndpoint(`?session_port=3002&session_token=${token}`),
+    `http://127.0.0.1:3002/session/${token}`,
+  );
+  assert.equal(reviewSessionEndpoint(''), null);
+  assert.throws(
+    () => reviewSessionEndpoint('?session_port=443&session_token=bad'),
+    /Invalid local/,
+  );
+  await assert.rejects(
+    loadReviewSessionPayload({
+      contract_version: 'secureflow-review-session-v1',
+      cases: [{ name: '../case.json', bytes_base64: encode(first) }],
+    }),
+    /Invalid case entry/,
+  );
 });
 
 void test('remediation drafts reject empty and escaping path scopes', async () => {

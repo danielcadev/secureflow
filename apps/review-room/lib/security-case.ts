@@ -84,6 +84,11 @@ export type LoadedSecurityCase = {
   sha256: string;
 };
 
+type ReviewSessionPayload = {
+  contract_version: 'secureflow-review-session-v1';
+  cases: Array<{ name: string; bytes_base64: string }>;
+};
+
 export type RemediationHandoffDraft = {
   contract_version: 'secureflow-remediation-handoff-v1';
   handoff_id: string;
@@ -565,6 +570,72 @@ export async function loadSecurityCaseFile(
     fileName: file.name ?? 'security-case.json',
     sha256,
   };
+}
+
+export function reviewSessionEndpoint(search: string): string | null {
+  const parameters = new URLSearchParams(search);
+  const port = parameters.get('session_port');
+  const token = parameters.get('session_token');
+  if (port === null && token === null) return null;
+  if (
+    port === null ||
+    token === null ||
+    !/^\d{1,5}$/.test(port) ||
+    Number(port) < 1 ||
+    Number(port) > 65_535 ||
+    !/^[0-9a-f]{64}$/.test(token)
+  ) {
+    throw new Error('Invalid local Review Room session parameters.');
+  }
+  return `http://127.0.0.1:${Number(port)}/session/${token}`;
+}
+
+export async function loadReviewSessionPayload(
+  input: unknown,
+): Promise<LoadedSecurityCase[]> {
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+    throw new Error('Invalid local Review Room session.');
+  }
+  const payload = input as Partial<ReviewSessionPayload>;
+  if (
+    payload.contract_version !== 'secureflow-review-session-v1' ||
+    !Array.isArray(payload.cases) ||
+    payload.cases.length === 0 ||
+    payload.cases.length > 1_024
+  ) {
+    throw new Error('Invalid local Review Room session.');
+  }
+  let totalBytes = 0;
+  const files = payload.cases.map((entry) => {
+    if (
+      typeof entry !== 'object' ||
+      entry === null ||
+      typeof entry.name !== 'string' ||
+      entry.name.length === 0 ||
+      entry.name.length > 255 ||
+      entry.name.includes('/') ||
+      entry.name.includes('\\') ||
+      typeof entry.bytes_base64 !== 'string' ||
+      !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
+        entry.bytes_base64,
+      )
+    ) {
+      throw new Error('Invalid case entry in local Review Room session.');
+    }
+    const decoded = Uint8Array.from(atob(entry.bytes_base64), (character) =>
+      character.charCodeAt(0),
+    );
+    totalBytes += decoded.byteLength;
+    if (decoded.byteLength > MAX_SECURITY_CASE_BYTES || totalBytes > 128 * 1024 * 1024) {
+      throw new Error('The local Review Room session exceeds its byte limit.');
+    }
+    return {
+      name: entry.name,
+      size: decoded.byteLength,
+      arrayBuffer: async () => decoded.slice().buffer,
+    };
+  });
+  return Promise.all(files.map(loadSecurityCaseFile));
 }
 
 export async function createRemediationDraft(

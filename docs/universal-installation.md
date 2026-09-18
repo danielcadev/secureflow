@@ -53,17 +53,21 @@ cd apps/review-room
 npm ci
 npm run build
 cd ../..
-bash plugins/secureflow/scripts/open-review-room.sh
+bash plugins/secureflow/scripts/open-review-room.sh \
+  --case /path/to/component-a/security-case.json \
+  --case /path/to/component-b/security-case.json
 ```
 
 The launcher binds to `127.0.0.1` and prints its loopback URL without launching
 an external browser. In Codex desktop, SecureFlow opens that URL in the
 right-side browser panel. Pass
 `--system-browser` only when an external browser is explicitly desired; use
-`--port` or `--app-dir` when needed. Review Room loads a local
-Security Case through the browser file picker and registers its existing
-WebMCP tools. Artifact-derived content remains untrusted and agent staging only
-prepares the visible form.
+`--port`, `--session-port`, or `--app-dir` when needed. Every repeated `--case`
+path is CLI-validated before startup and exposed only through a tokenized,
+loopback-only session, so Review Room opens with the component set already
+loaded. With no `--case`, its manual file picker remains available. The app
+registers its existing WebMCP tools; artifact-derived content remains untrusted
+and agent staging only prepares the visible form.
 
 ## Security boundary
 

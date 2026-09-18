@@ -29,6 +29,8 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   createRemediationDraft,
   loadSecurityCaseFile,
+  loadReviewSessionPayload,
+  reviewSessionEndpoint,
   type Decision,
   type LoadedSecurityCase,
   type SecurityCase,
@@ -173,6 +175,7 @@ export default function Home() {
   >('unavailable');
   const decisionsRef = useRef(decisions);
   const selectionRef = useRef(remediationSelection);
+  const sessionLoadStarted = useRef(false);
 
   const candidates = useMemo(
     () =>
@@ -233,6 +236,42 @@ export default function Home() {
     const decision = decisions[key];
     setStaged(decision?.decision ?? null);
     setRationale(decision?.rationale ?? '');
+  }
+
+  function acceptLoadedCases(parsed: LoadedSecurityCase[]) {
+    const caseIds = new Set<string>();
+    for (const loaded of parsed) {
+      if (caseIds.has(loaded.document.case_id)) {
+        throw new Error(`Duplicate case identity: ${loaded.document.case_id}`);
+      }
+      caseIds.add(loaded.document.case_id);
+    }
+    const nextCandidates = parsed.flatMap((loaded) =>
+      loaded.document.candidates.map((candidate) =>
+        candidateFromCase(loaded, candidate),
+      ),
+    );
+    const authoritative: Record<string, ReviewDraft> = {};
+    for (const loaded of parsed) {
+      for (const decision of loaded.document.decisions) {
+        authoritative[`${loaded.document.case_id}:${decision.candidate_id}`] = {
+          decision: decision.decision,
+          rationale: decision.rationale,
+          authoritative: true,
+        };
+      }
+    }
+    setLoadedCases(parsed);
+    setSelectedKey(nextCandidates[0]?.key ?? '');
+    setDecisions(authoritative);
+    setRemediationSelection([]);
+    setAudit([
+      {
+        actor: 'system',
+        action: `Loaded ${parsed.length} cases with ${nextCandidates.length} evidence-bound candidates`,
+        time: clock(),
+      },
+    ]);
   }
 
   function stageRecommendation() {
@@ -368,39 +407,7 @@ export default function Home() {
         throw new Error('The selected component set exceeds the 128 MiB session limit.');
       }
       const parsed = await Promise.all(Array.from(files, loadSecurityCaseFile));
-      const caseIds = new Set<string>();
-      for (const loaded of parsed) {
-        if (caseIds.has(loaded.document.case_id)) {
-          throw new Error(`Duplicate case identity: ${loaded.document.case_id}`);
-        }
-        caseIds.add(loaded.document.case_id);
-      }
-      const nextCandidates = parsed.flatMap((loaded) =>
-        loaded.document.candidates.map((candidate) =>
-          candidateFromCase(loaded, candidate),
-        ),
-      );
-      const authoritative: Record<string, ReviewDraft> = {};
-      for (const loaded of parsed) {
-        for (const decision of loaded.document.decisions) {
-          authoritative[`${loaded.document.case_id}:${decision.candidate_id}`] = {
-            decision: decision.decision,
-            rationale: decision.rationale,
-            authoritative: true,
-          };
-        }
-      }
-      setLoadedCases(parsed);
-      setSelectedKey(nextCandidates[0]?.key ?? '');
-      setDecisions(authoritative);
-      setRemediationSelection([]);
-      setAudit([
-        {
-          actor: 'system',
-          action: `Loaded ${parsed.length} cases with ${nextCandidates.length} evidence-bound candidates`,
-          time: clock(),
-        },
-      ]);
+      acceptLoadedCases(parsed);
     } catch (error) {
       setLoadError(
         error instanceof Error
@@ -409,6 +416,42 @@ export default function Home() {
       );
     }
   }
+
+  useEffect(() => {
+    if (sessionLoadStarted.current) return;
+    sessionLoadStarted.current = true;
+    let endpoint: string | null;
+    try {
+      endpoint = reviewSessionEndpoint(window.location.search);
+    } catch (error) {
+      queueMicrotask(() =>
+        setLoadError(error instanceof Error ? error.message : 'Invalid local session.'),
+      );
+      return;
+    }
+    if (endpoint === null) return;
+    const controller = new AbortController();
+    void fetch(endpoint, {
+      cache: 'no-store',
+      credentials: 'omit',
+      referrerPolicy: 'no-referrer',
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Could not open the local Review Room session.');
+        return loadReviewSessionPayload(await response.json());
+      })
+      .then(acceptLoadedCases)
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        setLoadError(
+          error instanceof Error
+            ? error.message
+            : 'Could not open the local Review Room session.',
+        );
+      });
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     const context = document.modelContext;
