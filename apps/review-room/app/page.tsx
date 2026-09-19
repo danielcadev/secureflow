@@ -105,6 +105,8 @@ const label = (decision: Decision) =>
     : decision === 'rejected'
       ? 'Reject'
       : 'Abstain';
+const compactIdentifier = (value: string) =>
+  value.length > 28 ? `${value.slice(0, 18)}…${value.slice(-6)}` : value;
 
 function candidateFromCase(
   loaded: LoadedSecurityCase,
@@ -722,7 +724,9 @@ export default function Home() {
                 <span className={`severity-rule severity-${candidate.severity}`} />
                 <span className="candidate-copy">
                   <span className="component-name">{candidate.caseLabel}</span>
-                  <span className="candidate-id">{candidate.id} · {candidate.severity}</span>
+                  <span className="candidate-id" title={candidate.id}>
+                    {compactIdentifier(candidate.id)} · {candidate.severity}
+                  </span>
                   <span className="candidate-title">{candidate.title}</span>
                   <span className="candidate-state">
                     {decisions[candidate.key]
@@ -740,7 +744,10 @@ export default function Home() {
 
         <section className="evidence-pane">
           <header className="finding-header">
-            <div className="finding-reference"><span>{selected.id}</span><span className={`severity-label severity-text-${selected.severity}`}>{selected.severity} signal</span></div>
+            <div className="finding-reference">
+              <span title={selected.id}>{compactIdentifier(selected.id)}</span>
+              <span className={`severity-label severity-text-${selected.severity}`}>{selected.severity} signal</span>
+            </div>
             <h2>{selected.title}</h2>
             <p>{selected.summary}</p>
             <div className="source-location"><FileCode2 /> {selected.location}</div>
