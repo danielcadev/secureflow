@@ -24,6 +24,13 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/components/ui/pagination';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -87,6 +94,7 @@ declare global {
 const STORAGE_KEY = 'secureflow-review-room-v2';
 const MAX_REVIEW_CASES = 1_024;
 const MAX_REVIEW_CASE_BYTES = 128 * 1024 * 1024;
+const CANDIDATE_PAGE_SIZE = 5;
 const severityFor = (value?: string): Candidate['severity'] =>
   value === 'high' || value === 'medium' || value === 'low' ? value : 'low';
 const confidenceFor = (value: string) =>
@@ -161,6 +169,7 @@ export default function Home() {
   const [selectedKey, setSelectedKey] = useState('');
   const [loadError, setLoadError] = useState('');
   const [query, setQuery] = useState('');
+  const [candidatePage, setCandidatePage] = useState(0);
   const [mode, setMode] = useState<'manual' | 'agent'>('manual');
   const [staged, setStaged] = useState<Decision | null>(null);
   const [rationale, setRationale] = useState('');
@@ -201,6 +210,15 @@ export default function Home() {
           .includes(query.toLowerCase()),
       ),
     [query, candidates],
+  );
+  const candidatePageCount = Math.max(
+    1,
+    Math.ceil(filtered.length / CANDIDATE_PAGE_SIZE),
+  );
+  const candidatePageStart = candidatePage * CANDIDATE_PAGE_SIZE;
+  const visibleCandidates = filtered.slice(
+    candidatePageStart,
+    candidatePageStart + CANDIDATE_PAGE_SIZE,
   );
   const dispositionCount = Object.values(decisions).length;
 
@@ -265,6 +283,7 @@ export default function Home() {
     }
     setLoadedCases(parsed);
     setSelectedKey(nextCandidates[0]?.key ?? '');
+    setCandidatePage(0);
     setDecisions(authoritative);
     setRemediationSelection([]);
     setAudit([
@@ -534,6 +553,10 @@ export default function Home() {
         annotations: { readOnlyHint: true, untrustedContentHint: true },
         execute: (input) => {
           const candidate = candidateFor(input);
+          setQuery('');
+          setCandidatePage(
+            Math.floor(candidates.indexOf(candidate) / CANDIDATE_PAGE_SIZE),
+          );
           setSelectedKey(candidate.key);
           return {
             key: candidate.key,
@@ -556,6 +579,10 @@ export default function Home() {
         annotations: { readOnlyHint: false, untrustedContentHint: true },
         execute: (input) => {
           const candidate = candidateFor(input);
+          setQuery('');
+          setCandidatePage(
+            Math.floor(candidates.indexOf(candidate) / CANDIDATE_PAGE_SIZE),
+          );
           setSelectedKey(candidate.key);
           setMode('agent');
           setStaged(candidate.recommendation);
@@ -711,15 +738,15 @@ export default function Home() {
       </section>
 
       <div className="workbench">
-        <aside className="queue-pane" aria-label="Candidate queue">
+        <aside id="candidate-queue" className="queue-pane" aria-label="Candidate queue">
           <div className="pane-heading">
             <div><p className="section-kicker">Candidate queue</p><h2>Component signals</h2></div>
             <span className="count-cell">{candidates.length}</span>
           </div>
-          <div className="queue-search"><Search /><input aria-label="Search candidates" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="ID, title, or component" /></div>
+          <div className="queue-search"><Search /><input aria-label="Search candidates" value={query} onChange={(event) => { setQuery(event.target.value); setCandidatePage(0); }} placeholder="ID, title, or component" /></div>
           <div className="queue-columns" aria-hidden="true"><span>Signal</span><span>Evidence</span></div>
           <div className="candidate-list">
-            {filtered.map((candidate) => (
+            {visibleCandidates.map((candidate) => (
               <button key={candidate.key} onClick={() => choose(candidate.key)} className={`candidate-row ${candidate.key === selected.key ? 'candidate-row-active' : ''}`}>
                 <span className={`severity-rule severity-${candidate.severity}`} />
                 <span className="candidate-copy">
@@ -739,6 +766,43 @@ export default function Home() {
             ))}
             {filtered.length === 0 && <p className="queue-empty">No candidates match this filter.</p>}
           </div>
+          {filtered.length > 0 && (
+            <Pagination className="queue-pagination" aria-label="Candidate pages">
+              <PaginationContent className="queue-pagination-content">
+                <PaginationItem>
+                  <PaginationPrevious
+                    href="#candidate-queue"
+                    text="Previous"
+                    aria-disabled={candidatePage === 0}
+                    tabIndex={candidatePage === 0 ? -1 : 0}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      if (candidatePage > 0) setCandidatePage(candidatePage - 1);
+                    }}
+                  />
+                </PaginationItem>
+                <PaginationItem>
+                  <span className="queue-page-status" role="status" aria-live="polite">
+                    {candidatePageStart + 1}–{Math.min(candidatePageStart + CANDIDATE_PAGE_SIZE, filtered.length)} of {filtered.length}
+                  </span>
+                </PaginationItem>
+                <PaginationItem>
+                  <PaginationNext
+                    href="#candidate-queue"
+                    text="Next"
+                    aria-disabled={candidatePage >= candidatePageCount - 1}
+                    tabIndex={candidatePage >= candidatePageCount - 1 ? -1 : 0}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      if (candidatePage < candidatePageCount - 1) {
+                        setCandidatePage(candidatePage + 1);
+                      }
+                    }}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+          )}
           <div className="queue-footnote">Component coverage is explicit; this view does not claim full-repository coverage.</div>
         </aside>
 
