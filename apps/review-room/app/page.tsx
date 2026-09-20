@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import './review-design.css';
 import {
   Bot,
   Boxes,
@@ -143,7 +144,7 @@ function candidateFromCase(
     severity: severityFor(candidate.severity),
     title: candidate.title,
     summary: `${candidate.class} retained in ${loaded.fileName}.`,
-    location: candidate.evidence_ids.join(', ') || 'No linked evidence identifier',
+    location: loaded.document.evidence.filter((entry) => candidate.evidence_ids.includes(entry.evidence_id)).map((entry) => entry.relative_path).filter(Boolean).join(', ') || 'Source location not recorded',
     confidence: confidenceFor(candidate.confidence),
     recommendation,
     agentReason:
@@ -173,6 +174,8 @@ function downloadJson(value: unknown, fileName: string) {
 }
 
 export default function Home() {
+  const [mobileDetail, setMobileDetail] = useState(false);
+  const [controlsOpen, setControlsOpen] = useState(false);
   const [loadedCases, setLoadedCases] = useState<LoadedSecurityCase[]>([]);
   const [selectedKey, setSelectedKey] = useState('');
   const [loadError, setLoadError] = useState('');
@@ -270,6 +273,7 @@ export default function Home() {
   }, [decisions, remediationSelection]);
 
   function choose(key: string) {
+    setMobileDetail(true);
     setSelectedKey(key);
     const decision = decisions[key];
     setStaged(decision?.decision ?? null);
@@ -757,13 +761,14 @@ export default function Home() {
   const remediationEligible = selectedReview?.decision === 'validated' && selectedReview.authoritative;
 
   return (
-    <main className="review-shell min-h-screen">
+    <main className={`review-shell min-h-screen redesigned ${mobileDetail ? 'mobile-detail' : ''}`}>
       <header className="topbar">
         <div className="brand-lockup">
           <span className="brand-mark"><ShieldCheck /></span>
-          <span className="brand-name">SECUREFLOW</span>
+          <span className="brand-name">SecureFlow</span>
           <span className="brand-divider" />
-          <span className="brand-product">Unified Review Room</span>
+          <button className="brand-product" onClick={() => { setMobileDetail(false); setControlsOpen(false); }}>Review</button>
+          <button className="history-link" onClick={() => { setControlsOpen(true); setTimeout(() => document.querySelector('.audit-section')?.scrollIntoView({ behavior: 'smooth' }), 0); }}>History</button>
         </div>
         <div className="topbar-actions">
           <span className="status-line status-authorized"><LockKeyhole /> Authorized scope</span>
@@ -771,7 +776,7 @@ export default function Home() {
           <span className={`status-line ${webMcpStatus === 'ready' ? 'status-agent' : ''}`}>
             <span className="status-dot" />
             {webMcpStatus === 'ready'
-              ? 'WebMCP ready'
+              ? 'Local · Connected'
               : webMcpStatus === 'error'
                 ? 'WebMCP error'
                 : 'WebMCP unavailable'}
@@ -799,10 +804,9 @@ export default function Home() {
       <section className="case-masthead">
         <div>
           <p className="section-kicker">Active component / {selected.caseLabel}</p>
-          <h1>{selected.title}</h1>
+          <h1>Review what matters</h1>
           <p className="case-deck">
-            Investigate manually or with an agent. Human review and remediation
-            authorization remain separate, explicit actions.
+            {loadedCases.length} components / local review
           </p>
         </div>
         <div className="case-metadata">
@@ -820,20 +824,22 @@ export default function Home() {
           <span>CASE SHA {selectedCase.sha256.slice(0, 16)}…</span>
         </div>
         <div className="review-progress">
-          <div><span>Review drafts</span><strong>{dispositionCount} / {candidates.length}</strong></div>
-          <Progress value={candidates.length ? (dispositionCount / candidates.length) * 100 : 0} className="h-1 bg-black/10 [&>div]:bg-[#146b4d]" />
+          <div><span>{candidates.length} candidates</span><strong>{dispositionCount} review drafts</strong></div>
+          <Progress value={candidates.length ? (dispositionCount / candidates.length) * 100 : 0} className="h-1" />
         </div>
       </section>
 
       <div className="workbench">
         <aside id="candidate-queue" className="queue-pane" aria-label="Candidate queue">
           <div className="pane-heading">
-            <div><p className="section-kicker">Candidate queue</p><h2>Component signals</h2></div>
+            <div><h2>Security candidates</h2></div>
             <span className="count-cell" title={`${candidates.length} total candidates`}>
               {filtered.length}/{candidates.length}
             </span>
           </div>
-          <div className="queue-search"><Search /><input aria-label="Search candidates" value={query} onChange={(event) => { setQuery(event.target.value); setCandidatePage(0); }} placeholder="ID, title, or component" /></div>
+          <div className="queue-search"><Search /><input aria-label="Search candidates" value={query} onChange={(event) => { setQuery(event.target.value); setCandidatePage(0); }} placeholder="Search file, title or keyword…" /></div>
+          <div className="review-chips" aria-label="Quick review filters">{(['all', 'pending', 'recorded'] as const).map((state) => <button key={state} aria-pressed={reviewFilter === state} onClick={() => { setReviewFilter(state); setCandidatePage(0); }}>{state === 'all' ? 'All' : state === 'pending' ? 'Pending' : 'Reviewed'} <span>{state === 'all' ? candidates.length : state === 'pending' ? reviewSummary.byState.pending : Object.values(decisions).filter((entry) => entry.authoritative).length}</span></button>)}</div>
+          <details className="advanced-filters"><summary>More filters</summary>
           <div className="queue-filters">
             <label>
               <span>Review</span>
@@ -907,24 +913,25 @@ export default function Home() {
               ))}
             </div>
           )}
-          <div className="queue-columns" aria-hidden="true"><span>Signal</span><span>Evidence</span></div>
+          </details>
           <div className="candidate-list">
             {visibleCandidates.map((candidate) => (
               <button key={candidate.key} onClick={() => choose(candidate.key)} className={`candidate-row ${candidate.key === selected.key ? 'candidate-row-active' : ''}`}>
                 <span className={`severity-rule severity-${candidate.severity}`} />
                 <span className="candidate-copy">
-                  <span className="component-name">{candidate.caseLabel}</span>
+                  <span className="component-name">{decisions[candidate.key] ? (decisions[candidate.key].authoritative ? 'Reviewed' : 'Draft') : 'Pending'}</span>
                   <span className="candidate-id" title={candidate.id}>
                     {compactIdentifier(candidate.id)} · {candidate.severity}
                   </span>
                   <span className="candidate-title">{candidate.title}</span>
+                  <span className="candidate-component">{candidate.caseLabel}</span>
                   <span className="candidate-state">
                     {decisions[candidate.key]
                       ? `${decisions[candidate.key].authoritative ? 'recorded' : 'draft'}: ${decisions[candidate.key].decision}`
-                      : 'awaiting review'}
+                      : 'Awaiting verification'}
                   </span>
                 </span>
-                <strong>{candidate.confidence}%</strong>
+                <span aria-hidden="true" className="candidate-chevron">›</span>
               </button>
             ))}
             {filtered.length === 0 && <p className="queue-empty">No candidates match this filter.</p>}
@@ -970,10 +977,11 @@ export default function Home() {
         </aside>
 
         <section className="evidence-pane">
+          <button className="back-to-queue" onClick={() => setMobileDetail(false)}>‹ Back to candidates</button>
           <header className="finding-header">
             <div className="finding-reference">
+              <span className="pending-badge">{selectedReview ? (selectedReview.authoritative ? 'Recorded decision' : 'Review draft') : 'Pending review'}</span>
               <span title={selected.id}>{compactIdentifier(selected.id)}</span>
-              <span className={`severity-label severity-text-${selected.severity}`}>{selected.severity} signal</span>
             </div>
             <h2>{selected.title}</h2>
             <p>{selected.summary}</p>
@@ -983,12 +991,14 @@ export default function Home() {
 
           <Tabs defaultValue="evidence" className="evidence-tabs">
             <TabsList variant="line" className="evidence-tab-list">
-              <TabsTrigger value="evidence">Evidence record</TabsTrigger>
-              <TabsTrigger value="flow">Source → sink</TabsTrigger>
-              <TabsTrigger value="revision">Revision context</TabsTrigger>
+              <TabsTrigger value="evidence">Overview</TabsTrigger>
+              <TabsTrigger value="flow">Evidence</TabsTrigger>
+              <TabsTrigger value="revision">Context</TabsTrigger>
             </TabsList>
             <TabsContent value="evidence" className="evidence-content">
-              <div className="record-table">
+              <h3>What was detected</h3>
+              <p className="summary-explanation">{selected.title}. Review the linked component evidence to establish whether this signal has a security impact.</p>
+              <details className="evidence-disclosure" open><summary>Evidence record</summary><div className="record-table">
                 {[
                   ['01 / source', 'Analysis source', selected.source],
                   ['02 / control', 'Visible guard', selected.guard],
@@ -996,8 +1006,10 @@ export default function Home() {
                 ].map(([index, title, value]) => (
                   <div className="record-row" key={index}><span className="record-index">{index}</span><span className="record-label">{title}</span><code>{value}</code></div>
                 ))}
-              </div>
-              <div className="boundary-note"><CircleAlert /><div><strong>Evidence boundary</strong><p>Static evidence only. Runtime reachability, hidden policy layers, and exploitability require human-controlled validation.</p></div></div>
+              </div></details>
+              <details className="evidence-disclosure"><summary>Retained evidence</summary>{selectedCase.document.evidence.filter((entry) => selected.sink.split(', ').includes(entry.evidence_id)).map((entry) => <div className="retained-evidence" key={entry.evidence_id}><strong>{entry.relative_path ?? 'Evidence description'}</strong><p>{entry.description}</p><code>{entry.sha256}</code></div>)}</details>
+              <div className="boundary-note"><CircleAlert /><div><strong>What needs verification</strong><p>{selected.revision}</p></div></div>
+              <div className="agent-preview"><Bot /><div><strong>Agent suggestion · Unverified</strong><p>{selected.agentReason}</p></div></div>
             </TabsContent>
             <TabsContent value="flow" className="evidence-content">
               <div className="flow-ledger">
@@ -1014,9 +1026,11 @@ export default function Home() {
               <div className="revision-note"><GitCompareArrows /><div><span>REVISION {selectedCase.document.target.revision?.value ?? 'unrecorded'}</span><p>{selected.revision}</p></div></div>
             </TabsContent>
           </Tabs>
+          <div className="detail-actions"><Button onClick={() => setControlsOpen(true)}><ShieldQuestion /> Review decision</Button><Button variant="outline" onClick={() => { setMode('agent'); setControlsOpen(true); }}><Search /> Investigate further</Button></div>
         </section>
 
-        <aside className="review-pane" aria-label="Review and remediation controls">
+        <aside className="review-pane" hidden={!controlsOpen} aria-label="Review and remediation controls">
+          <button className="close-controls" onClick={() => setControlsOpen(false)}>Close review ×</button>
           <section className="review-section mode-section">
             <fieldset className="mode-switch" aria-label="Review mode">
               <button className={mode === 'manual' ? 'mode-active' : ''} onClick={() => setMode('manual')}><UserCheck /> Manual</button>
@@ -1075,6 +1089,7 @@ export default function Home() {
         </aside>
       </div>
 
+      <nav className="mobile-navigation" aria-label="Mobile navigation"><button onClick={() => { setMobileDetail(false); setControlsOpen(false); }}><ShieldCheck />Review</button><button onClick={() => { setControlsOpen(true); setTimeout(() => document.querySelector('.audit-section')?.scrollIntoView(), 0); }}><GitCompareArrows />History</button><button onClick={exportAudit}><Download />Export audit</button></nav>
       <footer className="review-footer"><span>SecureFlow / local-first review and remediation handoff</span><strong>AI investigates. Humans decide. Authorized agents patch. Evidence persists.</strong></footer>
     </main>
   );
