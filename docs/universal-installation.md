@@ -34,7 +34,8 @@ The universal server exposes four deliberately narrow tools:
 | Tool | Effect |
 | --- | --- |
 | `validate_case` | Semantically validates a bounded local case. |
-| `list_candidates` | Reads candidates and existing human dispositions. |
+| `summarize_candidates` | Reads compact aggregate counts before candidate detail. |
+| `list_candidates` | Pages and filters compact candidates and decision state. |
 | `investigate_candidate` | Reads one candidate and its bound evidence. |
 | `stage_agent_recommendation` | Writes a derived case without a human verdict. |
 
@@ -43,6 +44,13 @@ cases in different tasks. The staging tool additionally requires a distinct
 new `output_path` and refuses to replace an existing file. There is
 intentionally no MCP tool corresponding to
 `case-decide`.
+
+The efficient default is summary → filtered page → selected investigation.
+`list_candidates` defaults to 25 entries and accepts at most 100; its response
+does not duplicate limitations, evidence records, or decision rationales.
+`investigate_candidate` remains the explicit detail boundary. These limits
+reduce repeated serialization and model context while preserving exact IDs and
+human authority.
 
 ## Review Room and WebMCP
 

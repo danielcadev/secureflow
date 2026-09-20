@@ -35,7 +35,8 @@ picker remains available.
 | Tool                         | Effect                                                       |
 | ---------------------------- | ------------------------------------------------------------ |
 | `list_security_cases`         | Reads exact loaded component identities and coverage.        |
-| `list_candidates`             | Reads candidates and existing human dispositions.            |
+| `summarize_candidates`        | Returns counts and repeated-signal groups without case detail. |
+| `list_candidates`             | Pages and filters compact candidate summaries.                |
 | `inspect_evidence`            | Selects a candidate and returns its evidence boundary.       |
 | `stage_agent_recommendation`  | Prepares the visible human review form but cannot submit it. |
 | `prepare_remediation_handoff` | Reads the selection and reports the required next gate.      |
@@ -55,6 +56,13 @@ npm audit --omit=dev
 The WebMCP integration mirrors the loaded case state: valid read and stage calls
 change the visible draft only, and an invalid candidate ID fails without
 recording a decision.
+
+For large component sets, call `summarize_candidates` first, then
+`list_candidates` with a bounded `limit`, `cursor`, and optional filters. The
+candidate-key schemas remain constant-size instead of embedding every loaded ID.
+Only call `inspect_evidence` for candidates selected for actual investigation.
+This reduces serialized context without changing evidence or transferring one
+candidate's recommendation or decision to another.
 
 ## Evidence boundary
 

@@ -416,6 +416,83 @@ body {
 .queue-search input:focus {
   box-shadow: inset 3px 0 #235f4c;
 }
+.queue-filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid #c2c5c2;
+  background: #e4e6e2;
+}
+.queue-filters label {
+  min-width: 0;
+}
+.queue-filters label > span,
+.signal-groups-heading {
+  display: block;
+  margin-bottom: 0.3rem;
+  font: 0.52rem var(--font-geist-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #687279;
+}
+.queue-filters select {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0 1.6rem 0 0.5rem;
+  border: 1px solid #b8bcb9;
+  border-radius: 0;
+  background: #f8f8f5;
+  color: #314047;
+  font-size: 0.65rem;
+}
+.signal-groups {
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid #c2c5c2;
+  background: #eef0ec;
+}
+.signal-groups-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0;
+}
+.signal-groups-heading button {
+  min-height: 2.75rem;
+  padding: 0 0.35rem;
+  color: #245c4a;
+  text-transform: uppercase;
+}
+.signal-groups > button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  align-items: center;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid #c1c5c1;
+  background: #f8f8f5;
+  color: #4e5a60;
+  text-align: left;
+}
+.signal-groups > button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.62rem;
+}
+.signal-groups > button strong {
+  min-width: 1.35rem;
+  text-align: center;
+  font: 0.62rem var(--font-geist-mono);
+}
+.signal-groups > .signal-group-active {
+  border-color: #54806e;
+  background: #dce8e1;
+  color: #173d33;
+}
 .queue-columns {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -430,11 +507,11 @@ body {
 .candidate-row {
   position: relative;
   width: 100%;
-  min-height: 6.75rem;
+  min-height: 5.8rem;
   display: grid;
   grid-template-columns: 3px minmax(0, 1fr) auto;
   gap: 0.75rem;
-  padding: 0.9rem 0.8rem 0.9rem 0;
+  padding: 0.72rem 0.8rem 0.72rem 0;
   border-bottom: 1px solid #c2c5c2;
   text-align: left;
   background: transparent;

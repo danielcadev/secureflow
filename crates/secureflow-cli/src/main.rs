@@ -4388,9 +4388,15 @@ fn universal_mcp_tools() -> serde_json::Value {
             "annotations":read_annotations
         },
         {
-            "name":"list_candidates",
-            "description":"List candidates and recorded human dispositions from one authorized local Security Case. Candidates remain unvalidated unless a human decision is present.",
+            "name":"summarize_candidates",
+            "description":"Return compact aggregate counts for one authorized local Security Case before listing individual candidates.",
             "inputSchema":{"type":"object","required":["case_path"],"properties":{"case_path":{"type":"string","minLength":1}},"additionalProperties":false},
+            "annotations":read_annotations
+        },
+        {
+            "name":"list_candidates",
+            "description":"Page through compact candidate summaries from one authorized local Security Case. Use summarize_candidates first and investigate_candidate only for selected IDs.",
+            "inputSchema":{"type":"object","required":["case_path"],"properties":{"case_path":{"type":"string","minLength":1},"offset":{"type":"integer","minimum":0,"default":0},"limit":{"type":"integer","minimum":1,"maximum":100,"default":25},"severity":{"type":"string","maxLength":40},"decision":{"enum":["pending","validated","rejected","abstained"]},"query":{"type":"string","maxLength":200}},"additionalProperties":false},
             "annotations":read_annotations
         },
         {
@@ -4406,6 +4412,115 @@ fn universal_mcp_tools() -> serde_json::Value {
             "annotations":{"readOnlyHint":false,"destructiveHint":false,"idempotentHint":false,"openWorldHint":false}
         }
     ]})
+}
+
+fn mcp_bounded_usize(
+    arguments: &serde_json::Value,
+    name: &str,
+    default: usize,
+    maximum: usize,
+) -> Result<usize, String> {
+    match arguments.get(name) {
+        None => Ok(default),
+        Some(value) => value
+            .as_u64()
+            .and_then(|value| usize::try_from(value).ok())
+            .filter(|value| *value <= maximum)
+            .ok_or_else(|| format!("{name} must be an integer from 0 to {maximum}")),
+    }
+}
+
+fn mcp_optional_text<'a>(
+    arguments: &'a serde_json::Value,
+    name: &str,
+    maximum: usize,
+) -> Result<Option<&'a str>, String> {
+    match arguments.get(name) {
+        None => Ok(None),
+        Some(value) => value
+            .as_str()
+            .filter(|value| value.len() <= maximum)
+            .map(Some)
+            .ok_or_else(|| format!("{name} must be a string no longer than {maximum} bytes")),
+    }
+}
+
+fn case_candidate_decision<'a>(
+    case: &'a SecurityCase,
+    candidate_id: &str,
+) -> Option<&'a secureflow_case::HumanDecision> {
+    case.decisions
+        .iter()
+        .find(|decision| decision.candidate_id == candidate_id)
+}
+
+fn case_decision_label(decision: Option<&secureflow_case::HumanDecision>) -> &'static str {
+    match decision.map(|decision| decision.decision) {
+        Some(secureflow_case::Decision::Validated) => "validated",
+        Some(secureflow_case::Decision::Rejected) => "rejected",
+        Some(secureflow_case::Decision::Abstained) => "abstained",
+        None => "pending",
+    }
+}
+
+fn compact_candidate_summary(case: &SecurityCase, candidate: &CaseCandidate) -> serde_json::Value {
+    serde_json::json!({
+        "candidate_id":candidate.candidate_id,
+        "class":candidate.class,
+        "title":candidate.title,
+        "severity":candidate.severity,
+        "confidence":candidate.confidence,
+        "decision":case_decision_label(case_candidate_decision(case, &candidate.candidate_id)),
+        "has_staged_recommendation":case.staged_recommendations.iter().any(|stage| stage.candidate_id == candidate.candidate_id),
+        "evidence_count":candidate.evidence_ids.len()
+    })
+}
+
+fn candidate_aggregate(case: &SecurityCase) -> serde_json::Value {
+    let mut by_decision = std::collections::BTreeMap::from([
+        ("pending", 0_u64),
+        ("validated", 0),
+        ("rejected", 0),
+        ("abstained", 0),
+    ]);
+    let mut by_severity = std::collections::BTreeMap::<String, u64>::new();
+    let mut by_class = std::collections::BTreeMap::<String, u64>::new();
+    let mut repeated = std::collections::BTreeMap::<String, u64>::new();
+    for candidate in &case.candidates {
+        *by_decision
+            .entry(case_decision_label(case_candidate_decision(
+                case,
+                &candidate.candidate_id,
+            )))
+            .or_default() += 1;
+        *by_severity
+            .entry(
+                candidate
+                    .severity
+                    .as_deref()
+                    .unwrap_or("unspecified")
+                    .to_lowercase(),
+            )
+            .or_default() += 1;
+        *by_class
+            .entry(format!("{:?}", candidate.class).to_lowercase())
+            .or_default() += 1;
+        *repeated.entry(candidate.title.to_lowercase()).or_default() += 1;
+    }
+    let repeated_signals = repeated
+        .into_iter()
+        .filter(|(_, count)| *count > 1)
+        .map(|(title, count)| serde_json::json!({"title":title,"count":count}))
+        .collect::<Vec<_>>();
+    serde_json::json!({
+        "case_id":case.case_id,
+        "total":case.candidates.len(),
+        "by_decision":by_decision,
+        "by_severity":by_severity,
+        "by_class":by_class,
+        "repeated_signals":repeated_signals,
+        "final_authority":"human-only"
+    })
 }
 
 fn mcp_path(arguments: &serde_json::Value, name: &str) -> Result<PathBuf, String> {
@@ -4440,12 +4555,68 @@ fn universal_mcp_tool_call(params: &serde_json::Value) -> Result<serde_json::Val
             .map_err(|_| "serialization failed")?;
             Ok(serde_json::json!({"content":[{"type":"text","text":text}]}))
         }
+        "summarize_candidates" => {
+            let case = load_security_case(&case_path).map_err(|error| error.to_string())?;
+            let text = serde_json::to_string(&candidate_aggregate(&case))
+                .map_err(|_| "serialization failed")?;
+            Ok(serde_json::json!({"content":[{"type":"text","text":text}]}))
+        }
         "list_candidates" => {
             let case = load_security_case(&case_path).map_err(|error| error.to_string())?;
-            let text = serde_json::to_string_pretty(&serde_json::json!({
+            let offset = mcp_bounded_usize(&arguments, "offset", 0, usize::MAX)?;
+            let limit = mcp_bounded_usize(&arguments, "limit", 25, 100)?;
+            if limit == 0 {
+                return Err("limit must be an integer from 1 to 100".into());
+            }
+            let severity = mcp_optional_text(&arguments, "severity", 40)?.map(str::to_lowercase);
+            let decision = mcp_optional_text(&arguments, "decision", 10)?;
+            if let Some(decision) = decision
+                && !["pending", "validated", "rejected", "abstained"].contains(&decision)
+            {
+                return Err("decision must be pending, validated, rejected, or abstained".into());
+            }
+            let query = mcp_optional_text(&arguments, "query", 200)?.map(str::to_lowercase);
+            let matching = case
+                .candidates
+                .iter()
+                .filter(|candidate| {
+                    severity.as_ref().is_none_or(|expected| {
+                        candidate
+                            .severity
+                            .as_deref()
+                            .unwrap_or("unspecified")
+                            .eq_ignore_ascii_case(expected)
+                    })
+                })
+                .filter(|candidate| {
+                    decision.is_none_or(|expected| {
+                        case_decision_label(case_candidate_decision(&case, &candidate.candidate_id))
+                            == expected
+                    })
+                })
+                .filter(|candidate| {
+                    query.as_ref().is_none_or(|query| {
+                        candidate.candidate_id.to_lowercase().contains(query)
+                            || candidate.title.to_lowercase().contains(query)
+                    })
+                })
+                .collect::<Vec<_>>();
+            let page = matching
+                .iter()
+                .skip(offset)
+                .take(limit)
+                .map(|candidate| compact_candidate_summary(&case, candidate))
+                .collect::<Vec<_>>();
+            let next_offset = (offset + page.len() < matching.len()).then_some(offset + page.len());
+            let text = serde_json::to_string(&serde_json::json!({
                 "case_id":case.case_id,
-                "candidates":case.candidates,
-                "human_decisions":case.decisions,
+                "total":case.candidates.len(),
+                "matched":matching.len(),
+                "offset":offset,
+                "limit":limit,
+                "returned":page.len(),
+                "next_offset":next_offset,
+                "candidates":page,
                 "final_authority":"human-only"
             }))
             .map_err(|_| "serialization failed")?;

@@ -42,6 +42,14 @@ import {
   type LoadedSecurityCase,
   type SecurityCase,
 } from '@/lib/security-case';
+import {
+  candidateKeyInputSchema,
+  filterReviewCandidates,
+  parseCandidatePageRequest,
+  summarizeReviewCandidates,
+  type ReviewState,
+  WEB_MCP_MAX_PAGE_SIZE,
+} from '@/lib/review-efficiency';
 
 type Candidate = {
   key: string;
@@ -169,6 +177,11 @@ export default function Home() {
   const [selectedKey, setSelectedKey] = useState('');
   const [loadError, setLoadError] = useState('');
   const [query, setQuery] = useState('');
+  const [severityFilter, setSeverityFilter] = useState<
+    'all' | Candidate['severity']
+  >('all');
+  const [reviewFilter, setReviewFilter] = useState<ReviewState>('all');
+  const [groupFilter, setGroupFilter] = useState('');
   const [candidatePage, setCandidatePage] = useState(0);
   const [mode, setMode] = useState<'manual' | 'agent'>('manual');
   const [staged, setStaged] = useState<Decision | null>(null);
@@ -202,14 +215,19 @@ export default function Home() {
   const selectedCase = loadedCases.find(
     (loaded) => loaded.document.case_id === selected?.caseId,
   );
+  const reviewSummary = useMemo(
+    () => summarizeReviewCandidates(candidates, decisions),
+    [candidates, decisions],
+  );
   const filtered = useMemo(
     () =>
-      candidates.filter((candidate) =>
-        `${candidate.id} ${candidate.title} ${candidate.caseLabel}`
-          .toLowerCase()
-          .includes(query.toLowerCase()),
-      ),
-    [query, candidates],
+      filterReviewCandidates(candidates, decisions, {
+        query,
+        severity: severityFilter,
+        reviewState: reviewFilter,
+        groupKey: groupFilter || undefined,
+      }),
+    [query, severityFilter, reviewFilter, groupFilter, candidates, decisions],
   );
   const candidatePageCount = Math.max(
     1,
@@ -284,6 +302,10 @@ export default function Home() {
     setLoadedCases(parsed);
     setSelectedKey(nextCandidates[0]?.key ?? '');
     setCandidatePage(0);
+    setQuery('');
+    setSeverityFilter('all');
+    setReviewFilter('all');
+    setGroupFilter('');
     setDecisions(authoritative);
     setRemediationSelection([]);
     setAudit([
@@ -489,10 +511,7 @@ export default function Home() {
     const candidateSchema = {
       type: 'object',
       properties: {
-        candidateKey: {
-          type: 'string',
-          enum: candidates.map((candidate) => candidate.key),
-        },
+        candidateKey: candidateKeyInputSchema,
       },
       required: ['candidateKey'],
       additionalProperties: false,
@@ -520,10 +539,10 @@ export default function Home() {
         }),
       },
       {
-        name: 'list_candidates',
-        title: 'List security candidates',
+        name: 'summarize_candidates',
+        title: 'Summarize security candidates',
         description:
-          'List candidates, staged recommendations, and human decision state. Candidates are not vulnerabilities by default.',
+          'Return compact counts and repeated signal groups before requesting individual candidate pages.',
         inputSchema: {
           type: 'object',
           properties: {},
@@ -531,16 +550,81 @@ export default function Home() {
         },
         annotations: { readOnlyHint: true, untrustedContentHint: true },
         execute: () => ({
-          candidates: candidates.map((candidate) => ({
-            key: candidate.key,
-            id: candidate.id,
-            caseId: candidate.caseId,
-            title: candidate.title,
-            humanDecision: decisionsRef.current[candidate.key]?.decision ?? null,
-            authoritative:
-              decisionsRef.current[candidate.key]?.authoritative ?? false,
-          })),
+          ...summarizeReviewCandidates(candidates, decisionsRef.current),
+          coverage: 'loaded component cases only',
+          finalAuthority: 'human-only',
         }),
+      },
+      {
+        name: 'list_candidates',
+        title: 'List security candidates',
+        description:
+          'Page through compact candidate summaries. Filter first, then inspect only selected candidates.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            cursor: { type: 'integer', minimum: 0, default: 0 },
+            limit: {
+              type: 'integer',
+              minimum: 1,
+              maximum: WEB_MCP_MAX_PAGE_SIZE,
+              default: 20,
+            },
+            severity: { enum: ['high', 'medium', 'low'] },
+            reviewState: {
+              enum: [
+                'pending',
+                'draft',
+                'recorded',
+                'validated',
+                'rejected',
+                'abstained',
+              ],
+            },
+            query: { type: 'string', maxLength: 200 },
+          },
+          additionalProperties: false,
+        },
+        annotations: { readOnlyHint: true, untrustedContentHint: true },
+        execute: (input) => {
+          const request = parseCandidatePageRequest(input);
+          const matching = filterReviewCandidates(
+            candidates,
+            decisionsRef.current,
+            request,
+          );
+          const page = matching.slice(
+            request.cursor,
+            request.cursor + request.limit,
+          );
+          const nextCursor =
+            request.cursor + page.length < matching.length
+              ? request.cursor + page.length
+              : null;
+          return {
+            total: candidates.length,
+            matched: matching.length,
+            returned: page.length,
+            cursor: request.cursor,
+            nextCursor,
+            candidates: page.map((candidate) => ({
+              key: candidate.key,
+              id: candidate.id,
+              caseId: candidate.caseId,
+              component: candidate.caseLabel,
+              severity: candidate.severity,
+              source: candidate.source,
+              title: candidate.title,
+              reviewState:
+                decisionsRef.current[candidate.key]?.authoritative === true
+                  ? decisionsRef.current[candidate.key]?.decision
+                  : decisionsRef.current[candidate.key]
+                    ? 'draft'
+                    : 'pending',
+            })),
+            finalAuthority: 'human-only',
+          };
+        },
       },
       {
         name: 'inspect_evidence',
@@ -552,6 +636,9 @@ export default function Home() {
         execute: (input) => {
           const candidate = candidateFor(input);
           setQuery('');
+          setSeverityFilter('all');
+          setReviewFilter('all');
+          setGroupFilter('');
           setCandidatePage(
             Math.floor(candidates.indexOf(candidate) / CANDIDATE_PAGE_SIZE),
           );
@@ -578,6 +665,9 @@ export default function Home() {
         execute: (input) => {
           const candidate = candidateFor(input);
           setQuery('');
+          setSeverityFilter('all');
+          setReviewFilter('all');
+          setGroupFilter('');
           setCandidatePage(
             Math.floor(candidates.indexOf(candidate) / CANDIDATE_PAGE_SIZE),
           );
@@ -739,9 +829,84 @@ export default function Home() {
         <aside id="candidate-queue" className="queue-pane" aria-label="Candidate queue">
           <div className="pane-heading">
             <div><p className="section-kicker">Candidate queue</p><h2>Component signals</h2></div>
-            <span className="count-cell">{candidates.length}</span>
+            <span className="count-cell" title={`${candidates.length} total candidates`}>
+              {filtered.length}/{candidates.length}
+            </span>
           </div>
           <div className="queue-search"><Search /><input aria-label="Search candidates" value={query} onChange={(event) => { setQuery(event.target.value); setCandidatePage(0); }} placeholder="ID, title, or component" /></div>
+          <div className="queue-filters">
+            <label>
+              <span>Review</span>
+              <select
+                aria-label="Filter by review state"
+                value={reviewFilter}
+                onChange={(event) => {
+                  setReviewFilter(event.target.value as ReviewState);
+                  setCandidatePage(0);
+                }}
+              >
+                <option value="all">All states</option>
+                <option value="pending">Pending ({reviewSummary.byState.pending})</option>
+                <option value="draft">Draft ({reviewSummary.byState.draft})</option>
+                <option value="recorded">Recorded</option>
+                <option value="validated">Validated ({reviewSummary.byState.validated})</option>
+                <option value="rejected">Rejected ({reviewSummary.byState.rejected})</option>
+                <option value="abstained">Abstained ({reviewSummary.byState.abstained})</option>
+              </select>
+            </label>
+            <label>
+              <span>Severity</span>
+              <select
+                aria-label="Filter by severity"
+                value={severityFilter}
+                onChange={(event) => {
+                  setSeverityFilter(
+                    event.target.value as 'all' | Candidate['severity'],
+                  );
+                  setCandidatePage(0);
+                }}
+              >
+                <option value="all">All levels</option>
+                <option value="high">High ({reviewSummary.bySeverity.high})</option>
+                <option value="medium">Medium ({reviewSummary.bySeverity.medium})</option>
+                <option value="low">Low ({reviewSummary.bySeverity.low})</option>
+              </select>
+            </label>
+          </div>
+          {reviewSummary.repeatedGroups.length > 0 && (
+            <div className="signal-groups" aria-label="Repeated signal groups">
+              <div className="signal-groups-heading">
+                <span>Repeated signals</span>
+                {groupFilter && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGroupFilter('');
+                      setCandidatePage(0);
+                    }}
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              {reviewSummary.repeatedGroups.slice(0, 3).map((group) => (
+                <button
+                  type="button"
+                  key={group.key}
+                  className={groupFilter === group.key ? 'signal-group-active' : ''}
+                  aria-pressed={groupFilter === group.key}
+                  title={group.title}
+                  onClick={() => {
+                    setGroupFilter(groupFilter === group.key ? '' : group.key);
+                    setCandidatePage(0);
+                  }}
+                >
+                  <span>{group.title}</span>
+                  <strong>{group.count}</strong>
+                </button>
+              ))}
+            </div>
+          )}
           <div className="queue-columns" aria-hidden="true"><span>Signal</span><span>Evidence</span></div>
           <div className="candidate-list">
             {visibleCandidates.map((candidate) => (

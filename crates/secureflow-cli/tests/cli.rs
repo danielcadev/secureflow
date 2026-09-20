@@ -377,9 +377,11 @@ fn universal_mcp_discovers_cases_per_call_and_only_stages_recommendations() {
         serde_json::json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}),
         serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}),
         serde_json::json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"validate_case","arguments":{"case_path":&case_path_argument}}}),
-        serde_json::json!({"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"investigate_candidate","arguments":{"case_path":&case_path_argument,"candidate_id":candidate_id}}}),
-        serde_json::json!({"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"stage_agent_recommendation","arguments":{"case_path":&case_path_argument,"output_path":&staged_path_argument,"candidate_id":candidate_id,"agent_name":"integration-test","recommendation":"abstained","rationale":"Evidence remains insufficient for a human verdict."}}}),
-        serde_json::json!({"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"stage_agent_recommendation","arguments":{"case_path":&case_path_argument,"output_path":&staged_path_argument,"candidate_id":candidate_id,"agent_name":"integration-test","recommendation":"validated","rationale":"This must not replace the existing derived case."}}}),
+        serde_json::json!({"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"summarize_candidates","arguments":{"case_path":&case_path_argument}}}),
+        serde_json::json!({"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"list_candidates","arguments":{"case_path":&case_path_argument,"limit":1,"decision":"pending"}}}),
+        serde_json::json!({"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"investigate_candidate","arguments":{"case_path":&case_path_argument,"candidate_id":candidate_id}}}),
+        serde_json::json!({"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"stage_agent_recommendation","arguments":{"case_path":&case_path_argument,"output_path":&staged_path_argument,"candidate_id":candidate_id,"agent_name":"integration-test","recommendation":"abstained","rationale":"Evidence remains insufficient for a human verdict."}}}),
+        serde_json::json!({"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"stage_agent_recommendation","arguments":{"case_path":&case_path_argument,"output_path":&staged_path_argument,"candidate_id":candidate_id,"agent_name":"integration-test","recommendation":"validated","rationale":"This must not replace the existing derived case."}}}),
     ];
     {
         let stdin = child.stdin.as_mut().expect("MCP stdin");
@@ -399,11 +401,11 @@ fn universal_mcp_discovers_cases_per_call_and_only_stages_recommendations() {
         .lines()
         .map(|line| serde_json::from_str::<serde_json::Value>(line).expect("valid response"))
         .collect::<Vec<_>>();
-    assert_eq!(responses.len(), 6);
+    assert_eq!(responses.len(), 8);
     let tools = responses[1]["result"]["tools"]
         .as_array()
         .expect("tool list");
-    assert_eq!(tools.len(), 4);
+    assert_eq!(tools.len(), 5);
     assert!(tools.iter().all(|tool| tool["name"] != "case_decide"));
     assert_eq!(
         tools[0]["annotations"]["readOnlyHint"],
@@ -415,6 +417,23 @@ fn universal_mcp_discovers_cases_per_call_and_only_stages_recommendations() {
             .expect("validation text")
             .contains("human-only")
     );
+    let summary: serde_json::Value = serde_json::from_str(
+        responses[3]["result"]["content"][0]["text"]
+            .as_str()
+            .expect("summary text"),
+    )
+    .expect("summary JSON");
+    assert_eq!(summary["total"], serde_json::json!(1));
+    assert_eq!(summary["by_decision"]["pending"], serde_json::json!(1));
+    let page: serde_json::Value = serde_json::from_str(
+        responses[4]["result"]["content"][0]["text"]
+            .as_str()
+            .expect("candidate page text"),
+    )
+    .expect("candidate page JSON");
+    assert_eq!(page["returned"], serde_json::json!(1));
+    assert_eq!(page["candidates"][0]["candidate_id"], candidate_id);
+    assert!(page["candidates"][0].get("limitations").is_none());
 
     let staged: serde_json::Value =
         serde_json::from_slice(&std::fs::read(&staged_path).expect("staged case should exist"))
@@ -429,7 +448,7 @@ fn universal_mcp_discovers_cases_per_call_and_only_stages_recommendations() {
         serde_json::json!("abstained")
     );
     assert!(
-        responses[5]["error"]["message"]
+        responses[7]["error"]["message"]
             .as_str()
             .expect("overwrite error")
             .contains("destination already exists")

@@ -29,6 +29,9 @@ draft only against exact decided cases.
 - Manual and agent-assisted review modes with a visible authority distinction.
 - Component-aware WebMCP tools for listing, evidence inspection, staging, and
   reading the human remediation selection.
+- Constant-size WebMCP schemas, aggregate summaries, bounded candidate pages,
+  and repeated-signal grouping so large reviews do not resend the full case on
+  each agent interaction.
 - Versioned remediation handoff schema and semantic Rust validator.
 - CLI authorization bound to exact case hashes, target identity, revision, and
   final human validation.
