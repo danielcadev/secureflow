@@ -1,6 +1,6 @@
 {
   "name": "secureflow",
-  "version": "1.1.0-rc.2",
+  "version": "1.1.0-rc.3",
   "description": "Investigate authorized local Security Cases and hand off explicitly selected fixes without granting an agent final vulnerability authority.",
   "author": {
     "name": "Daniel Castrillon",
