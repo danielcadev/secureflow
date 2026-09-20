@@ -316,14 +316,12 @@ export default function Home() {
       [selected.key]: {
         decision: staged,
         rationale: rationale.trim(),
-        authoritative: current[selected.key]?.authoritative ?? false,
+        authoritative: false,
       },
     }));
-    if (staged !== 'validated') {
-      setRemediationSelection((current) =>
-        current.filter((key) => key !== selected.key),
-      );
-    }
+    setRemediationSelection((current) =>
+      current.filter((key) => key !== selected.key),
+    );
     setAudit((events) => [
       ...events,
       {
@@ -335,7 +333,7 @@ export default function Home() {
   }
 
   function toggleRemediation(key: string) {
-    if (decisions[key]?.decision !== 'validated') return;
+    if (decisions[key]?.decision !== 'validated' || !decisions[key]?.authoritative) return;
     setRemediationSelection((current) =>
       current.includes(key)
         ? current.filter((candidateKey) => candidateKey !== key)
@@ -611,7 +609,7 @@ export default function Home() {
             ? 'draft_ready'
             : 'awaiting_human_selection',
           requiredNextStep:
-            'Export the draft, persist final case decisions, then authorize it with secureflow remediation-authorize.',
+            'Export the draft from recorded decisions, then authorize it with secureflow remediation-authorize.',
           mergeAuthorized: false,
           deployAuthorized: false,
         }),
@@ -666,7 +664,7 @@ export default function Home() {
   }
 
   const selectedReview = decisions[selected.key];
-  const remediationEligible = selectedReview?.decision === 'validated';
+  const remediationEligible = selectedReview?.decision === 'validated' && selectedReview.authoritative;
 
   return (
     <main className="review-shell min-h-screen">
@@ -782,9 +780,9 @@ export default function Home() {
                   />
                 </PaginationItem>
                 <PaginationItem>
-                  <span className="queue-page-status" role="status" aria-live="polite">
+                  <output className="queue-page-status" aria-live="polite">
                     {candidatePageStart + 1}–{Math.min(candidatePageStart + CANDIDATE_PAGE_SIZE, filtered.length)} of {filtered.length}
-                  </span>
+                  </output>
                 </PaginationItem>
                 <PaginationItem>
                   <PaginationNext
@@ -889,7 +887,7 @@ export default function Home() {
             <div className="review-section-heading"><Wrench /><div><span>Remediation handoff</span><small>Separate authorization boundary</small></div></div>
             <button className={`remediation-select ${remediationSelection.includes(selected.key) ? 'remediation-selected' : ''}`} disabled={!remediationEligible} onClick={() => toggleRemediation(selected.key)}>
               {remediationSelection.includes(selected.key) ? <CheckSquare2 /> : <Square />}
-              {remediationEligible ? 'Include this validated candidate' : 'Validate this candidate before selecting it'}
+              {remediationEligible ? 'Include this validated candidate' : 'Load a recorded validated decision to select this candidate'}
             </button>
             <label htmlFor="allowed-paths">Allowed repository paths <span>one per line</span></label>
             <Textarea id="allowed-paths" value={allowedPaths} onChange={(event) => setAllowedPaths(event.target.value)} placeholder={'apps/api/src/auth.ts\npackages/security'} className="scope-paths" />

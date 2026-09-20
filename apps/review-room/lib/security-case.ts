@@ -676,6 +676,26 @@ export async function createRemediationDraft(
     throw new Error('Remediation paths must be normalized repository-relative paths.');
   }
   const selected = new Set(selectedKeys);
+  if (selected.size !== selectedKeys.length) {
+    throw new Error('Duplicate remediation candidate selection.');
+  }
+  const knownCases = new Set<string>();
+  const eligible = new Set<string>();
+  for (const loaded of loadedCases) {
+    parseSecurityCase(loaded.document);
+    if (knownCases.has(loaded.document.case_id)) {
+      throw new Error('Duplicate remediation case identity.');
+    }
+    knownCases.add(loaded.document.case_id);
+    for (const decision of loaded.document.decisions) {
+      if (decision.decision === 'validated') {
+        eligible.add(`${loaded.document.case_id}:${decision.candidate_id}`);
+      }
+    }
+  }
+  if ([...selected].some((key) => !eligible.has(key))) {
+    throw new Error('Every selected candidate needs a recorded validated decision in the loaded case. Browser drafts and agent recommendations cannot authorize remediation.');
+  }
   const cases = loadedCases.flatMap((loaded) => {
     const candidateIds = loaded.document.candidates
       .filter((candidate) =>

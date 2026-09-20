@@ -39,28 +39,52 @@ candidate is a vulnerability.
 
 ## Remediating reviewed findings
 
-Use this mode only when the user explicitly asks to fix an exact visible or
-listed selection. A phrase such as “fix these” is sufficient only when the
-selected candidate IDs and allowed repository paths are already unambiguous;
-otherwise ask the user to identify them.
+An instruction such as “I reviewed it, resolve them all” authorizes investigation
+and preparation within the identified scope. It does not assert that every
+candidate is a vulnerability. Investigate first and present a concrete table
+by case ID and candidate ID, with the proposed disposition and source evidence.
+Existing explicit approval of that exact table is sufficient; do not ask again.
+If no explicit dispositions exist, keep the result staged for human review.
+Never assign the user's Git identity as a reviewer merely because it is configured.
 
-1. Persist each selected disposition with `secureflow case-decide`. Only
+1. Persist only the dispositions explicitly chosen by the named human with
+   `secureflow case-decide`, retaining the instruction or review reference. Only
    `validated` candidates are eligible for remediation; never turn an agent
    recommendation or browser draft into a verdict without the user's explicit
-   review.
+   review. A false-positive recommendation is not a human rejection. Keep
+   uncertain candidates pending or abstained as appropriate; never validate
+   candidates to unlock a remediation command. If an earlier run recorded
+   inferred verdicts, preserve those artifacts and prepare a reconciliation
+   from the original cases; do not silently rewrite or supersede human decisions.
 2. Export or create a `secureflow-remediation-handoff-v1` draft, then run
    `secureflow remediation-authorize` with every exact decided case. Stop if a
    case hash, target identity, revision, candidate decision, or path boundary
    does not match.
 3. After authorization, use the `secure` workflow to confirm the security
    boundary and `codex-security:fix-finding` for the bounded implementation.
-   Work in an isolated branch or worktree and modify only the handoff's allowed
-   paths plus the smallest necessary tests or documentation.
+   Work in an isolated branch or worktree from an exact base commit. Record the
+   pre-edit status, including untracked files. Do not copy all existing changes
+   under an allowed directory: retain an explicit file/patch inventory for this
+   remediation. Tests and documentation must also be inside the authorized scope;
+   obtain an explicit scope extension when necessary.
 4. Run targeted tests, lint/type checks, and a SecureFlow re-scan when the
    authorized scanner can complete without weakening its sandbox. Report a
    failed or truncated re-scan as incomplete evidence, never as a clean result.
-5. Return the diff, commands, results, residual risk, and candidate status for
-   Review Room. The handoff never authorizes merge, deployment, publication,
+5. Reconcile every original candidate by ID. Scanner disappearance alone is
+   not evidence of a fix, and scanner count differences are not vulnerability
+   counts. A `fixed` result needs source review, linked patch files, and retained
+   regression evidence. `no_change` closes only a human-rejected candidate with
+   source evidence; unresolved contradictions remain `pending_review` or `blocked`.
+   Record failing global checks honestly, even if a baseline also fails.
+6. Before committing, run `secureflow remediation-check` using the closure report,
+   every original/decided case under review, the authorized handoff (when patching),
+   isolated repository, and external evidence directory. Read
+   `docs/contracts/secureflow-remediation-closure-v1.md` in the source checkout for
+   the report format. If the installed CLI lacks the command, report that the
+   automated closure gate is unavailable instead of claiming it passed.
+7. Return the diff, commands, results, residual risk, and candidate status for
+   Review Room. A passing closure is ready for review, not an automatic human
+   approval. The handoff never authorizes merge, deployment, publication,
    exploitation, network access, or unrelated cleanup.
 
 ## Creating a case from a repository

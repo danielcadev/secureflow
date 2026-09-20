@@ -157,6 +157,31 @@ void test('loads an exact case hash and creates a scoped remediation draft', asy
   assert.deepEqual(draft.scope.allowed_paths, ['src/auth.ts']);
   assert.equal(draft.scope.merge_authorized, false);
   assert.equal(draft.scope.deploy_authorized, false);
+  await assert.rejects(createRemediationDraft([loaded], [key, 'unknown'], ['src']), /recorded validated/);
+  await assert.rejects(createRemediationDraft([loaded, loaded], [key], ['src']), /Duplicate remediation case/);
+});
+
+void test('handoff export rejects recommendations, drafts, rejected and unknown selections', async () => {
+  for (const disposition of [null, 'rejected', 'abstained'] as const) {
+    const value = fixture();
+    value.staged_recommendations = [{
+      stage_id: identifier('stage', 'proposal'),
+      candidate_id: value.candidates[0].candidate_id,
+      agent_name: 'fixture agent',
+      recommendation: 'validated',
+      rationale: 'Proposed validation is not a recorded human decision.',
+      created_at: value.created_at,
+    }];
+    if (disposition) {
+      value.decisions = [{ ...decision(value.candidates[0].candidate_id, 'review'), decision: disposition }];
+    }
+    const bytes = new TextEncoder().encode(JSON.stringify(value));
+    const loaded = await loadSecurityCaseFile({ size: bytes.length, arrayBuffer: async () => bytes.slice().buffer });
+    const key = `${value.case_id}:${value.candidates[0].candidate_id}`;
+    await assert.rejects(createRemediationDraft([loaded], [key], ['src']), /recorded validated/);
+    await assert.rejects(createRemediationDraft([loaded], [key, key], ['src']), /Duplicate/);
+    await assert.rejects(createRemediationDraft([loaded], ['unknown'], ['src']), /recorded validated/);
+  }
 });
 
 void test('loads a bounded local review session and rejects invalid endpoints', async () => {

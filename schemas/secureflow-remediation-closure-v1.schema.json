@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://secureflow.dev/schemas/secureflow-remediation-closure-v1.schema.json",
+  "title": "SecureFlow remediation closure v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "base_commit", "cases", "files", "checks"],
+  "properties": {
+    "contract_version": {"const": "secureflow-remediation-closure-v1"},
+    "base_commit": {"type": "string", "pattern": "^([a-f0-9]{40}|[a-f0-9]{64})$"},
+    "cases": {"type": "array", "minItems": 1, "maxItems": 1024, "items": {"$ref": "#/$defs/case"}},
+    "files": {"type": "array", "maxItems": 4096, "items": {"$ref": "#/$defs/file"}},
+    "checks": {"type": "array", "maxItems": 64, "items": {"$ref": "#/$defs/check"}}
+  },
+  "$defs": {
+    "sha": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "path": {"type": "string", "minLength": 1, "maxLength": 4096},
+    "artifact": {
+      "type": "object", "additionalProperties": false,
+      "required": ["path", "sha256", "kind"],
+      "properties": {
+        "path": {"$ref": "#/$defs/path"},
+        "sha256": {"$ref": "#/$defs/sha"},
+        "kind": {"enum": ["source_review", "regression_test", "rescan"]}
+      }
+    },
+    "case": {
+      "type": "object", "additionalProperties": false,
+      "required": ["case_id", "case_sha256", "outcomes"],
+      "properties": {
+        "case_id": {"type": "string", "pattern": "^sf_case_[a-z0-9_]{16,92}$", "maxLength": 100},
+        "case_sha256": {"$ref": "#/$defs/sha"},
+        "outcomes": {"type": "array", "maxItems": 4096, "items": {"$ref": "#/$defs/outcome"}}
+      }
+    },
+    "outcome": {
+      "type": "object", "additionalProperties": false,
+      "required": ["candidate_id", "outcome", "rationale", "evidence", "changed_paths"],
+      "properties": {
+        "candidate_id": {"type": "string", "pattern": "^sf_candidate_[a-z0-9_]{16,87}$", "maxLength": 100},
+        "outcome": {"enum": ["fixed", "no_change", "blocked", "pending_review"]},
+        "rationale": {"type": "string", "minLength": 1, "maxLength": 3000},
+        "evidence": {"type": "array", "maxItems": 64, "items": {"$ref": "#/$defs/artifact"}},
+        "changed_paths": {"type": "array", "uniqueItems": true, "maxItems": 4096, "items": {"$ref": "#/$defs/path"}}
+      }
+    },
+    "file": {
+      "type": "object", "additionalProperties": false,
+      "required": ["path", "mode", "sha256"],
+      "properties": {
+        "path": {"$ref": "#/$defs/path"},
+        "mode": {"enum": ["100644", "100755", "000000"]},
+        "sha256": {"anyOf": [{"$ref": "#/$defs/sha"}, {"type": "null"}]}
+      },
+      "if": {"properties": {"mode": {"const": "000000"}}},
+      "then": {"properties": {"sha256": {"type": "null"}}},
+      "else": {"properties": {"sha256": {"$ref": "#/$defs/sha"}}}
+    },
+    "check": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "passed", "evidence"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "maxLength": 200},
+        "passed": {"type": "boolean"},
+        "evidence": {"$ref": "#/$defs/artifact"}
+      }
+    }
+  }
+}

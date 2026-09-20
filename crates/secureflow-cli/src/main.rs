@@ -1,4 +1,5 @@
 mod catalog_trust_cli;
+mod closure_cli;
 use clap::{Parser, Subcommand, ValueEnum};
 use secureflow_ai as ai;
 use secureflow_bench_adapter as bench_adapter;
@@ -217,6 +218,8 @@ enum Command {
     },
     /// Print the structural remediation handoff schema.
     RemediationSchema,
+    /// Check candidate outcomes, patch scope and retained evidence without changing decisions.
+    RemediationCheck(closure_cli::CheckArgs),
     /// Validate a remediation draft or authorized handoff.
     RemediationValidate {
         path: PathBuf,
@@ -1347,6 +1350,8 @@ impl From<ReviewDecision> for HumanDecision {
 
 #[derive(Debug, Error)]
 enum CliError {
+    #[error("remediation closure failed: {0}")]
+    Closure(String),
     #[error("Security Case contract failed: {0}")]
     SecurityCase(#[from] secureflow_case::CaseError),
     #[error("{0}")]
@@ -1645,6 +1650,7 @@ fn execute(cli: Cli) -> Result<(), CliError> {
             print!("{REMEDIATION_HANDOFF_SCHEMA}");
             Ok(())
         }
+        Command::RemediationCheck(args) => closure_cli::check(args),
         Command::RemediationValidate { path } => {
             load_remediation_handoff(&path)?;
             println!("valid {REMEDIATION_CONTRACT_VERSION}: {}", path.display());

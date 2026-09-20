@@ -4,6 +4,7 @@
 //! Candidate authority is retained explicitly and only a named human decision
 //! may be final.
 
+pub mod closure;
 pub mod remediation;
 
 use serde::{Deserialize, Serialize};

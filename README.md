@@ -67,6 +67,13 @@ merge and deployment unauthorized. See the
 [handoff contract](docs/contracts/secureflow-remediation-handoff-v1.md) and the
 [Unified Review Room milestone](docs/plans/unified-review-room.md).
 
+Before committing a remediation, `secureflow remediation-check` reconciles each
+candidate with recorded decisions, exact patch files, and hashed source-review
+and regression evidence. It rejects closing validated candidates as false
+positives and detects unrelated changes in the checkout. See the
+[closure contract](docs/contracts/secureflow-remediation-closure-v1.md) for the
+report format, evidence requirements, and trust limits.
+
 The research goal is to outperform human baselines on narrow, measurable tasks
 in coverage, speed, pattern memory, and reproducibility. That must be
 demonstrated through a blind study and does not transfer final authority.
