@@ -827,7 +827,7 @@ pub(crate) fn classify_record(
 fn validate_archive_entry<R: Read>(
     entry: &zip::read::ZipFile<'_, R>,
 ) -> Result<String, SnapshotError> {
-    let name = entry.name().to_owned();
+    let name = entry.name()?.into_owned();
     validate_archive_name(&name)?;
     if entry.encrypted() {
         return Err(SnapshotError::UnsafeArchiveEntry {

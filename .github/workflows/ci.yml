@@ -42,6 +42,64 @@ jobs:
       - name: Test release evidence tooling
         run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 
+      - name: Test local review execution and presentation
+        run: node --test scripts/tests/approved-https.test.mjs scripts/tests/company-research.test.mjs scripts/tests/company-research-mcp.test.mjs scripts/tests/dynamic-review.test.mjs scripts/tests/auto-review-launcher.test.mjs scripts/tests/plugin-installation.test.mjs
+
+      - name: Retain synthetic company intake MCP demo and validate contracts
+        shell: bash
+        run: |
+          mkdir -p target
+          node scripts/demo-company-research-local.mjs | tee target/company-demo.log
+          company_demo_dir=$(sed -n 's/^company demo artifacts retained at: //p' target/company-demo.log)
+          test -n "$company_demo_dir"
+          cp -a "$company_demo_dir" target/company-demo
+          (cd target/company-demo && sha256sum -c SHA256SUMS)
+          node --input-type=module -e '
+          import fs from "node:fs";
+          import Ajv from "./apps/review-room/node_modules/ajv/dist/2020.js";
+          import formats from "./apps/review-room/node_modules/ajv-formats/dist/index.js";
+          const ajv = new Ajv({strict: false}); formats(ajv);
+          const root = "target/company-demo/";
+          const receipt = JSON.parse(fs.readFileSync(root + "demo-receipt.json"));
+          const workspace = root + "workspaces/" + receipt.workspace_id + "/";
+          for (const [kind, file] of [["request", workspace + "request.json"], ["discovery", root + "synthetic-discovery.json"], ["inventory", workspace + "inventory-001.json"]]) {
+            const schema = JSON.parse(fs.readFileSync("schemas/secureflow-company-" + kind + "-v1.schema.json"));
+            const validate = ajv.compile(schema); const value = JSON.parse(fs.readFileSync(file));
+            if (!validate(value)) throw Error(JSON.stringify(validate.errors));
+            if (validate({...value, unexpected: true})) throw Error("Unknown field accepted");
+            if (kind === "inventory") {
+              value.assets[0].execution_allowed = true;
+              if (validate(value)) throw Error("Executable authority accepted");
+            }
+          }
+          '
+
+      - name: Retain owned loopback dynamic MCP demo
+        shell: bash
+        run: |
+          mkdir -p target
+          node scripts/demo-dynamic-local.mjs | tee target/dynamic-demo.log
+          demo_dir=$(sed -n 's/^dynamic demo artifacts retained at: //p' target/dynamic-demo.log)
+          test -n "$demo_dir"
+          cp -a "$demo_dir" target/dynamic-demo
+
+      - name: Verify dynamic plan and result schema boundary
+        run: |
+          node --input-type=module -e '
+          import fs from "node:fs";
+          import Ajv from "./apps/review-room/node_modules/ajv/dist/2020.js";
+          import formats from "./apps/review-room/node_modules/ajv-formats/dist/index.js";
+          const ajv = new Ajv({strict: false});
+          formats(ajv);
+          for (const [kind, file] of [["plan", "approved-plan.json"], ["result", "run/result.json"]]) {
+            const schema = JSON.parse(fs.readFileSync("schemas/secureflow-dynamic-" + kind + "-v1.schema.json"));
+            const validate = ajv.compile(schema);
+            const value = JSON.parse(fs.readFileSync("target/dynamic-demo/" + file));
+            if (!validate(value)) throw Error(JSON.stringify(validate.errors));
+            if (validate({...value, unexpected: true})) throw Error("Unknown field accepted");
+          }
+          '
+
       - name: Lint tracked release notes
         run: python3 scripts/lint_release_notes.py docs/releases
 
@@ -52,6 +110,8 @@ jobs:
         run: cargo +1.92.0 clippy --workspace --all-targets --locked -- -D warnings
 
       - name: Test
+        env:
+          SECUREFLOW_REQUIRE_SANDBOX_TESTS: "1"
         run: cargo +1.92.0 test --workspace --locked
 
       - name: Audit Rust dependencies
@@ -94,5 +154,9 @@ jobs:
             target/codesupply-demo.log
             target/codesupply-demo/
             target/trusted-catalog-demo/
+            target/dynamic-demo.log
+            target/dynamic-demo/
+            target/company-demo.log
+            target/company-demo/
           if-no-files-found: error
           retention-days: 14

@@ -1,6 +1,8 @@
 # SecureFlow threat model
 
-Status: design baseline for SecureFlow v0.3.0.
+Status: historical v0.3.0 baseline with additive Security Case, automatic-review,
+and opt-in loopback dynamic-research boundaries. Offline profile controls remain
+unchanged; the dynamic boundary below does not enable remote-domain traffic.
 
 ## Security Case v1 boundary
 
@@ -128,6 +130,29 @@ administrator-controlled, immutable, authenticated binary.
 
 ### 4. External artifacts to canonical contracts
 
+The development automatic-review runner adds an operator-pinned startup grant,
+not ambient MCP execution permission. It fixes 1–16 explicit component roots,
+their hashes, the selected Engine hash, a new external output directory,
+expiration, and process/whole-run budgets. Unknown permissions, changed inputs,
+path redirection, expired grants, overlapping roots, and output reuse are
+rejected. The default MCP tool surface remains unchanged; the optional execution
+tool accepts no replacement target, binary, command, sandbox, or output path.
+
+Execution reuses the sandbox-required adapter. Cases are created only after
+successful untruncated full-graph import. Failures preserve already completed
+component artifacts but mark the run failed; interruption without a final
+receipt is incomplete, never a clean result. Verification checks artifact hashes,
+case/manifest/plan links, and absence of human verdicts. A hash pin is not a
+signature or proof of a legal mandate. Trusted local storage and an immutable
+Engine remain prerequisites; this does not solve same-account races or restored
+between-check changes. Whole-run timing is cooperative across phases, not a
+hard interruption deadline for filesystem reads.
+
+No AI provider transport is added. A connected MCP client's own handling of tool
+responses remains subject to that client's privacy and provider configuration.
+Automatic preparation does not claim contextual investigation, vulnerability
+validation, autonomous remediation, deployment, or publication.
+
 Engine, Secure Skill, Secure Bench, Web, AI, snapshot, delta, backup, and bundle
 artifacts cross strict JSON or SQLite boundaries. Parsers reject unknown or
 incompatible fields where the contract promises closed-world validation.
@@ -202,6 +227,67 @@ evidence status.
   independently adjudicated study;
 - treating one million synthetic source records as one million real or
   validated vulnerabilities.
+
+## Company research intake boundary
+
+The [company intake contract](contracts/secureflow-company-research-v1.md)
+introduces metadata supplied by an MCP host. Company names, source URLs, source
+hashes, and graph relationships are untrusted declarations. The broker performs
+no provider lookup, DNS resolution, HTTP request, repository clone, or active
+test. Every imported asset retains unverified ownership, unapproved scope, and
+disabled execution. An imported scope policy cannot grant testing permission.
+
+Closed inputs, bounded batches and graph size, canonical identities, exact
+reference validation, and dot-boundary checks for candidate subdomains constrain
+malformed graphs and lookalike suffixes. Public company names are not converted
+into guessed domains. Query strings, fragments and URL userinfo are rejected;
+plain metadata and path segments can still contain sensitive text, so callers
+must supply public, minimized metadata and never credentials or raw responses.
+The host must treat imported text as data and ignore embedded instructions.
+
+Owned private POSIX directories, no-follow bounded reads, immutable hash-chained
+batches, capacity preflight, and canonical replay detect malformed or changed
+evidence within the documented local boundary. SHA-256 records byte identity;
+it does not authenticate ownership or the declared upstream source. Trusted
+ancestors and the local account remain assumptions. A same-account actor can
+rewrite a complete workspace; concurrent writers and physical power loss are
+not qualified. Failed appends require a new workspace rather than skipped state.
+
+Summary and page tools limit repeated context. Full evidence exports stay local;
+MCP export returns a path and digest. Limits are per workspace/process, not a
+global storage or host-model token budget. Remote discovery providers, transport,
+scope approval, and actual model sessions need separate qualification.
+
+## Loopback dynamic research boundary
+
+The [dynamic contract](contracts/secureflow-dynamic-v1.md) authorizes a separate
+stdio subprocess, not the default scanner or MCP server. The operator approves
+exact plan bytes, service identity, principal environment-variable names,
+actions, output directory, expiry, and budgets before startup. An agent can
+select an approved action ID, but cannot add paths, hosts, credentials, methods,
+budgets, or evidence destinations through tool arguments.
+
+Actors are the approving operator, the possibly mistaken or manipulated MCP
+client, the owned but potentially misleading target service, and other local
+processes. Protected assets are credentials, local files, action scope, request
+capacity, and the distinction between observations and human decisions. The
+host kernel, account, runtime, and filesystem ancestors are trusted.
+
+| Abuse or failure | Preventive and detective controls | Residual risk |
+| --- | --- | --- |
+| Agent broadens network scope | Literal IPv4 loopback socket, fixed port and canonical preapproved GET paths; no DNS, proxy, redirect, or retry | Loopback is not proof of ownership; the operator must approve the specific service |
+| Another service occupies the port | Anonymous identity-body hash checked before each action | Identity is an assertion, not TLS or attestation; a malicious same-account process can spoof it and there is a probe/action race |
+| Target data instructs the agent to escape scope | Raw response bodies and headers are not returned; tool args cannot widen the grant | Future body observations require prompt-injection and privacy controls; client reasoning itself is outside the broker |
+| Credentials leak into evidence or another host | Bearer values loaded from environment, restricted syntax, never intentionally persisted; no redirects | Environment/process memory and the trusted local service can access them; hashes reveal response equality and may disclose low-entropy facts |
+| Client replays or overwhelms actions | One attempt per ID; serial dispatch; request reservations before I/O; bounded bytes, execution window, timeout, and cadence | The execution window is cooperative, not an idle-process lifetime timer; GET may have application side effects; only safe operator-approved fixture routes are qualified |
+| Crash or storage failure loses execution accounting | Create-new reservations before I/O; provisional result synchronized before final publication; best-effort quarantine after publication failure; existing output rejects restart | Arbitrary disk errors can prevent quarantine; require explicit MCP finish response and matching final state, not exit zero; no resume, physical power-loss proof, or hostile same-account race protection |
+| Transport failure looks like a clean review | Fatal failure closes execution; early finish is incomplete; mismatches are observations only | A completed action list does not establish coverage, exploitability, or a security verdict |
+
+Positive and adversarial tests live in `scripts/tests/dynamic-review.test.mjs`.
+The owned synthetic demo exercises a real MCP subprocess, not an actual host
+model or a third-party application. Remote origin pinning, TLS, egress policy,
+browser isolation, richer observations, and dynamic Security Case linkage are
+separate unimplemented gates in the [execution plan](plans/autonomous-web-api.md).
 
 ## Review triggers
 

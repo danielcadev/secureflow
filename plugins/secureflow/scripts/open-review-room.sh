@@ -103,22 +103,17 @@ if ((${#case_paths[@]})); then
   for case_path in "${case_paths[@]}"; do
     secureflow case-validate "$case_path" >/dev/null
   done
+  session_args=(--app-dir "$app_dir" --port "$port" --session-port "$session_port")
+  if ((open_system_browser)); then
+    session_args+=(--system-browser)
+  fi
+  for case_path in "${case_paths[@]}"; do
+    session_args+=(--case "$case_path")
+  done
+  exec node "$plugin_dir/scripts/run-review-session.mjs" "${session_args[@]}"
 fi
 
 url="http://127.0.0.1:$port/"
-session_pid=""
-if ((${#case_paths[@]})); then
-  session_token=$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')
-  session_origin="http://127.0.0.1:$port"
-  node "$plugin_dir/scripts/review-session-server.mjs" \
-    --port "$session_port" \
-    --origin "$session_origin" \
-    --token "$session_token" \
-    "${case_paths[@]}" &
-  session_pid=$!
-  trap 'kill "$session_pid" 2>/dev/null || true' EXIT INT TERM
-  url="${url}?session_port=${session_port}&session_token=${session_token}"
-fi
 echo "SecureFlow Review Room: $url" >&2
 if ((open_system_browser)); then
   if command -v xdg-open >/dev/null 2>&1; then
@@ -131,4 +126,4 @@ if ((open_system_browser)); then
 fi
 
 cd -- "$app_dir"
-npm start -- --ip 127.0.0.1 --port "$port"
+WRANGLER_SEND_METRICS=false npm start -- --local --ip 127.0.0.1 --port "$port"

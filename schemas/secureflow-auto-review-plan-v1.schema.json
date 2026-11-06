@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SecureFlow automatic-review operator plan v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "created_at",
+    "binary",
+    "binary_sha256",
+    "targets",
+    "authorization",
+    "permissions",
+    "timeout_seconds",
+    "total_budget_seconds",
+    "output_directory"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "secureflow-auto-review-plan-v1"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "binary": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^/[^\\u0000-\\u001f\\u007f]*$"
+    },
+    "binary_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "targets": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "root_sha256"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^/[^\\u0000-\\u001f\\u007f]*$"
+          },
+          "root_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      }
+    },
+    "authorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "basis",
+        "reviewer",
+        "reference",
+        "expires_at"
+      ],
+      "properties": {
+        "status": {
+          "const": "authorized"
+        },
+        "basis": {
+          "enum": [
+            "repository-owner",
+            "written-consent",
+            "organization-policy",
+            "local-project",
+            "other-documented"
+          ]
+        },
+        "reviewer": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "permissions": {
+      "const": {
+        "sandbox": "required",
+        "network": false,
+        "target_execution": false,
+        "ai_transport": false,
+        "human_decisions": false,
+        "autonomous_patching": false
+      }
+    },
+    "timeout_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3600
+    },
+    "total_budget_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3600
+    },
+    "output_directory": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^/[^\\u0000-\\u001f\\u007f]*$"
+    }
+  }
+}

@@ -1,4 +1,11 @@
-# SecureFlow MVP
+# SecureFlow repository scanner MVP
+
+This document preserves the implemented repository-scanner milestone. Its
+scope and exclusions apply to the legacy offline profile, not to every future
+SecureFlow capability. The scanner remains available as an optional evidence
+source. The new product direction and separately opt-in loopback boundary are
+defined in [Autonomous web and API research](plans/autonomous-web-api.md) and
+the [dynamic contract](contracts/secureflow-dynamic-v1.md).
 
 ## Scope
 

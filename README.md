@@ -1,5 +1,11 @@
 # SecureFlow
 
+> Project handoff — November 6, 2026: active feature development is closed.
+> This repository preserves the final engineering prototype, reproducible local
+> workflows, and their documented limits. See [final status](docs/project-handoff.md)
+> for component identities, verification, and unfinished experiments. Historical
+> plans are retained as design records, not promises of future delivery.
+
 [![CI](https://github.com/danielcadev/secureflow/actions/workflows/ci.yml/badge.svg)](https://github.com/danielcadev/secureflow/actions/workflows/ci.yml)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](./LICENSE-MIT)
 [![Rust 1.92](https://img.shields.io/badge/Rust-1.92-orange.svg)](./rust-toolchain.toml)
@@ -9,11 +15,33 @@ available under MIT or Apache-2.0; those licenses do not grant rights to imply
 endorsement or use the SecureFlow name and branding for a confusingly similar
 distribution. See [`NOTICE`](./NOTICE) and [`TRADEMARKS.md`](./TRADEMARKS.md).
 
-SecureFlow is a local-first trust and evidence layer for authorized security
-research and software supply-chain analysis. Its objective is to let a
-maintainer investigate risks in software they are authorized to examine using
-verifiable local data, then produce reproducible evidence for a person to make
-an informed decision.
+SecureFlow's product objective is AI-directed, authorized web and API security
+research: let an agent explore approved workflows, test security hypotheses,
+and retain reproducible evidence for human review, without requiring source
+code. The intended entry point is a company name, URL, or GitHub organization:
+assemble an evidence-backed asset inventory, select authorized scope, then
+investigate approved services and optional repositories. Local-first scope
+enforcement and human authority remain mandatory.
+
+The [company research intake](docs/company-research.md) now accepts those seeds
+and imports host-supplied domain, subdomain, repository, origin, and endpoint
+evidence through six stdio MCP tools. It provides compact queries and a hashed
+inventory export. This development sidecar does not fetch discovery providers or
+test remote assets; a company name remains an unresolved identity until reviewed.
+
+This direction remains an incomplete experiment, not a claim of finished autonomous
+discovery. The first dynamic slice is a separate opt-in MCP broker for
+operator-approved GET actions against an owned service on literal IPv4
+loopback. It does not crawl domains, invent test scope, or validate
+vulnerabilities. The connected MCP client supplies reasoning; SecureFlow adds
+no embedded AI provider transport.
+
+The implemented repository scanner and software supply-chain workflow remain
+available as optional evidence sources. Their completed milestone is preserved
+in [Repository scanner](docs/milestones/repository-scanner.md). See the
+[execution plan](docs/plans/autonomous-web-api.md),
+[dynamic contract](docs/contracts/secureflow-dynamic-v1.md), and
+[local walkthrough](docs/dynamic-research.md) for the new direction and its limits.
 
 The project combines separate, versioned contracts and processes for:
 
@@ -31,6 +59,22 @@ may produce candidates, but SecureFlow binds their use to explicit scope and
 authorization, preserves hashes and provenance, and retains the evidence needed
 for human review. As analysis becomes cheaper or more capable, that trust and
 decision boundary remains the product's purpose.
+
+## Dynamic research development slice
+
+```bash
+node scripts/demo-company-research-local.mjs
+node --test scripts/tests/company-research.test.mjs scripts/tests/company-research-mcp.test.mjs
+node scripts/demo-dynamic-local.mjs
+node --test scripts/tests/dynamic-review.test.mjs
+```
+
+The demo runs only a synthetic service it owns and a real stdio MCP subprocess.
+It contrasts two identities and anonymous access, an intentionally broken
+authorization route, and a negative control. A status mismatch is an
+observation, not a vulnerability. No real model, third-party application,
+remote domain, or bounty submission is exercised. This source-only slice
+does not change the installed plugin, default MCP server, or published release.
 
 ## Universal Security Case (v1 implementation candidate)
 
@@ -55,6 +99,10 @@ capabilities. It has no method that records a final decision. Run
 `bash scripts/demo-security-case-local.sh` for an offline reproducible demo.
 For an install-once Codex plugin, multi-case MCP entry point, and local Review
 Room launcher, see the [universal installation guide](docs/universal-installation.md).
+The development [automatic-review workflow](docs/automatic-review.md) adds
+operator-pinned component scans, verified case bundles, and direct Review Room
+loading. Its MCP execution tools are opt-in at process startup; they cannot
+change scope, record human decisions, or apply patches.
 The published JSON Schema checks structural shape only. Cross-record references,
 identifier uniqueness, candidate authority, and decision semantics are enforced
 by `secureflow case-validate`; CI acceptance must run that command rather than

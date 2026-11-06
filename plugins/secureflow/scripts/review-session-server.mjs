@@ -39,6 +39,7 @@ if (casePaths.length === 0 || casePaths.length > MAX_CASES) fail('invalid case c
 
 const cases = [];
 let totalBytes = 0;
+const resolvedCases = [];
 for (const casePath of casePaths) {
   const resolved = await realpath(casePath);
   const metadata = await stat(resolved);
@@ -46,6 +47,9 @@ for (const casePath of casePaths) {
   if (metadata.size > MAX_CASE_BYTES) fail(`case exceeds 32 MiB: ${casePath}`);
   totalBytes += metadata.size;
   if (totalBytes > MAX_SESSION_BYTES) fail('case set exceeds 128 MiB');
+  resolvedCases.push(resolved);
+}
+for (const resolved of resolvedCases) {
   const bytes = await readFile(resolved);
   cases.push({
     name: path.basename(resolved),
@@ -83,7 +87,9 @@ const server = createServer((request, response) => {
 
 server.listen(port, '127.0.0.1', () => {
   process.stderr.write(`SecureFlow review session ready on 127.0.0.1:${port}\n`);
+  if (process.connected) process.send({ type: 'secureflow-review-session-ready' });
 });
+server.on('error', error => fail(`cannot start case loader: ${error.message}`));
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, () => server.close(() => process.exit(0)));
 }

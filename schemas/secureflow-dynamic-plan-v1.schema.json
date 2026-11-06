@@ -1,0 +1,193 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SecureFlow dynamic plan v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "authorization",
+    "target",
+    "budgets",
+    "principals",
+    "actions",
+    "output_directory"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "secureflow-dynamic-plan-v1"
+    },
+    "authorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operator",
+        "reference",
+        "issued_at",
+        "expires_at",
+        "owned_local_service"
+      ],
+      "properties": {
+        "operator": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+        },
+        "reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+        },
+        "issued_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "owned_local_service": {
+          "const": true
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "host",
+        "port",
+        "identity_path",
+        "identity_sha256"
+      ],
+      "properties": {
+        "host": {
+          "const": "127.0.0.1"
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535
+        },
+        "identity_path": {
+          "type": "string",
+          "maxLength": 1024,
+          "pattern": "^/(?:[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*/?)?$"
+        },
+        "identity_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_requests",
+        "timeout_ms",
+        "total_budget_ms",
+        "max_response_bytes",
+        "min_interval_ms"
+      ],
+      "properties": {
+        "max_requests": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 64
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5000
+        },
+        "total_budget_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 120000
+        },
+        "max_response_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65536
+        },
+        "min_interval_ms": {
+          "type": "integer",
+          "minimum": 20,
+          "maximum": 1000
+        }
+      }
+    },
+    "principals": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "token_env"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+          },
+          "token_env": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^SECUREFLOW_DYNAMIC_[A-Z0-9_]+$"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "actions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "principal_id",
+          "path",
+          "expected_status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+          },
+          "principal_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+          },
+          "path": {
+            "type": "string",
+            "maxLength": 1024,
+            "pattern": "^/(?:[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*/?)?$"
+          },
+          "expected_status": {
+            "type": "integer",
+            "minimum": 200,
+            "maximum": 499
+          }
+        }
+      }
+    },
+    "output_directory": {
+      "type": "string",
+      "minLength": 2,
+      "pattern": "^/[^\\u0000-\\u001f\\u007f]+$"
+    }
+  }
+}

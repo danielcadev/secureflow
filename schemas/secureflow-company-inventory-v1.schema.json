@@ -1,0 +1,248 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://secureflow.dev/schemas/secureflow-company-inventory-v1.schema.json",
+  "description": "Structural contract only; runtime enforces canonical identities, references, quotas and storage integrity.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "workspace_id",
+    "request_sha256",
+    "seed",
+    "sources",
+    "assets",
+    "coverage",
+    "next_step"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "secureflow-company-inventory-v1"
+    },
+    "workspace_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "request_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "seed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "value"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "company",
+            "url",
+            "github-org"
+          ]
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      }
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 128,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "kind",
+          "reference_url",
+          "content_sha256"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+          },
+          "kind": {
+            "enum": [
+              "official-site",
+              "scope-policy",
+              "github-metadata",
+              "certificate-transparency",
+              "dns-record",
+              "agent-search"
+            ]
+          },
+          "reference_url": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "format": "uri"
+          },
+          "content_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        }
+      }
+    },
+    "assets": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 512,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "kind",
+          "value",
+          "source_ids",
+          "relations",
+          "limitations",
+          "ownership",
+          "scope_status",
+          "execution_allowed"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^sf_asset_[a-f0-9]{64}$"
+          },
+          "kind": {
+            "enum": [
+              "domain",
+              "origin",
+              "repository",
+              "endpoint"
+            ]
+          },
+          "value": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "source_ids": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 128,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+            }
+          },
+          "relations": {
+            "type": "array",
+            "minItems": 0,
+            "maxItems": 512,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "target_id"
+              ],
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "references",
+                    "deployed-on",
+                    "contains",
+                    "candidate-subdomain"
+                  ]
+                },
+                "target_id": {
+                  "type": "string",
+                  "pattern": "^sf_asset_[a-f0-9]{64}$"
+                }
+              }
+            }
+          },
+          "limitations": {
+            "type": "array",
+            "minItems": 0,
+            "maxItems": 128,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          "ownership": {
+            "const": "unverified"
+          },
+          "scope_status": {
+            "const": "unapproved"
+          },
+          "execution_allowed": {
+            "const": false
+          }
+        }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "discovery",
+        "asset_count",
+        "source_count",
+        "batch_count",
+        "active_tests",
+        "repo_scans",
+        "vulnerabilities_validated",
+        "human_decisions",
+        "broker_provider_calls",
+        "host_model_usage"
+      ],
+      "properties": {
+        "discovery": {
+          "const": "external-host-evidence-only"
+        },
+        "asset_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 512
+        },
+        "source_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 128
+        },
+        "batch_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 64
+        },
+        "active_tests": {
+          "const": 0
+        },
+        "repo_scans": {
+          "const": 0
+        },
+        "vulnerabilities_validated": {
+          "const": 0
+        },
+        "human_decisions": {
+          "const": 0
+        },
+        "broker_provider_calls": {
+          "const": 0
+        },
+        "host_model_usage": {
+          "const": "not-measured"
+        }
+      }
+    },
+    "next_step": {
+      "const": "approve-exact-scope-and-qualified-executor"
+    }
+  }
+}

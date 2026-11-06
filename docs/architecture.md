@@ -1,6 +1,38 @@
-# Initial architecture
+# SecureFlow architecture
 
 ## Objective
+
+SecureFlow is developing an AI-directed workbench for authorized web and API
+security research, with source code optional. The intended agent loop is
+observe, propose a scoped hypothesis, execute approved checks, compare controls,
+and retain evidence for a person. This is a product objective, not an implemented
+claim of autonomous vulnerability discovery.
+
+A separate company-research intake accepts a company name, URL, or GitHub
+organization. The MCP host supplies discovered metadata with source references
+and declared hashes; the local broker canonicalizes asset identities, merges
+provenance and relationships, and retains a replayable journal. Its six tools
+prepare, register, summarize, list, inspect, and export. See the
+[company contract](contracts/secureflow-company-research-v1.md).
+
+The inventory connects domains, candidate subdomains, repositories, origins,
+and endpoints. Relationships describe supplied evidence; neither ownership nor
+test authorization follows from them. Company identity remains unresolved, and
+the company broker has no executor or network client. Scope selection and a
+qualified remote executor are separate remaining gates. The inventory cannot
+be passed directly as the loopback broker's approved plan or a Security Case.
+
+The first dynamic slice is a separate Node stdio MCP broker that permits only
+preapproved GET actions against an owned literal `127.0.0.1` service. Its grant,
+budgets, identity probes, and evidence are defined in the
+[dynamic contract](contracts/secureflow-dynamic-v1.md). The connected MCP host
+supplies reasoning; no AI provider transport is added. Network remains disabled
+in the default scanner, case, catalog, and offline web profiles.
+
+The completed repository scanner is retained as an optional input, not replaced
+or reinterpreted as dynamic evidence. Its unattended analysis-to-review slice
+is documented in [Automatic review](automatic-review.md) and its milestone in
+[Repository scanner](milestones/repository-scanner.md).
 
 SecureFlow lets maintainers investigate risks in software they are authorized
 to examine using verifiable local data, then produce reproducible evidence for
@@ -88,6 +120,17 @@ secureflow-recon-network (proposed; not implemented)
     ├── DNS, redirect, and shared-asset revalidation
     ├── bounded passive acquisition and loopback-first safe checks
     └── rate limits, redaction, stop rules, and human review
+
+dynamic-review-core.mjs (separate opt-in development broker)
+    ├── exact-byte plan hash, expiring operator grant, approved action IDs
+    ├── literal IPv4 loopback GET and identity probe before each action
+    ├── request, response-size, cadence, timeout, and cooperative execution limits
+    ├── create-new reservations, receipts, observations, and final result
+    └── status/hash evidence only; no verdict, patch, provider, or remote traffic
+
+run-dynamic-review.mjs
+    ├── deterministic execution of the approved action list
+    └── opt-in stdio MCP selection of the same actions by an external client
 ```
 
 ## Repository structure
@@ -143,7 +186,8 @@ test justify each one.
 
 - A target is authorized before any phase executes.
 - Static analysis never executes target scripts.
-- Network access is disabled by default.
+- Network access is disabled by default. The separately approved dynamic
+  broker permits bounded literal-loopback requests only.
 - No exported path escapes the target's logical root.
 - Secrets never enter an AI payload without redaction and consent.
 - Human contextual judgment remains authoritative; only a human decision can
@@ -160,4 +204,6 @@ benchmark are approved.
 SecureFlow's own assets, trust boundaries, controls, and residual risks are
 maintained in [`threat-model.md`](./threat-model.md). Any new execution or
 network boundary requires that document and the relevant ADR to be reviewed
-before implementation.
+before implementation. The first loopback boundary is recorded in the
+[dynamic contract](contracts/secureflow-dynamic-v1.md); it does not authorize
+the proposed remote recon layer.

@@ -10,7 +10,8 @@ candidate is a vulnerability.
 
 ## Workflow
 
-1. Confirm the target is explicitly authorized before analyzing it. Do not
+1. Confirm the target is explicitly authorized before analyzing it. In the
+   default local-case workflow, do not
    broaden the scope, contact targets, crawl, exploit, or transmit evidence.
 2. Prefer the bundled `secureflow` MCP tools. Validate the case before relying
    on it. Call `summarize_candidates` before listing detail, request bounded
@@ -91,9 +92,52 @@ Never assign the user's Git identity as a reviewer merely because it is configur
    approval. The handoff never authorizes merge, deployment, publication,
    exploitation, network access, or unrelated cleanup.
 
+## Automatic local analysis
+
+Use this mode when the user wants the authorized scan-to-review preparation to
+run unattended. Check that the selected CLI supports `review-plan` first; do
+not assume an older installed binary has these commands. A local candidate
+installation does not establish that the published release has them.
+
+Create a `review-plan` with only the explicitly authorized component roots,
+operator identity/reference, selected Engine, external fresh output directory,
+expiration, and time limits. The plan pins input hashes. Execute it with
+`review-execute --plan <path> --plan-sha256 <printed-hash>`. A host configured
+with those same startup arguments on `secureflow mcp` can instead call
+`run_authorized_review`; the default MCP server cannot scan. Tool arguments
+cannot replace the plan's scope or weaken isolation.
+
+The runner performs deterministic analysis and case preparation, not contextual
+agent research. Use its compact summary, then `investigate_review_candidate`
+for selected IDs to obtain bound source/sink evidence. Investigate within the
+authorized scope and stage individual recommendations only when requested;
+never mass-produce abstentions and call that completed investigation. Host-model
+usage and reasoning budgets remain controlled by the host, not this runner.
+
+For direct presentation, prefer the installed `secureflow-review --plan <path>
+--plan-sha256 <hash>` entry point when available. Otherwise run
+`node plugins/secureflow/scripts/run-auto-review.mjs --plan <path> --plan-sha256 <hash>`
+from the matching source checkout.
+It executes the plan and starts the existing Review Room with every verified
+case already selected. To reopen without rescanning, use `--directory <run-dir>`
+instead of `--plan`. Open the printed session URL with `open_in_codex` in the
+right panel. Do not switch to Chrome or Computer Use. Failed/incomplete runs
+must not be presented as completed coverage; inspect `review-status` and report
+the failure. Do not rerun into an existing directory or disable the sandbox.
+
+## Company inventory and dynamic research
+
+For a company name, URL, domain inventory, or explicitly approved runtime
+research request, read [research modes](references/research-modes.md).
+The installed default case server does not expose the separate research tools.
+Use the matching source scripts when available and report missing capabilities
+directly. A company inventory, public repository, or URL never supplies testing
+authority. Keep runtime observations distinct from Security Case candidates;
+no automatic case conversion or final verdict is implemented.
+
 ## Creating a case from a repository
 
-The MCP server does not scan, create, or import cases. When the user explicitly
+The default MCP server does not scan, create, or import cases. When the user explicitly
 authorizes a repository analysis and no case exists:
 
 1. Keep every output outside the target tree in a directory named for the

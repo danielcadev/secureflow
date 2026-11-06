@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://secureflow.dev/schemas/secureflow-company-request-v1.schema.json",
+  "description": "Structural contract only; runtime enforces canonical identities, references, quotas and storage integrity.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "workspace_id",
+    "seed",
+    "created_at",
+    "capabilities",
+    "limits"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "secureflow-company-request-v1"
+    },
+    "workspace_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "seed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "value"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "company",
+            "url",
+            "github-org"
+          ]
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      }
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "discovery",
+        "active_testing",
+        "repo_analysis",
+        "human_decisions"
+      ],
+      "properties": {
+        "discovery": {
+          "const": "external-host-evidence-import"
+        },
+        "active_testing": {
+          "const": "disabled"
+        },
+        "repo_analysis": {
+          "const": "requires-separate-authorization"
+        },
+        "human_decisions": {
+          "const": "human-only"
+        }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_batches",
+        "max_sources",
+        "max_assets",
+        "max_batch_bytes"
+      ],
+      "properties": {
+        "max_batches": {
+          "const": 64
+        },
+        "max_sources": {
+          "const": 128
+        },
+        "max_assets": {
+          "const": 512
+        },
+        "max_batch_bytes": {
+          "const": 65536
+        }
+      }
+    }
+  }
+}
