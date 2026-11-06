@@ -55,7 +55,14 @@ campaign, actual model session or physical power-loss test was performed.
 
 - Secure Engine: merged current upstream into the local calibration branch;
   core, CLI and desktop suites passed, formatting passed, and core/CLI strict
-  Clippy passed. Published `67e9dd18439525aae21d4c796c0f8bee3ad290f6` to `main`.
+  Clippy passed. Hosted full-workspace formatting, Clippy and tests also passed
+  for `67e9dd18439525aae21d4c796c0f8bee3ad290f6`. Its dependency job exposed
+  current TLS advisories, subsequently fixed by updating Rustls, WebPKI,
+  certificate roots and the yanked Windows clipboard dependency. Final commit
+  `123d04c142d0c09c0290bf7583f29fb2bb69f408` passed local `cargo audit --no-fetch`
+  with no vulnerabilities or warnings and all 12 affected AI/transport tests.
+  `cargo deny --locked check` passed advisories, bans, licenses and sources.
+  Both commits were published to `main`.
 - Secure Bench: Phase 38 tamper tests and scanner-free certification passed
   without altering frozen evidence or running scanners. Published existing
   `485402e099f7e99577203e56604bbaadec0623fa` to `main`.
@@ -66,7 +73,7 @@ campaign, actual model session or physical power-loss test was performed.
 
 GitHub dependency alerts on deliberately vulnerable benchmark fixtures remain
 separate from this verification. No claim of a fresh whole-dependency audit of
-Engine, Bench or Secure Skill is made by the SecureFlow audit above.
+Bench or Secure Skill is made by the SecureFlow and separate Engine audits above.
 
 ## Publication and preservation
 
@@ -74,6 +81,14 @@ Source commits are published to the existing repositories without force pushes,
 tag replacement, deletion, archival or visibility changes. No stable release or
 new binary artifact is implied. Hosted CI is triggered by the pushes; its status
 must be read from GitHub rather than inferred from local success.
+
+Bench and Secure Skill hosted CI passed for the published commits. SecureFlow
+run [42183716773](https://github.com/danielcadev/secureflow/actions/runs/42183716773)
+failed before executing any step. Its job annotation states: “The job was not
+started because your account is locked due to a billing issue.” This is an
+external account blocker; local checks passed, and the source push succeeded.
+The account owner must resolve billing before a hosted SecureFlow rerun can
+provide a green CI receipt. No workflow was disabled to conceal that status.
 
 The original `/home/danielcastrillon/Proyectos/secureflow` checkout remains at
 `cb888ecf0b6294c3babe224593fedf80c7b26cda`; its preexisting untracked `docs/assets/`

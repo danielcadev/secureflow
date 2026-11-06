@@ -37,7 +37,7 @@ existing chats.
 | Component | Published source |
 | --- | --- |
 | SecureFlow | [repository](https://github.com/danielcadev/secureflow), final handoff commit containing this document |
-| Secure Engine | [67e9dd18439525aae21d4c796c0f8bee3ad290f6](https://github.com/usesecure/secure-engine/commit/67e9dd18439525aae21d4c796c0f8bee3ad290f6), including local RegExp/process sink calibration merged with upstream |
+| Secure Engine | [123d04c142d0c09c0290bf7583f29fb2bb69f408](https://github.com/usesecure/secure-engine/commit/123d04c142d0c09c0290bf7583f29fb2bb69f408), including local RegExp/process sink calibration merged with upstream and updated TLS trust dependencies |
 | Secure Bench | [485402e099f7e99577203e56604bbaadec0623fa](https://github.com/usesecure/secure-bench/commit/485402e099f7e99577203e56604bbaadec0623fa), frozen Phase 38 post-open scoring certification |
 | Secure Skill | [b355462d279ce4393547cd28be3128153957d3ab](https://github.com/usesecure/secure-skill/commit/b355462d279ce4393547cd28be3128153957d3ab), validated canonical skills and handoff |
 
